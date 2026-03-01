@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+branch = true
+source = ["kirby_clone"]
+omit = [
+  "kirby_clone/game.py",
+  "kirby_clone/assets.py",
+  "kirby_clone/hud.py",
+  "kirby_clone/audio.py",
+  "kirby_clone/__main__.py"
+]
