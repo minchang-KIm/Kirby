@@ -1,0 +1,124 @@
+{
+  "abilities": [
+    {
+      "name": "sword",
+      "damage": 3,
+      "cooldown_ms": 220,
+      "range_px": 42,
+      "projectile_speed": 360.0,
+      "is_super": false
+    },
+    {
+      "name": "fire",
+      "damage": 4,
+      "cooldown_ms": 260,
+      "range_px": 58,
+      "projectile_speed": 330.0,
+      "is_super": false
+    },
+    {
+      "name": "ice",
+      "damage": 3,
+      "cooldown_ms": 250,
+      "range_px": 52,
+      "projectile_speed": 290.0,
+      "is_super": false
+    },
+    {
+      "name": "beam",
+      "damage": 3,
+      "cooldown_ms": 210,
+      "range_px": 60,
+      "projectile_speed": 380.0,
+      "is_super": false
+    },
+    {
+      "name": "spark",
+      "damage": 2,
+      "cooldown_ms": 180,
+      "range_px": 34,
+      "projectile_speed": 260.0,
+      "is_super": false
+    },
+    {
+      "name": "cutter",
+      "damage": 4,
+      "cooldown_ms": 320,
+      "range_px": 70,
+      "projectile_speed": 420.0,
+      "is_super": false
+    },
+    {
+      "name": "hammer",
+      "damage": 6,
+      "cooldown_ms": 420,
+      "range_px": 28,
+      "projectile_speed": 220.0,
+      "is_super": false
+    },
+    {
+      "name": "spear",
+      "damage": 4,
+      "cooldown_ms": 240,
+      "range_px": 68,
+      "projectile_speed": 350.0,
+      "is_super": false
+    },
+    {
+      "name": "whip",
+      "damage": 3,
+      "cooldown_ms": 210,
+      "range_px": 64,
+      "projectile_speed": 310.0,
+      "is_super": false
+    },
+    {
+      "name": "ninja",
+      "damage": 5,
+      "cooldown_ms": 300,
+      "range_px": 48,
+      "projectile_speed": 400.0,
+      "is_super": false
+    },
+    {
+      "name": "fighter",
+      "damage": 4,
+      "cooldown_ms": 230,
+      "range_px": 36,
+      "projectile_speed": 340.0,
+      "is_super": false
+    },
+    {
+      "name": "parasol",
+      "damage": 2,
+      "cooldown_ms": 160,
+      "range_px": 32,
+      "projectile_speed": 240.0,
+      "is_super": false
+    },
+    {
+      "name": "ultra_sword",
+      "damage": 12,
+      "cooldown_ms": 600,
+      "range_px": 110,
+      "projectile_speed": 520.0,
+      "is_super": true
+    },
+    {
+      "name": "monster_flame",
+      "damage": 10,
+      "cooldown_ms": 560,
+      "range_px": 95,
+      "projectile_speed": 480.0,
+      "is_super": true
+    },
+    {
+      "name": "grand_hammer",
+      "damage": 11,
+      "cooldown_ms": 620,
+      "range_px": 90,
+      "projectile_speed": 500.0,
+      "is_super": true
+    }
+  ]
+}

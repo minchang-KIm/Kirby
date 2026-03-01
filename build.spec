@@ -6,6 +6,7 @@ project_root = SPECPATH
 datas = [
     (f"{project_root}/levels", "levels"),
     (f"{project_root}/assets", "assets"),
+    (f"{project_root}/kirby_clone/content", "kirby_clone/content"),
 ]
 
 a = Analysis(

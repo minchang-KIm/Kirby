@@ -9,4 +9,4 @@ def test_replay_sample_matches_expected_hash() -> None:
     replay = Path("tests/integration/replay_sample.json")
     actual, expected = run_replay(replay)
     assert actual == expected
-    assert expected == "09cd37a93a816878"
+    assert expected == "44c4fd361eb8d979"
