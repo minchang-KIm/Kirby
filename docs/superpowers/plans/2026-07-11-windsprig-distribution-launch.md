@@ -10,6 +10,7 @@
 
 ## Global Constraints
 
+- Treat the repository as a code-study artifact: follow `docs/development/code-conventions.md`, document public contracts concisely, and comment non-obvious invariants and tradeoffs without narrating obvious statements.
 - Public title: `Windsprig: Echoes of the Gale`; Python package and executable identity: `windsprig`.
 - The public game, package, executable, window title, repository display name, documentation, screenshots, and website must not use Nintendo, Kirby, Return to Dream Land, or any Nintendo character, logo, visual asset, audio, level, or copy.
 - Keep all six worlds, 30 stages, six unique bosses, and 90 stable Wind Motes in v1.0.0.

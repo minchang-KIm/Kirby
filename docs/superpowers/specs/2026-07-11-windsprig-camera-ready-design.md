@@ -386,6 +386,14 @@ Before release, use computer control for the Windows artifact and browser contro
 - browser refresh, focus loss, cache, and clean-profile behavior;
 - Windows launch from a path containing spaces and from outside the repository.
 
+### 10.4 Code-study readability
+
+- Treat the repository as both production source and a learning artifact. Public modules, protocols, classes, and non-obvious functions receive concise docstrings that state their contract, ownership, timing, or failure semantics.
+- Comments explain *why* an invariant, ordering rule, compatibility seam, or safety check exists. Do not add comments that simply translate the next statement into prose.
+- Prefer explicit types, domain names, small cohesive functions, dependency injection at platform boundaries, and immutable value objects. Avoid unexplained abbreviations, hidden global state, and duplicate implementations.
+- Record project-wide conventions in `docs/development/code-conventions.md`. Every task review checks new code against that guide, and the final whole-codebase review repairs stale or misleading comments before release.
+- Architectural boundaries and surprising tradeoffs remain discoverable through focused design notes, test names, and links from the code-convention guide; comments must never be used to excuse unclear code.
+
 ## 11. Build, CI, and Release
 
 ### 11.1 Dependency and build reproducibility

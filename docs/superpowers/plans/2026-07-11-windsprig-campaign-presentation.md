@@ -10,6 +10,7 @@
 
 ## Global Constraints
 
+- Treat the repository as a code-study artifact: follow `docs/development/code-conventions.md`, document public contracts concisely, and comment non-obvious invariants and tradeoffs without narrating obvious statements.
 - Public title: `Windsprig: Echoes of the Gale`; active Python package, imports, window title, and executable identity: `windsprig`.
 - The public game, package, executable, documentation, screenshots, art, audio, levels, copy, and generated artifacts must contain no Nintendo, Kirby, Return to Dream Land, Nintendo character, logo, visual asset, audio, level, or public-facing identifier.
 - v1.0 contains exactly six named worlds, five stages per world, 30 playable stages, six boss stages, six unique multi-phase bosses, and 90 stable collectible Wind Mote IDs.

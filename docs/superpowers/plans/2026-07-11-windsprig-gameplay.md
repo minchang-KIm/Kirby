@@ -10,6 +10,7 @@
 
 ## Global Constraints
 
+- Treat the repository as a code-study artifact: follow `docs/development/code-conventions.md`, document public contracts concisely, and comment non-obvious invariants and tradeoffs without narrating obvious statements.
 - The active public package is `windsprig`; do not retain `kirby_clone` as a compatibility package, import target, executable name, window title, test namespace, or release artifact string.
 - Public names are *Windsprig: Echoes of the Gale*, Sprig, draw, capture, release, launch, harmonize, Wind Mote, Bloomblade, Cinder, Voltsong, Galehook, Stoneheart, and Tempest. Do not add Nintendo, Kirby, Return to Dream Land, or Nintendo character/asset/copy identifiers.
 - Use one production ECS runtime. Absorb tested behavior from `windsprig/simulation.py`, `windsprig/player.py`, `windsprig/enemies.py`, `windsprig/entities.py`, and `windsprig/combat.py`, then delete those competing runtime modules in Task 11.

@@ -27,6 +27,10 @@ py -3.12 -m venv .venv
 
 The game contains original code and release assets. See `assets/LICENSES.md` for provenance and third-party license notices.
 
+## Code study and conventions
+
+The repository is intentionally written as a production-quality learning resource. See [`docs/development/code-conventions.md`](docs/development/code-conventions.md) for architecture, naming, typing, testing, docstring, and comment conventions.
+
 ## Campaign
 
 Guide Sprig across six sky islands with five stages each. Draw nearby echoes, capture their resonance, and harmonize with it to use an echo ability. Each stage also holds Wind Motes that reward careful exploration.

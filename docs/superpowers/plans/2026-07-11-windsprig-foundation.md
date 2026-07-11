@@ -10,6 +10,7 @@
 
 ## Global Constraints
 
+- Treat the repository as a code-study artifact: follow `docs/development/code-conventions.md`, document public contracts concisely, and comment non-obvious invariants and tradeoffs without narrating obvious statements.
 - One original, production-quality game shipped as a playable browser build and a Windows desktop build from the same Python/pygame-ce codebase.
 - This is a full-product program, not a vertical-slice reduction.
 - The six-world, five-stage campaign remains the v1.0 scope.
