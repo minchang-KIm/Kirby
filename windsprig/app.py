@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import pygame
 
 from windsprig.config import GameConfig
@@ -8,10 +9,17 @@ from windsprig.content import load_campaign_catalog
 from windsprig.core.rng import derive_stage_seed
 from windsprig.core.time import FixedStepClock
 from windsprig.gameplay.abilities import create_default_registry
-from windsprig.gameplay.components import Collider, Collectible, EnemyAI, Health, PlayerSlot, StageGoal, Team, Transform
+from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.input import ActiveRoster, DeviceRef, InputDeviceMux
-from windsprig.meta import CompletionTracker, SaveManager, UnlockRules, WorldMapService
+from windsprig.meta import (
+    CompletionTracker,
+    SaveManager,
+    UnlockRules,
+    WorldMapService,
+    migrate_v1,
+    migration_catalog,
+)
 
 
 class GameApp:
@@ -23,12 +31,14 @@ class GameApp:
         self.ability_registry = create_default_registry(self.content_dir)
         self.save_manager = SaveManager(Path("save/save_data.json"))
         self.save_schema = self.save_manager.load()
-        profile = self.save_schema.profiles[0]
+        self.migration_catalog = migration_catalog(self.catalog)
+        profile = migrate_v1(self.save_schema.to_json_dict(), self.migration_catalog).profiles[0]
         self.tracker = CompletionTracker(
-            cleared_nodes=set(profile.cleared_nodes),
-            energy_spheres=dict(profile.energy_spheres),
-            challenge_unlocks=set(profile.challenge_unlocks),
-            best_times=dict(profile.best_times),
+            cleared_nodes=set(self.save_schema.profiles[0].cleared_nodes),
+            collected_mote_ids=set(profile.collected_mote_ids),
+            challenge_rewards=set(profile.challenge_rewards),
+            best_times_ms=dict(profile.best_times_ms),
+            clear_counts=dict(profile.clear_counts),
         )
         self.unlocked_worlds = set(profile.unlocked_worlds)
         self.unlock_rules = UnlockRules(self.catalog)
@@ -143,8 +153,14 @@ class GameApp:
             return
         stage = self.runtime.stage
         elapsed = self.runtime.world.frame_index * self.config.fixed_dt_ms
-        self.tracker.mark_stage_clear(stage.node_id, elapsed)
-        self.tracker.add_energy_spheres(stage.stage_id, self.runtime.world.resources.get("run_energy_spheres", 0))
+        self.tracker.mark_stage_clear(stage.node_id, stage.stage_id, elapsed)
+        run_mote_count = self.runtime.world.resources.get("run_energy_spheres", 0)
+        if type(run_mote_count) is not int:
+            raise ValueError("run_energy_spheres must be an integer")
+        available_mote_ids = self.migration_catalog.mote_ids_by_stage.get(stage.stage_id, ())
+        # The prototype runtime exposes only a count; fixed catalog order prevents replay-minted currency.
+        for mote_id in available_mote_ids[: max(0, min(run_mote_count, len(available_mote_ids)))]:
+            self.tracker.collect_mote(mote_id)
         self.unlocked_worlds = self.unlock_rules.apply_stage_rewards(stage.node_id, self.unlocked_worlds)
         self._flush_save()
         self.mode = "world_map"
@@ -153,9 +169,16 @@ class GameApp:
         profile = self.save_schema.profiles[0]
         profile.unlocked_worlds = set(self.unlocked_worlds)
         profile.cleared_nodes = set(self.tracker.cleared_nodes)
-        profile.energy_spheres = dict(self.tracker.energy_spheres)
-        profile.challenge_unlocks = set(self.tracker.challenge_unlocks)
-        profile.best_times = dict(self.tracker.best_times)
+        profile.energy_spheres = {
+            stage_id: sum(mote_id in self.tracker.collected_mote_ids for mote_id in mote_ids)
+            for stage_id, mote_ids in self.migration_catalog.mote_ids_by_stage.items()
+            if any(mote_id in self.tracker.collected_mote_ids for mote_id in mote_ids)
+        }
+        # Task 7 replaces this v1 bridge; these extension fields keep v2 identities lossless meanwhile.
+        profile.collected_mote_ids = set(self.tracker.collected_mote_ids)
+        profile.challenge_unlocks = set(self.tracker.challenge_rewards)
+        profile.best_times = dict(self.tracker.best_times_ms)
+        profile.clear_counts = dict(self.tracker.clear_counts)
         self.save_manager.save(self.save_schema)
 
     def _render_world_map(self, screen: pygame.Surface, font: pygame.font.Font, small_font: pygame.font.Font) -> None:
@@ -202,7 +225,12 @@ class GameApp:
             pygame.draw.rect(
                 screen,
                 (76, 98, 128),
-                pygame.Rect(tx * stage.tile_size - camera_x, ty * stage.tile_size - camera_y, stage.tile_size, stage.tile_size),
+                pygame.Rect(
+                    tx * stage.tile_size - camera_x,
+                    ty * stage.tile_size - camera_y,
+                    stage.tile_size,
+                    stage.tile_size,
+                ),
             )
         for tx, ty in stage.one_way_tiles:
             pygame.draw.rect(
@@ -214,7 +242,12 @@ class GameApp:
             pygame.draw.rect(
                 screen,
                 (230, 85, 85),
-                pygame.Rect(tx * stage.tile_size - camera_x, ty * stage.tile_size - camera_y, stage.tile_size, stage.tile_size),
+                pygame.Rect(
+                    tx * stage.tile_size - camera_x,
+                    ty * stage.tile_size - camera_y,
+                    stage.tile_size,
+                    stage.tile_size,
+                ),
             )
 
         for entity_id, collectible, transform, collider in world.query(Collectible, Transform, Collider):
@@ -262,7 +295,8 @@ class GameApp:
         screen.blit(stage_label, (16, 12))
         for idx, player in enumerate(hud.get("players", [])):
             text = small_font.render(
-                f"P{player['slot']} HP {player['hp']}/{player['max_hp']} LIFE {player['lives']} ABIL {player['ability']}",
+                f"P{player['slot']} HP {player['hp']}/{player['max_hp']} "
+                f"LIFE {player['lives']} ABIL {player['ability']}",
                 True,
                 (245, 245, 255),
             )

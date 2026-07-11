@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -11,8 +11,10 @@ class SaveProfile:
     unlocked_worlds: set[str] = field(default_factory=lambda: {"world_1"})
     cleared_nodes: set[str] = field(default_factory=set)
     energy_spheres: dict[str, int] = field(default_factory=dict)
+    collected_mote_ids: set[str] | None = None
     challenge_unlocks: set[str] = field(default_factory=set)
     best_times: dict[str, int] = field(default_factory=dict)
+    clear_counts: dict[str, int] | None = None
     settings: dict[str, object] = field(default_factory=dict)
 
 
@@ -32,8 +34,18 @@ class SaveSchema:
                     "unlocked_worlds": sorted(profile.unlocked_worlds),
                     "cleared_nodes": sorted(profile.cleared_nodes),
                     "energy_spheres": profile.energy_spheres,
+                    **(
+                        {"collected_mote_ids": sorted(profile.collected_mote_ids)}
+                        if profile.collected_mote_ids is not None
+                        else {}
+                    ),
                     "challenge_unlocks": sorted(profile.challenge_unlocks),
                     "best_times": profile.best_times,
+                    **(
+                        {"clear_counts": profile.clear_counts}
+                        if profile.clear_counts is not None
+                        else {}
+                    ),
                     "settings": profile.settings,
                 }
                 for profile in self.profiles
@@ -41,17 +53,32 @@ class SaveSchema:
         }
 
     @staticmethod
-    def from_json_dict(payload: dict[str, object]) -> "SaveSchema":
+    def from_json_dict(payload: dict[str, object]) -> SaveSchema:
         profiles: list[SaveProfile] = []
-        for item in payload.get("profiles", []):
+        raw_profiles = payload.get("profiles", [])
+        if not isinstance(raw_profiles, list):
+            raise ValueError("profiles must be a list")
+        for item in raw_profiles:
+            if not isinstance(item, dict):
+                raise ValueError("profile must be an object")
             profiles.append(
                 SaveProfile(
                     profile_name=str(item.get("profile_name", "P1")),
                     unlocked_worlds=set(item.get("unlocked_worlds", ["world_1"])),
                     cleared_nodes=set(item.get("cleared_nodes", [])),
                     energy_spheres={str(k): int(v) for k, v in dict(item.get("energy_spheres", {})).items()},
+                    collected_mote_ids=(
+                        set(item["collected_mote_ids"])
+                        if "collected_mote_ids" in item
+                        else None
+                    ),
                     challenge_unlocks=set(item.get("challenge_unlocks", [])),
                     best_times={str(k): int(v) for k, v in dict(item.get("best_times", {})).items()},
+                    clear_counts=(
+                        {str(k): int(v) for k, v in dict(item["clear_counts"]).items()}
+                        if "clear_counts" in item
+                        else None
+                    ),
                     settings=dict(item.get("settings", {})),
                 )
             )
@@ -59,7 +86,10 @@ class SaveSchema:
             profiles = [SaveProfile("P1"), SaveProfile("P2"), SaveProfile("P3")]
         while len(profiles) < 3:
             profiles.append(SaveProfile(f"P{len(profiles) + 1}"))
-        return SaveSchema(save_version=int(payload.get("save_version", 1)), profiles=profiles[:3])
+        save_version = payload.get("save_version", 1)
+        if type(save_version) is not int:
+            raise ValueError("save_version must be an integer")
+        return SaveSchema(save_version=save_version, profiles=profiles[:3])
 
 
 class SaveManager:
