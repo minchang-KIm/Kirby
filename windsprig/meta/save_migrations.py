@@ -96,12 +96,10 @@ class SaveMigrationCatalog:
         for stage_id, stage in sorted(campaign.stages.items()):
             if stage.stage_id != stage_id:
                 raise ValueError(f"campaign stage key does not match stage_id: {stage_id}")
-            if len(stage.energy_spheres) != 3:
-                raise ValueError(f"{stage_id} must contain exactly three prototype collectible positions")
-            # Position order is the compatibility seam; later art/layout changes must retain these IDs.
-            mote_ids_by_stage[stage_id] = tuple(
-                f"{stage_id}:mote:{index}" for index, _ in enumerate(stage.energy_spheres, start=1)
-            )
+            if len(stage.motes) != 3:
+                raise ValueError(f"{stage_id} must contain exactly three stable motes")
+            # Gameplay content now owns the IDs that prototype counts migrate into.
+            mote_ids_by_stage[stage_id] = tuple(mote.mote_id for mote in stage.motes)
 
         # Stable world IDs define cross-world succession without relying on mapping insertion order.
         ordered_nodes = [

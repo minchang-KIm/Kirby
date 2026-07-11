@@ -67,13 +67,15 @@ def stage_spec() -> StageSpec:
         height_tiles=10,
         tile_size=32,
         ground_y_tile=8,
-        player_spawns=[(10.0, 20.0)],
-        enemy_spawns=[],
-        energy_spheres=[],
+        player_spawns=((10.0, 20.0),),
+        enemy_spawns=(),
+        motes=(),
+        checkpoints=(),
+        interactions=(),
         goal_tile=(18, 8),
-        hazards=[],
-        one_way_tiles=[],
-        solids=[],
+        hazards=(),
+        one_way_tiles=(),
+        solids=(),
     )
 
 

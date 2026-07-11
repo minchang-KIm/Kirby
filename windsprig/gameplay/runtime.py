@@ -57,13 +57,13 @@ class StageRuntime:
                 x=enemy.x,
                 y=enemy.y,
                 kind=enemy.kind,
-                ability=enemy.copy_ability,
+                ability=enemy.ability_id or "none",
                 patrol_left=enemy.patrol_left,
                 patrol_right=enemy.patrol_right,
             )
 
-        for tx, ty in stage.energy_spheres:
-            self.factory.spawn_energy_sphere(tx, ty, stage.tile_size)
+        for mote in stage.motes:
+            self.factory.spawn_energy_sphere(mote.tile_x, mote.tile_y, stage.tile_size)
 
         self.factory.spawn_stage_goal(stage)
 
