@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import inspect
+import runpy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pygame
 import pytest
 
+from tools import build_web
 from windsprig.app import GameApp
 from windsprig.config import GameConfig
 from windsprig.feasibility import FoundationProbe
-from windsprig.input.commands import ConfirmCommand, InputFrame, JumpCommand, MoveCommand
+from windsprig.gameplay.components import Transform
+from windsprig.input.commands import (
+    ConfirmCommand,
+    InputFrame,
+    JumpCommand,
+    MoveCommand,
+    ProbeCompleteCommand,
+)
 from windsprig.input.queue import InputQueue
 from windsprig.input.roster import ActiveRoster, DeviceRef
 from windsprig.input.router import RoutedInput
@@ -22,6 +32,7 @@ from windsprig.platform.services import (
     PlatformServices,
     StorageCapabilities,
 )
+from windsprig.screens import foundation as foundation_module
 
 
 class FakeStorage:
@@ -117,6 +128,16 @@ class FakeLifecycle:
 
     def consume(self, _events: Sequence[pygame.event.Event]) -> tuple[LifecycleEvent, ...]:
         return self.next_events
+
+
+class ProbeQueryBrowser:
+    def __init__(self) -> None:
+        self.query_count = 0
+
+    def query_param(self, name: str) -> str | None:
+        assert name == "foundation_probe"
+        self.query_count += 1
+        return "1"
 
 
 class FakeKeys:
@@ -361,6 +382,71 @@ def test_default_foundation_factory_shares_an_explicit_probe_with_the_coordinato
 
     assert app.probe is probe
     assert app.foundation_screen.probe is probe
+
+
+def test_staged_non_probe_capability_blocks_query_and_f9_in_active_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = Path(__file__).resolve().parents[2]
+    stage = tmp_path / "web-stage"
+    build_web.stage_sources(root, stage, probe=False)
+    staged_capabilities = runpy.run_path(str(stage / "windsprig" / "_build_flags.py"))
+    staged_probe_available = staged_capabilities["FOUNDATION_PROBE_AVAILABLE"]
+    assert staged_probe_available is False
+    monkeypatch.setattr(
+        foundation_module,
+        "FOUNDATION_PROBE_AVAILABLE",
+        staged_probe_available,
+    )
+
+    storage = FakeStorage()
+    browser = ProbeQueryBrowser()
+    services = PlatformServices(
+        storage=storage,
+        audio=FakeAudio(),
+        display=FakeDisplay(),
+        time=FakeTime(),
+        lifecycle=FakeLifecycle(),
+        browser=browser,  # type: ignore[arg-type]
+        capabilities=PlatformCapabilities(
+            is_web=True,
+            persistent_storage=True,
+            fullscreen=False,
+            gamepads=False,
+            audio_requires_gesture=True,
+        ),
+    )
+
+    app = GameApp(
+        GameConfig(),
+        services,
+        event_source=lambda: (),
+        key_source=FakeKeys,
+    )
+    screen = app.foundation_screen
+    screen.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    assert screen._start_selected_stage() is True
+    screen.screen_id = "playing"
+    assert screen.runtime is not None
+    player_id = screen.runtime.player_entities[0]
+    transform = screen.runtime.world.get_component(player_id, Transform)
+    original_position = (transform.x, transform.y)
+
+    screen.complete_probe_stage()
+    assert (transform.x, transform.y) == original_position
+
+    transition = screen.fixed_update(
+        screen.config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [ProbeCompleteCommand(player_slot=1)]}),
+    )
+
+    assert app.probe.enabled is False
+    assert screen.probe is app.probe
+    assert browser.query_count == 0
+    assert transition is None
+    assert transform.x == original_position[0]
+    assert storage.values == {}
 
 
 async def test_async_app_keeps_edge_until_first_fixed_step_then_consumes_it_once() -> None:

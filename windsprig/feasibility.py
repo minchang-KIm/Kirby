@@ -17,6 +17,7 @@ class FoundationProbe:
     enabled: bool
     input_edge_count: int = 0
     _boot_presented: bool = False
+    _gameplay_active: bool = False
     _frame_durations_ms: list[float] = field(default_factory=list, repr=False)
 
     _FPS_FRAME_COUNT: ClassVar[int] = 120
@@ -24,6 +25,7 @@ class FoundationProbe:
         "audio",
         "boot",
         "fps",
+        "gameplay",
         "input",
         "save",
         "stage",
@@ -43,6 +45,7 @@ class FoundationProbe:
         self.storage.write_text("probe/session", str(session))
         self.input_edge_count = 0
         self._boot_presented = False
+        self._gameplay_active = False
         self._frame_durations_ms.clear()
 
     def read(self, name: str) -> str | None:
@@ -64,13 +67,20 @@ class FoundationProbe:
         value = "consumed_once" if self.input_edge_count == 1 else "consumed_more_than_once"
         self.mark("input", value)
 
-    def presented_frame(self, elapsed_ms: float) -> None:
-        """Mark first presentation, then publish FPS from 120 subsequent frame durations."""
+    def presented_frame(self, elapsed_ms: float, *, gameplay_active: bool) -> None:
+        """Mark boot, then measure only 120 consecutive real-gameplay presentations."""
         if not self.enabled:
             return
         if not self._boot_presented:
             self._boot_presented = True
             self.mark("boot", "ready")
+            return
+        if gameplay_active != self._gameplay_active:
+            self._gameplay_active = gameplay_active
+            self._frame_durations_ms.clear()
+            self.storage.delete("probe/fps")
+            self.mark("gameplay", "active" if gameplay_active else "inactive")
+        if not gameplay_active:
             return
         if len(self._frame_durations_ms) >= self._FPS_FRAME_COUNT:
             return

@@ -60,9 +60,19 @@ class FakeElement:
 
 
 @dataclass
+class FakeStatusElement:
+    textContent: str = ""
+    hidden: bool = True
+
+
+@dataclass
 class FakeDocument:
     hidden: bool = False
     documentElement: object = field(default_factory=FakeElement)
+    audio_status: FakeStatusElement = field(default_factory=FakeStatusElement)
+
+    def getElementById(self, element_id: str) -> FakeStatusElement | None:
+        return self.audio_status if element_id == "audio-status" else None
 
 
 @dataclass
@@ -186,12 +196,41 @@ def test_bridge_denied_fullscreen_returns_false() -> None:
     assert PygbagBrowserBridge(window).request_fullscreen() is False
 
 
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (
+            AudioStatus(ready=False, muted=True, error_code="gesture_required"),
+            "Audio: click the game to enable",
+        ),
+        (AudioStatus(ready=True, muted=False), "Audio: ready"),
+        (
+            AudioStatus(ready=False, muted=True, error_code="audio_init_failed"),
+            "Audio: muted",
+        ),
+    ],
+)
+def test_bridge_publishes_exact_visible_audio_status(
+    status: AudioStatus,
+    expected: str,
+) -> None:
+    window = FakeWindow()
+
+    PygbagBrowserBridge(window).publish_audio_status(status)
+
+    assert window.document.audio_status.textContent == expected
+    assert window.document.audio_status.hidden is False
+
+
 def test_web_audio_requires_a_gesture_before_mixer_initialization(monkeypatch: pytest.MonkeyPatch) -> None:
     pygame.mixer.quit()
     initializations: list[bool] = []
     monkeypatch.setattr(pygame.mixer, "get_init", lambda: None)
     monkeypatch.setattr(pygame.mixer, "init", lambda: initializations.append(True))
-    audio = WebAudioService()
+    window = FakeWindow()
+    audio = WebAudioService(PygbagBrowserBridge(window))
+
+    assert window.document.audio_status.textContent == "Audio: click the game to enable"
 
     assert asyncio.run(audio.initialize()) == AudioStatus(
         ready=False,
@@ -201,6 +240,28 @@ def test_web_audio_requires_a_gesture_before_mixer_initialization(monkeypatch: p
     assert initializations == []
     assert asyncio.run(audio.initialize(after_user_gesture=True)) == AudioStatus(ready=True, muted=False)
     assert initializations == [True]
+    assert window.document.audio_status.textContent == "Audio: ready"
+
+
+def test_web_audio_surfaces_muted_fallback_after_failed_initialization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pygame.mixer.quit()
+    monkeypatch.setattr(pygame.mixer, "get_init", lambda: None)
+
+    def fail_initialization() -> None:
+        raise pygame.error("browser audio unavailable")
+
+    monkeypatch.setattr(pygame.mixer, "init", fail_initialization)
+    window = FakeWindow()
+    audio = WebAudioService(PygbagBrowserBridge(window))
+
+    assert asyncio.run(audio.initialize(after_user_gesture=True)) == AudioStatus(
+        ready=False,
+        muted=True,
+        error_code="audio_init_failed",
+    )
+    assert window.document.audio_status.textContent == "Audio: muted"
 
 
 def test_web_display_requests_browser_fullscreen_but_cannot_exit() -> None:

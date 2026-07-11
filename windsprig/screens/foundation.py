@@ -10,6 +10,7 @@ from typing import Literal, cast
 
 import pygame
 
+from windsprig._build_flags import FOUNDATION_PROBE_AVAILABLE
 from windsprig.config import GameConfig
 from windsprig.content import CampaignCatalog, load_campaign_catalog
 from windsprig.content.loader import WorldNode
@@ -604,7 +605,11 @@ class FoundationScreenFactory(ScreenFactory):
     ) -> None:
         self.roster = roster or ActiveRoster(config.max_local_players)
         if probe is None:
-            enabled = services.browser is not None and services.browser.query_param("foundation_probe") == "1"
+            enabled = (
+                FOUNDATION_PROBE_AVAILABLE
+                and services.browser is not None
+                and services.browser.query_param("foundation_probe") == "1"
+            )
             probe = FoundationProbe(services.storage, enabled=enabled)
         probe.start_session()
         self.probe = probe

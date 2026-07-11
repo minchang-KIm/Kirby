@@ -135,6 +135,9 @@ class BrowserBridge(Protocol):
     def document_hidden(self) -> bool:
         raise NotImplementedError
 
+    def publish_audio_status(self, status: AudioStatus) -> None:
+        raise NotImplementedError
+
 
 @dataclass(frozen=True, slots=True)
 class PlatformServices:

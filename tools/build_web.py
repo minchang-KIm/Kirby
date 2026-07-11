@@ -8,6 +8,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -31,6 +32,10 @@ _ALLOWED_SUFFIXES: Final = frozenset(
     {".json", ".jpg", ".jpeg", ".ogg", ".otf", ".png", ".py", ".ttf", ".txt", ".webp"}
 )
 _SECRET_SUFFIXES: Final = frozenset({".key", ".p12", ".pem", ".pfx"})
+_PROBE_CAPABILITY_MEMBER: Final = "assets/windsprig/_build_flags.py"
+_ALLOWED_BUILD_TARGETS: Final = frozenset(
+    {Path("build/web-stage"), Path("dist/web")}
+)
 
 
 class _OutputMeasurements(TypedDict):
@@ -89,6 +94,13 @@ def _copy_runtime_tree(source: Path, target: Path) -> None:
         shutil.copy2(path, destination)
 
 
+def _probe_capability_source(probe: bool) -> bytes:
+    return (
+        '"""Generated browser artifact capabilities; do not edit."""\n\n'
+        f"FOUNDATION_PROBE_AVAILABLE = {probe!r}\n"
+    ).encode()
+
+
 def stage_sources(root: Path, stage: Path, *, probe: bool) -> None:
     """Copy only the browser entry, installable package, and level data into staging."""
     stage.mkdir(parents=True, exist_ok=False)
@@ -100,17 +112,63 @@ def stage_sources(root: Path, stage: Path, *, probe: bool) -> None:
         shutil.copy2(source, stage / filename)
     _copy_runtime_tree(root / "windsprig", stage / "windsprig")
     _copy_runtime_tree(root / "levels", stage / "levels")
+    (stage / "windsprig" / "_build_flags.py").write_bytes(_probe_capability_source(probe))
     if probe and not (stage / "windsprig" / "feasibility.py").is_file():
         raise SystemExit("probe build is missing windsprig/feasibility.py")
 
 
-def _remove_build_path(path: Path, *, expected: Path) -> None:
-    if path.resolve() != expected.resolve():
-        raise ValueError(f"refusing to clean unexpected build path: {path}")
+def _is_link_or_reparse(path: Path) -> bool:
+    """Detect links, Windows junctions, and any other existing reparse point."""
     if path.is_symlink():
-        raise ValueError(f"refusing to clean symlinked build path: {path}")
-    if path.exists():
-        shutil.rmtree(path)
+        return True
+    isjunction = getattr(os.path, "isjunction", None)
+    if callable(isjunction) and isjunction(path):
+        return True
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except FileNotFoundError:
+        return False
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(attributes & reparse_flag)
+
+
+def _remove_build_target(root: Path, relative_target: Path) -> None:
+    """Remove one exact build target without following any link outside the repository."""
+    relative = Path(relative_target)
+    if relative.is_absolute() or relative.drive or relative not in _ALLOWED_BUILD_TARGETS:
+        raise ValueError(f"refusing to clean non-allowlisted relative build target: {relative}")
+
+    lexical_root = Path(root).absolute()
+    candidate = lexical_root / relative
+    components = [lexical_root]
+    current = lexical_root
+    for part in relative.parts:
+        current /= part
+        components.append(current)
+    for component in components:
+        if _is_link_or_reparse(component):
+            raise ValueError(f"refusing to clean through link or reparse point: {component}")
+
+    if not lexical_root.is_dir():
+        raise ValueError(f"repository root is not an existing directory: {lexical_root}")
+    resolved_root = lexical_root.resolve(strict=True)
+    resolved_candidate = candidate.resolve(strict=False)
+    try:
+        resolved_candidate.relative_to(resolved_root)
+    except ValueError as error:
+        raise ValueError(
+            f"refusing to clean target that resolves outside repository root: {candidate}"
+        ) from error
+    if resolved_candidate != resolved_root / relative:
+        raise ValueError(f"refusing to clean redirected build target: {candidate}")
+
+    if candidate.exists():
+        for component in components:
+            if _is_link_or_reparse(component):
+                raise ValueError(f"refusing to clean through link or reparse point: {component}")
+        if not candidate.is_dir():
+            raise ValueError(f"refusing to clean non-directory build target: {candidate}")
+        shutil.rmtree(candidate)
 
 
 def _normalize_source_times(stage: Path) -> None:
@@ -158,6 +216,32 @@ def _normalize_archives(output: Path) -> None:
         _normalize_tar_gz(path)
 
 
+def verify_probe_artifacts(output: Path, *, probe: bool) -> None:
+    """Require both Pygbag archives to carry the requested immutable probe capability."""
+    expected = _probe_capability_source(probe)
+    apk_archives = sorted(output.glob("*.apk"))
+    tar_archives = sorted(output.glob("*.tar.gz"))
+    if not apk_archives or not tar_archives:
+        raise SystemExit("probe capability verification requires both Pygbag archives")
+    for archive_path in [*apk_archives, *tar_archives]:
+        try:
+            if archive_path.suffix == ".apk":
+                with zipfile.ZipFile(archive_path, "r") as archive:
+                    actual = archive.read(_PROBE_CAPABILITY_MEMBER)
+            else:
+                with tarfile.open(archive_path, mode="r:gz") as archive:
+                    member = archive.extractfile(_PROBE_CAPABILITY_MEMBER)
+                    if member is None:
+                        raise KeyError(_PROBE_CAPABILITY_MEMBER)
+                    actual = member.read()
+        except (KeyError, tarfile.TarError, zipfile.BadZipFile) as error:
+            raise SystemExit(
+                f"probe capability is missing from packaged source manifest: {archive_path.name}"
+            ) from error
+        if actual != expected:
+            raise SystemExit(f"probe capability mismatch in {archive_path.name}")
+
+
 def measure_output(output: Path) -> _OutputMeasurements:
     """Return canonical transfer totals from deterministic per-file gzip measurements."""
     paths = sorted((path for path in output.rglob("*") if path.is_file()), key=lambda path: path.as_posix())
@@ -179,8 +263,8 @@ def build_web(probe: bool) -> dict[str, object]:
     output = root / "dist" / "web"
     verify_toolchain_versions()
     generate_favicon(source / "favicon.png")
-    _remove_build_path(stage, expected=root / "build" / "web-stage")
-    _remove_build_path(output, expected=root / "dist" / "web")
+    _remove_build_target(root, Path("build/web-stage"))
+    _remove_build_target(root, Path("dist/web"))
     stage_sources(root, stage, probe=probe)
     _normalize_source_times(stage)
 
@@ -217,6 +301,7 @@ def build_web(probe: bool) -> dict[str, object]:
     if not (built / "index.html").is_file():
         raise SystemExit(f"Pygbag did not produce {built / 'index.html'}")
     _normalize_archives(built)
+    verify_probe_artifacts(built, probe=probe)
     shutil.copytree(built, output)
 
     measurements = measure_output(output)

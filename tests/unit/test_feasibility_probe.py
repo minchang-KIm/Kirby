@@ -85,13 +85,48 @@ def test_probe_measures_fps_from_120_rendered_frame_durations_after_boot() -> No
     storage = MemoryStorage()
     probe = FoundationProbe(storage, enabled=True)
 
-    probe.presented_frame(999.0)
+    probe.presented_frame(999.0, gameplay_active=False)
     assert storage.values["probe/boot"] == "ready"
     assert "probe/fps" not in storage.values
 
     for _ in range(119):
-        probe.presented_frame(20.0)
+        probe.presented_frame(20.0, gameplay_active=True)
     assert "probe/fps" not in storage.values
 
-    probe.presented_frame(20.0)
+    probe.presented_frame(20.0, gameplay_active=True)
     assert float(storage.values["probe/fps"]) == 50.0
+    assert storage.values["probe/gameplay"] == "active"
+
+
+def test_probe_requires_120_consecutive_gameplay_frames_and_clears_stale_fps() -> None:
+    storage = MemoryStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    probe.presented_frame(16.0, gameplay_active=False)
+
+    for _ in range(60):
+        probe.presented_frame(16.0, gameplay_active=True)
+    probe.presented_frame(16.0, gameplay_active=False)
+    for _ in range(60):
+        probe.presented_frame(16.0, gameplay_active=True)
+
+    assert "probe/fps" not in storage.values
+    assert storage.values["probe/gameplay"] == "active"
+
+    for _ in range(60):
+        probe.presented_frame(16.0, gameplay_active=True)
+    assert float(storage.values["probe/fps"]) == 62.5
+
+    probe.presented_frame(16.0, gameplay_active=False)
+    assert "probe/fps" not in storage.values
+    assert storage.values["probe/gameplay"] == "inactive"
+
+
+def test_probe_slow_gameplay_window_reports_below_the_runtime_floor() -> None:
+    storage = MemoryStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    probe.presented_frame(40.0, gameplay_active=False)
+
+    for _ in range(120):
+        probe.presented_frame(40.0, gameplay_active=True)
+
+    assert float(storage.values["probe/fps"]) == 25.0

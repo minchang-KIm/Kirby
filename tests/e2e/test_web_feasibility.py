@@ -42,6 +42,11 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
         timeout=5_000,
     )
     audio_status = signal(page, "audio")
+    audio_indicator = page.locator("#audio-status")
+    expect(audio_indicator).to_be_visible()
+    expect(audio_indicator).to_have_text(
+        "Audio: muted" if audio_status == "muted" else "Audio: ready"
+    )
 
     page.keyboard.press("Enter")
     # Joining suppresses that device's same-frame commands by ownership contract.
@@ -79,6 +84,15 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
         timeout=5_000,
     )
     cached_ms = int((time.perf_counter() - reload_started) * 1000)
+    canvas = page.locator("#canvas")
+    canvas.click(position={"x": 640, "y": 360})
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(100)
+    page.keyboard.press("KeyW")
+    page.wait_for_function(
+        "localStorage.getItem('windsprig:probe/gameplay') === 'active'",
+        timeout=5_000,
+    )
     page.wait_for_function(
         "Number(localStorage.getItem('windsprig:probe/fps')) >= 30",
         timeout=10_000,
@@ -93,6 +107,7 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
         "cold_ms": cold_ms,
         "console_errors": errors,
         "fps": fps,
+        "gameplay_active": signal(page, "gameplay") == "active",
         "input": input_status == "consumed_once",
         "save_restored": signal(page, "save") == "restored",
         "save_written": written_status == "written",
@@ -107,6 +122,7 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
 
     assert report["boot"] is True
     assert report["input"] is True
+    assert report["gameplay_active"] is True
     assert report["audio"] is True
     assert report["stage_complete"] is True
     assert report["save_written"] is True

@@ -188,7 +188,12 @@ class GameApp:
 
         self.screen.render(self.canvas, batch.alpha)
         self.services.display.present(self.canvas)
-        self.probe.presented_frame(raw_elapsed_ms)
+        gameplay_active = (
+            isinstance(self.screen, FoundationScreen)
+            and self.screen.screen_id == "playing"
+            and isinstance(self.screen.runtime, StageRuntime)
+        )
+        self.probe.presented_frame(raw_elapsed_ms, gameplay_active=gameplay_active)
         await self.services.time.yield_frame()
 
     def _observe_probe_input(self, input_frame: InputFrame) -> None:
