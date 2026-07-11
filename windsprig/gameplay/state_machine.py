@@ -1,5 +1,6 @@
-from __future__ import annotations
+"""Validate deterministic actor-state transitions."""
 
+from __future__ import annotations
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "Idle": {"Run", "Jump", "Float", "Draw", "Guard", "Dodge", "Hurt", "Dead"},

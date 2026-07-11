@@ -1,7 +1,9 @@
+"""Resolve deterministic body movement against the tile collision world."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 from .math2d import Rect, Vec2
 

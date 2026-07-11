@@ -1,7 +1,9 @@
+"""Queue semantic gameplay events without coupling simulation to presentation."""
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 
 @dataclass(frozen=True)

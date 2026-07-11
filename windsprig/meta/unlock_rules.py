@@ -1,8 +1,11 @@
+"""Derive campaign unlock state from authoritative completion data."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from windsprig.content.loader import CampaignCatalog
+
 from .completion import CompletionTracker
 
 

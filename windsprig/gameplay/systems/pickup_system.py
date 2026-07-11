@@ -1,3 +1,5 @@
+"""Collect overlapping run pickups exactly once and publish their result."""
+
 from __future__ import annotations
 
 from windsprig.core.ecs import World
@@ -6,6 +8,8 @@ from windsprig.math2d import Rect
 
 
 class PickupSystem:
+    """Apply collectible overlap only to living player entities."""
+
     def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         players = [
@@ -22,7 +26,9 @@ class PickupSystem:
                 prect = Rect(ptf.x, ptf.y, pcol.width, pcol.height)
                 if prect.intersects(crect):
                     collectible.collected = True
-                    world.resources["run_energy_spheres"] = world.resources.get("run_energy_spheres", 0) + collectible.value
+                    world.resources["run_energy_spheres"] = (
+                        world.resources.get("run_energy_spheres", 0) + collectible.value
+                    )
                     world.events.publish("collectible_picked", {"kind": collectible.kind, "value": collectible.value})
                     to_destroy.add(collectible_id)
                     break

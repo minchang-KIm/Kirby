@@ -1,8 +1,11 @@
+"""Build immutable world-map view models from catalog and completion state."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from windsprig.content.loader import CampaignCatalog, WorldNode
+
 from .completion import CompletionTracker
 from .unlock_rules import UnlockRules
 

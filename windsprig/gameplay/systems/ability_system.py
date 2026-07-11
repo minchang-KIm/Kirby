@@ -1,3 +1,5 @@
+"""Translate ability intent into deterministic projectile entities and events."""
+
 from __future__ import annotations
 
 from typing import Any, cast
@@ -19,6 +21,8 @@ from windsprig.gameplay.state_machine import transition
 
 
 class AbilitySystem:
+    """Own ability cooldowns, drops, attacks, and projectile materialization."""
+
     def update(self, world: World, dt_ms: int) -> None:
         registry = cast(AbilityRegistry, world.resources["ability_registry"])
         requests = cast(
@@ -67,7 +71,10 @@ class AbilitySystem:
             projectile_id = world.create_entity()
             world.add_component(projectile_id, Transform(float(req["x"]), float(req["y"])))
             world.add_component(projectile_id, Velocity(float(req["vx"]), float(req["vy"])))
-            world.add_component(projectile_id, Collider(int(req["width"]), int(req["height"]), on_ground=False, solid=False))
+            world.add_component(
+                projectile_id,
+                Collider(int(req["width"]), int(req["height"]), on_ground=False, solid=False),
+            )
             world.add_component(
                 projectile_id,
                 Projectile(

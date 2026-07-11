@@ -1,3 +1,5 @@
+"""Resolve projectile and body contacts into queued deterministic damage."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -8,6 +10,8 @@ from windsprig.math2d import Rect
 
 
 class CombatSystem:
+    """Advance projectiles and enqueue damage without mutating health directly."""
+
     def update(self, world: World, dt_ms: int) -> None:
         dt_s = dt_ms / 1000.0
         damage_queue = cast(
@@ -59,7 +63,7 @@ class CombatSystem:
             if php.dead:
                 continue
             prect = Rect(ptf.x, ptf.y, pcol.width, pcol.height)
-            for enemy_id, _, etf, ecol, ehp, ai in enemies:
+            for _enemy_id, _, etf, ecol, ehp, ai in enemies:
                 if ehp.dead or ai is None:
                     continue
                 erect = Rect(etf.x, etf.y, ecol.width, ecol.height)

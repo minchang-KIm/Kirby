@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from windsprig.math2d import Rect, Vec2
 from windsprig.physics import PhysicsBody, TileCollisionWorld, move_body

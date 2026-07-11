@@ -1,3 +1,5 @@
+"""Choose deterministic chase or patrol velocity for active enemies."""
+
 from __future__ import annotations
 
 from windsprig.core.ecs import World
@@ -5,6 +7,8 @@ from windsprig.gameplay.components import EnemyAI, Health, PlayerSlot, Transform
 
 
 class EnemyAISystem:
+    """Drive enemy horizontal intent from the nearest living player."""
+
     def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         players: list[tuple[int, Transform]] = []
@@ -12,7 +16,7 @@ class EnemyAISystem:
             if not health.dead:
                 players.append((player_id, transform))
 
-        for entity_id, ai, transform, velocity, health in world.query(EnemyAI, Transform, Velocity, Health):
+        for _entity_id, ai, transform, velocity, health in world.query(EnemyAI, Transform, Velocity, Health):
             if health.dead:
                 velocity.vx = 0.0
                 continue

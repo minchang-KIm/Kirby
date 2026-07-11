@@ -1,18 +1,20 @@
+"""Coordinate the deterministic entity-oriented simulation and snapshots."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import random
+from dataclasses import dataclass
 
 from .combat import CombatResolver
+from .config import GameConfig
 from .enemies import Enemy
 from .entities import WorldState
 from .input import InputState
 from .level import LevelData
 from .math2d import Rect
 from .player import Player
-from .config import GameConfig
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,9 @@
+"""Provide small mutable vector and rectangle primitives for simulation math."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 
 @dataclass
@@ -9,13 +11,13 @@ class Vec2:
     x: float
     y: float
 
-    def __add__(self, other: "Vec2") -> "Vec2":
+    def __add__(self, other: Vec2) -> Vec2:
         return Vec2(self.x + other.x, self.y + other.y)
 
-    def __sub__(self, other: "Vec2") -> "Vec2":
+    def __sub__(self, other: Vec2) -> Vec2:
         return Vec2(self.x - other.x, self.y - other.y)
 
-    def __mul__(self, scalar: float) -> "Vec2":
+    def __mul__(self, scalar: float) -> Vec2:
         return Vec2(self.x * scalar, self.y * scalar)
 
     def to_int(self) -> tuple[int, int]:
@@ -56,10 +58,10 @@ class Rect:
     def center_y(self) -> float:
         return self.y + self.h / 2.0
 
-    def moved(self, dx: float, dy: float) -> "Rect":
+    def moved(self, dx: float, dy: float) -> Rect:
         return Rect(self.x + dx, self.y + dy, self.w, self.h)
 
-    def intersects(self, other: "Rect") -> bool:
+    def intersects(self, other: Rect) -> bool:
         return (
             self.left < other.right
             and self.right > other.left
@@ -67,7 +69,7 @@ class Rect:
             and self.bottom > other.top
         )
 
-    def inflate(self, amount_x: float, amount_y: float) -> "Rect":
+    def inflate(self, amount_x: float, amount_y: float) -> Rect:
         return Rect(
             self.x - amount_x / 2.0,
             self.y - amount_y / 2.0,

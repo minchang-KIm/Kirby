@@ -1,3 +1,5 @@
+"""Construct a stage world from validated content and the active roster."""
+
 from __future__ import annotations
 
 from windsprig.content.loader import StageSpec
@@ -6,14 +8,14 @@ from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
     CameraFocus,
-    Collider,
     Collectible,
+    Collider,
     ControlIntent,
+    DrawState,
     EnemyAI,
     EnemyDropAbility,
     Facing,
     Health,
-    DrawState,
     PlayerSlot,
     Respawn,
     StageGoal,

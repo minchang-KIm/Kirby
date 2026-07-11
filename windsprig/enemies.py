@@ -1,12 +1,13 @@
+"""Entity-oriented enemy behavior for the deterministic simulation boundary."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import itertools
+from dataclasses import dataclass, field
 
-from .combat import HitEvent, Hitbox, Hurtbox
+from .combat import Hitbox, HitEvent, Hurtbox
 from .math2d import Rect, Vec2, move_towards
 from .physics import PhysicsBody, move_body
-
 
 _id_iter = itertools.count(100)
 
@@ -46,7 +47,7 @@ class Enemy:
         self.hp = self.max_hp
         self.body = PhysicsBody(rect=Rect(self.spawn[0], self.spawn[1], w, h), velocity=Vec2(0.0, 0.0))
 
-    def update(self, dt_ms: int, world: "WorldStateLike") -> None:
+    def update(self, dt_ms: int, world: WorldStateLike) -> None:
         if self.dead:
             return
 

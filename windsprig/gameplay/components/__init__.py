@@ -1,15 +1,17 @@
+"""Expose the production ECS component vocabulary."""
+
 from .core import (
     AbilityState,
     ActorState,
     CameraFocus,
-    Collider,
     Collectible,
+    Collider,
     ControlIntent,
+    DrawState,
     EnemyAI,
     EnemyDropAbility,
     Facing,
     Health,
-    DrawState,
     PlayerSlot,
     Projectile,
     Respawn,

@@ -1,3 +1,5 @@
+"""Apply player movement intent and gravity at the fixed simulation step."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -17,11 +19,13 @@ from windsprig.gameplay.state_machine import transition
 
 
 class MovementSystem:
+    """Own deterministic acceleration, jumping, hovering, and gravity."""
+
     def update(self, world: World, dt_ms: int) -> None:
         config = cast(GameConfig, world.resources["config"])
         dt_s = dt_ms / 1000.0
 
-        for entity_id, _, _, _, velocity, collider, intent, state in world.query(
+        for _entity_id, _, _, _, velocity, collider, intent, state in world.query(
             PlayerSlot,
             Team,
             Transform,
@@ -55,6 +59,5 @@ class MovementSystem:
                 velocity.vy -= 540.0 * dt_s
                 state.name = transition(state.name, "Float")
 
-        for entity_id, velocity, collider in world.query(Velocity, Collider):
-            _ = entity_id
+        for _entity_id, velocity, _collider in world.query(Velocity, Collider):
             velocity.vy = min(velocity.vy + config.gravity * dt_s, 1600.0)

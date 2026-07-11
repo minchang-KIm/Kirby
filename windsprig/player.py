@@ -1,12 +1,14 @@
+"""Implement player movement, action, and damage behavior for simulation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .combat import HitEvent, Hitbox, Hurtbox
+from .combat import Hitbox, HitEvent, Hurtbox
+from .config import GameConfig
 from .input import InputState
 from .math2d import Rect, Vec2, move_towards
 from .physics import PhysicsBody, TileCollisionWorld, move_body
-from .config import GameConfig
 
 
 @dataclass
@@ -41,7 +43,7 @@ class Player:
     def set_input(self, input_state: InputState) -> None:
         self._input_state = input_state
 
-    def update(self, dt_ms: int, world: "WorldStateLike") -> None:
+    def update(self, dt_ms: int, world: WorldStateLike) -> None:
         if self.dead:
             return
 
