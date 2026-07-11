@@ -223,7 +223,20 @@ class GameApp:
         result = self.save_service.save(updated)
         self.save_data = updated
         self.save_write_result = result
-        self.save_status = "saved" if result.ok else "retry_required"
+        if result.ok:
+            self.save_status = "saved"
+        elif result.error_code == "reset_confirmation_required":
+            self.save_status = "reset_required"
+        else:
+            self.save_status = "retry_required"
+
+    def confirm_save_reset(self) -> SaveWriteResult:
+        """Persist the recovery screen's explicit reset confirmation."""
+
+        result = self.save_service.confirm_reset(self.save_data)
+        self.save_write_result = result
+        self.save_status = "saved" if result.ok else "reset_required"
+        return result
 
     def _render_world_map(self, screen: pygame.Surface, font: pygame.font.Font, small_font: pygame.font.Font) -> None:
         screen.fill((25, 33, 64))

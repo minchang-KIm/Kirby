@@ -49,6 +49,7 @@ Windsprig is a production game and a code-study project. The source should make 
 - Raise precise exceptions for programmer/configuration errors. Convert expected runtime failures into typed results or visible notices at the boundary that can recover.
 - Never hide save, content, build, or release-integrity failures. Audio unavailability may degrade to muted play because the product explicitly supports it.
 - Diagnostic messages include a stable operation or error code and enough local context to act, without secrets or personal data.
+- Persistence assumes one active session. Save fingerprints are best-effort guards, not an atomic cross-tab compare-and-swap; after `recovery_required`, reload and adopt authoritative data before retrying.
 
 ## Tests
 

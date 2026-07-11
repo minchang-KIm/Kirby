@@ -191,6 +191,47 @@ def test_migrated_v1_rewrite_failure_keeps_migrated_memory_and_never_reports_sav
     assert app.save_status == "retry_required"
 
 
+def test_reset_required_app_flush_stays_locked_and_preserves_corrupt_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = ToggleStorage()
+    storage.values["save_data.json"] = "bad primary"
+    storage.values["save_data.backup.json"] = "bad backup"
+    app = GameApp(services=_services(tmp_path, monkeypatch, storage))
+    sources = {
+        "save_data.json": storage.values["save_data.json"],
+        "save_data.backup.json": storage.values["save_data.backup.json"],
+    }
+
+    app._flush_save()
+
+    assert app.save_notice is not None and app.save_notice.code == "reset_required"
+    assert app.save_status == "reset_required"
+    assert app.save_write_result is not None
+    assert app.save_write_result.error_code == "reset_confirmation_required"
+    assert storage.values["save_data.json"] == sources["save_data.json"]
+    assert storage.values["save_data.backup.json"] == sources["save_data.backup.json"]
+
+
+def test_app_exposes_narrow_verified_reset_confirmation_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = ToggleStorage()
+    storage.values["save_data.json"] = "bad primary"
+    storage.values["save_data.backup.json"] = "bad backup"
+    app = GameApp(services=_services(tmp_path, monkeypatch, storage))
+
+    result = app.confirm_save_reset()
+
+    assert result.ok is True
+    assert app.save_status == "saved"
+    assert app.save_write_result == result
+    assert save_data_from_json(storage.values["save_data.json"]) == app.save_data
+    assert save_data_from_json(storage.values["save_data.backup.json"]) == app.save_data
+
+
 def test_default_app_save_uses_platform_storage_and_creates_no_cwd_save_directory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

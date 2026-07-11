@@ -142,6 +142,55 @@ def test_invalid_primary_and_backup_offer_safe_new_data(
     assert result.data == SaveData()
 
 
+def test_reset_required_blocks_ordinary_save_until_explicit_confirmation() -> None:
+    storage = MemoryStorage()
+    storage.values["save_data.json"] = "bad primary"
+    storage.values["save_data.backup.json"] = "bad backup"
+    manager = SaveManager(storage, CATALOG, _now)
+    loaded = manager.load()
+    source_values = dict(storage.values)
+    storage.events.clear()
+
+    blocked = manager.save(_data("Implicit Reset"))
+
+    assert loaded.notice is not None and loaded.notice.code == "reset_required"
+    assert blocked.ok is False
+    assert blocked.error_code == "reset_confirmation_required"
+    assert storage.values == source_values
+    assert not storage.events
+
+
+def test_confirm_reset_verifies_all_writes_before_unlocking_ordinary_save() -> None:
+    storage = MemoryStorage()
+    storage.values["save_data.json"] = "bad primary"
+    storage.values["save_data.backup.json"] = "bad backup"
+    manager = SaveManager(storage, CATALOG, _now)
+    assert manager.load().notice is not None
+    storage.partial_writes.add("save_data.backup.json")
+
+    failed = manager.confirm_reset(_data("Fresh Start"))
+    storage.partial_writes.clear()
+    blocked = manager.save(_data("Still Blocked"))
+
+    assert failed.ok is False and failed.error_code == "storage_write_failed"
+    assert blocked.ok is False
+    assert blocked.error_code == "reset_confirmation_required"
+    assert storage.values["save_data.backup.staging.json"] == save_data_to_json(
+        _data("Fresh Start"), indent=2
+    )
+
+    retried = manager.confirm_reset(_data("Fresh Start"))
+
+    assert retried.ok is True
+    assert storage.values["save_data.json"] == save_data_to_json(
+        _data("Fresh Start"), indent=2
+    )
+    assert storage.values["save_data.backup.json"] == save_data_to_json(
+        _data("Fresh Start"), indent=2
+    )
+    assert manager.save(_data("Later Progress")).ok is True
+
+
 def test_unsupported_primary_is_preserved_without_downgrade_or_reset() -> None:
     storage = MemoryStorage()
     unsupported = '{"save_version":3,"future_data":"keep me"}'
@@ -180,6 +229,31 @@ def test_primary_read_failure_can_still_recover_a_known_good_backup() -> None:
     assert result.notice.message_key == "save.primary_read_failed"
     assert result.data == backup
     assert ("write", "save_data.json") not in storage.events
+
+
+@pytest.mark.parametrize(
+    "unsupported_key",
+    ["save_data.backup.json", "save_data.backup.staging.json"],
+)
+def test_primary_read_failure_stays_latched_when_recovery_copy_is_unsupported(
+    unsupported_key: str,
+) -> None:
+    storage = MemoryStorage()
+    unseen_raw = save_data_to_json(_data("Unseen"), indent=2)
+    storage.values["save_data.json"] = unseen_raw
+    storage.values[unsupported_key] = '{"save_version":3,"future_data":"keep"}'
+    storage.fail_reads.add("save_data.json")
+    manager = SaveManager(storage, CATALOG, _now)
+
+    loaded = manager.load()
+    storage.fail_reads.clear()
+    storage.events.clear()
+    blocked = manager.save(_data("Stale"))
+
+    assert loaded.notice is not None and loaded.notice.code == "unsupported_version"
+    assert blocked.ok is False and blocked.error_code == "recovery_required"
+    assert storage.values["save_data.json"] == unseen_raw
+    assert not storage.events
 
 
 def test_read_failed_load_blocks_stale_save_until_a_successful_reload() -> None:
@@ -281,7 +355,48 @@ def test_failed_non_atomic_backup_restore_keeps_backup_data_in_memory() -> None:
     assert storage.values["save_data.backup.json"] == save_data_to_json(backup)
 
 
-def test_save_preserves_previous_primary_as_backup_before_writing_new_primary() -> None:
+def test_corrupt_primary_and_canonical_backup_restore_verified_staging_fallback() -> None:
+    storage = MemoryStorage()
+    staged = _data("Staged Recovery")
+    storage.values["save_data.json"] = "bad primary"
+    storage.values["save_data.backup.json"] = "bad canonical backup"
+    storage.values["save_data.backup.staging.json"] = save_data_to_json(staged, indent=2)
+
+    result = SaveManager(storage, CATALOG, _now).load()
+
+    assert result.notice is not None and result.notice.code == "backup_restored"
+    assert result.data == staged
+    assert storage.values["save_data.json"] == save_data_to_json(staged, indent=2)
+    assert storage.values["save_data.backup.staging.json"] == save_data_to_json(
+        staged, indent=2
+    )
+
+
+def test_load_rechecks_primary_before_promoting_recovery_data() -> None:
+    external = _data("External")
+    external_raw = save_data_to_json(external, indent=2)
+
+    class PrimaryChangesAfterBackupReadStorage(MemoryStorage):
+        def read_text(self, key: str) -> str | None:
+            value = super().read_text(key)
+            if key == "save_data.backup.json":
+                self.values["save_data.json"] = external_raw
+            return value
+
+    storage = PrimaryChangesAfterBackupReadStorage()
+    storage.values["save_data.json"] = "bad primary"
+    storage.values["save_data.backup.json"] = save_data_to_json(
+        _data("Recovery"), indent=2
+    )
+
+    result = SaveManager(storage, CATALOG, _now).load()
+
+    assert result.notice is not None and result.notice.code == "read_failed"
+    assert result.notice.message_key == "save.primary_changed_during_recovery"
+    assert storage.values["save_data.json"] == external_raw
+
+
+def test_save_stages_previous_primary_then_rotates_backup_after_primary_verification() -> None:
     storage = MemoryStorage()
     previous = _data("Previous")
     updated = _data("Updated")
@@ -293,48 +408,253 @@ def test_save_preserves_previous_primary_as_backup_before_writing_new_primary() 
     assert result.ok is True and result.error_code is None
     assert storage.values["save_data.backup.json"] == previous_raw
     assert storage.values["save_data.json"] == save_data_to_json(updated, indent=2)
+    staging_write = storage.events.index(("write", "save_data.backup.staging.json"))
     backup_write = storage.events.index(("write", "save_data.backup.json"))
     primary_write = storage.events.index(("write", "save_data.json"))
-    assert backup_write < primary_write
+    assert staging_write < primary_write < backup_write
 
 
-def test_backup_write_failure_aborts_before_primary_changes() -> None:
+def test_partial_staging_write_preserves_primary_and_canonical_backup() -> None:
     storage = MemoryStorage()
     previous = _data("Previous")
+    older = _data("Older")
     previous_raw = save_data_to_json(previous, indent=2)
+    older_raw = save_data_to_json(older, indent=2)
     storage.values["save_data.json"] = previous_raw
-    storage.fail_writes.add("save_data.backup.json")
+    storage.values["save_data.backup.json"] = older_raw
+    storage.partial_writes.add("save_data.backup.staging.json")
 
     result = SaveManager(storage, CATALOG, _now).save(_data("Updated"))
 
     assert result.ok is False and result.error_code == "storage_write_failed"
     assert storage.values["save_data.json"] == previous_raw
+    assert storage.values["save_data.backup.json"] == older_raw
     assert ("write", "save_data.json") not in storage.events
 
 
 def test_primary_write_failure_preserves_known_good_backup_and_memory_state() -> None:
     storage = MemoryStorage()
     previous = _data("Previous")
+    older = _data("Older")
     updated = _data("Updated")
     previous_raw = save_data_to_json(previous, indent=2)
+    older_raw = save_data_to_json(older, indent=2)
     storage.values["save_data.json"] = previous_raw
+    storage.values["save_data.backup.json"] = older_raw
     storage.partial_writes.add("save_data.json")
 
     result = SaveManager(storage, CATALOG, _now).save(updated)
 
     assert result.ok is False and result.error_code == "storage_write_failed"
-    assert storage.values["save_data.backup.json"] == previous_raw
+    assert storage.values["save_data.backup.staging.json"] == previous_raw
+    assert storage.values["save_data.backup.json"] == older_raw
     assert updated.profiles[0].display_name == "Updated"
+
+
+def test_post_commit_backup_rotation_failure_is_repaired_by_same_data_retry() -> None:
+    storage = MemoryStorage()
+    previous = _data("Previous")
+    older = _data("Older")
+    updated = _data("Updated")
+    previous_raw = save_data_to_json(previous, indent=2)
+    older_raw = save_data_to_json(older, indent=2)
+    updated_raw = save_data_to_json(updated, indent=2)
+    storage.values["save_data.json"] = previous_raw
+    storage.values["save_data.backup.json"] = older_raw
+    storage.partial_writes.add("save_data.backup.json")
+    manager = SaveManager(storage, CATALOG, _now)
+
+    failed = manager.save(updated)
+
+    assert failed.ok is False and failed.error_code == "storage_write_failed"
+    assert storage.values["save_data.json"] == updated_raw
+    assert storage.values["save_data.backup.json"] not in {older_raw, previous_raw}
+    assert storage.values["save_data.backup.staging.json"] == previous_raw
+
+    storage.partial_writes.clear()
+    retried = manager.save(updated)
+
+    assert retried.ok is True
+    assert storage.values["save_data.json"] == updated_raw
+    assert storage.values["save_data.backup.json"] == previous_raw
+    assert "save_data.backup.staging.json" not in storage.values
+
+
+@pytest.mark.parametrize("backup_raw", [None, "bad backup"])
+def test_same_data_save_repairs_missing_or_corrupt_canonical_backup(
+    backup_raw: str | None,
+) -> None:
+    storage = MemoryStorage()
+    data = _data("Current")
+    raw = save_data_to_json(data, indent=2)
+    storage.values["save_data.json"] = raw
+    if backup_raw is not None:
+        storage.values["save_data.backup.json"] = backup_raw
+
+    result = SaveManager(storage, CATALOG, _now).save(data)
+
+    assert result.ok is True
+    assert storage.values["save_data.json"] == raw
+    assert storage.values["save_data.backup.json"] == raw
+    assert "save_data.backup.staging.json" not in storage.values
+
+
+def test_same_data_repair_records_fingerprint_before_later_save() -> None:
+    storage = MemoryStorage()
+    current = _data("Current")
+    external = _data("External")
+    current_raw = save_data_to_json(current, indent=2)
+    external_raw = save_data_to_json(external, indent=2)
+    storage.values["save_data.json"] = current_raw
+    storage.fail_deletes = True
+    manager = SaveManager(storage, CATALOG, _now)
+    assert manager.save(current).ok is True
+    storage.values["save_data.json"] = external_raw
+    storage.events.clear()
+
+    blocked = manager.save(_data("Stale"))
+
+    assert blocked.ok is False and blocked.error_code == "recovery_required"
+    assert storage.values["save_data.json"] == external_raw
+    assert storage.values["save_data.backup.staging.json"] == current_raw
+    assert not any(operation == "write" for operation, _ in storage.events)
+
+
+def test_existing_valid_staging_copy_is_never_overwritten() -> None:
+    storage = MemoryStorage()
+    previous = _data("Previous")
+    staged = _data("Earlier Recovery")
+    staged_raw = save_data_to_json(staged, indent=2)
+    storage.values["save_data.json"] = save_data_to_json(previous, indent=2)
+    storage.values["save_data.backup.staging.json"] = staged_raw
+    storage.fail_deletes = True
+
+    result = SaveManager(storage, CATALOG, _now).save(_data("Updated"))
+
+    assert result.ok is True
+    assert storage.values["save_data.backup.staging.json"] == staged_raw
+    assert storage.events.count(("write", "save_data.backup.staging.json")) == 0
 
 
 def test_primary_read_failure_during_save_returns_failure_without_writing() -> None:
     storage = MemoryStorage()
+    storage.values["save_data.json"] = save_data_to_json(_data("Existing"), indent=2)
     storage.fail_reads.add("save_data.json")
+    manager = SaveManager(storage, CATALOG, _now)
 
-    result = SaveManager(storage, CATALOG, _now).save(SaveData())
+    result = manager.save(SaveData())
 
     assert result.ok is False and result.error_code == "storage_write_failed"
     assert not any(operation == "write" for operation, _ in storage.events)
+
+    storage.fail_reads.clear()
+    storage.events.clear()
+    blocked = manager.save(_data("Stale"))
+
+    assert blocked.ok is False and blocked.error_code == "recovery_required"
+    assert not storage.events
+
+    assert manager.load().data == _data("Existing")
+    assert manager.save(_data("Reconciled")).ok is True
+
+
+def test_loaded_primary_fingerprint_blocks_stale_manager_overwrite() -> None:
+    storage = MemoryStorage()
+    initial = _data("Initial")
+    external = _data("External")
+    storage.values["save_data.json"] = save_data_to_json(initial, indent=2)
+    manager = SaveManager(storage, CATALOG, _now)
+    assert manager.load().data == initial
+    external_raw = save_data_to_json(external, indent=2)
+    storage.values["save_data.json"] = external_raw
+    storage.events.clear()
+
+    blocked = manager.save(_data("Stale Manager"))
+
+    assert blocked.ok is False and blocked.error_code == "recovery_required"
+    assert storage.values["save_data.json"] == external_raw
+    assert not any(operation == "write" for operation, _ in storage.events)
+
+    assert manager.load().data == external
+    assert manager.save(_data("Reconciled")).ok is True
+
+
+def test_same_data_repair_primary_read_failure_latches_reload_requirement() -> None:
+    class FailSecondPrimaryReadStorage(MemoryStorage):
+        def __init__(self) -> None:
+            super().__init__()
+            self.primary_reads = 0
+
+        def read_text(self, key: str) -> str | None:
+            if key == "save_data.json":
+                self.primary_reads += 1
+                if self.primary_reads == 2:
+                    raise OSError("primary recheck unavailable")
+            return super().read_text(key)
+
+    storage = FailSecondPrimaryReadStorage()
+    data = _data("Current")
+    raw = save_data_to_json(data, indent=2)
+    storage.values["save_data.json"] = raw
+    storage.values["save_data.backup.json"] = raw
+    manager = SaveManager(storage, CATALOG, _now)
+
+    failed = manager.save(data)
+
+    assert failed.ok is False and failed.error_code == "storage_write_failed"
+    storage.events.clear()
+    assert manager.save(_data("Stale")).error_code == "recovery_required"
+    assert not storage.events
+
+
+def test_reset_guard_primary_read_failure_also_latches_reload_requirement() -> None:
+    class FailSecondPrimaryReadStorage(MemoryStorage):
+        def __init__(self) -> None:
+            super().__init__()
+            self.primary_reads = 0
+
+        def read_text(self, key: str) -> str | None:
+            if key == "save_data.json":
+                self.primary_reads += 1
+                if self.primary_reads == 2:
+                    raise OSError("reset guard read unavailable")
+            return super().read_text(key)
+
+    storage = FailSecondPrimaryReadStorage()
+    storage.values["save_data.json"] = "bad primary"
+    manager = SaveManager(storage, CATALOG, _now)
+
+    failed = manager.save(_data("Fresh Start"))
+
+    assert failed.ok is False and failed.error_code == "storage_write_failed"
+    storage.events.clear()
+    assert manager.save(_data("Stale")).error_code == "recovery_required"
+    assert not storage.events
+
+
+def test_confirm_reset_rechecks_each_source_before_overwriting_it() -> None:
+    external = _data("External")
+    external_raw = save_data_to_json(external, indent=2)
+
+    class ConcurrentBackupStorage(MemoryStorage):
+        def write_text(self, key: str, value: str) -> None:
+            super().write_text(key, value)
+            if key == "save_data.backup.staging.json":
+                self.values["save_data.backup.json"] = external_raw
+
+    storage = ConcurrentBackupStorage()
+    storage.values["save_data.json"] = "bad primary"
+    storage.values["save_data.backup.json"] = "bad backup"
+    manager = SaveManager(storage, CATALOG, _now)
+    assert manager.load().notice is not None
+
+    result = manager.confirm_reset(_data("Fresh Start"))
+
+    assert result.ok is False and result.error_code == "recovery_required"
+    assert storage.values["save_data.backup.json"] == external_raw
+    assert manager.save(_data("Still Blocked")).error_code == (
+        "reset_confirmation_required"
+    )
 
 
 def test_silent_primary_write_loss_is_not_reported_as_saved() -> None:
