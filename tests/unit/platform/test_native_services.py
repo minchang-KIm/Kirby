@@ -295,12 +295,16 @@ def test_lifecycle_maps_quit_and_focus_events_in_order() -> None:
     )
 
 
-def test_time_service_reports_float_milliseconds_and_yields() -> None:
+def test_time_service_reports_float_milliseconds() -> None:
     time = PygameTimeService()
     assert isinstance(time.tick(0), float)
     assert isinstance(time.monotonic_ms(), float)
 
-    async def observe_yield() -> bool:
+
+def test_time_service_yields_to_the_event_loop() -> None:
+    time = PygameTimeService()
+
+    async def observe_yield() -> None:
         yielded = False
 
         async def mark_yielded() -> None:
@@ -308,8 +312,13 @@ def test_time_service_reports_float_milliseconds_and_yields() -> None:
             yielded = True
 
         task = asyncio.create_task(mark_yielded())
-        await time.yield_frame()
-        await task
-        return yielded
+        try:
+            await time.yield_frame()
+            assert yielded is True
+            assert task.done()
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
 
-    assert asyncio.run(observe_yield()) is True
+    asyncio.run(observe_yield())
