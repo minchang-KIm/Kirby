@@ -21,9 +21,22 @@ from windsprig.gameplay.components import (
     Velocity,
 )
 from windsprig.gameplay.factory import EntityFactory
+from windsprig.gameplay.runtime import StageRuntime
 from windsprig.gameplay.snapshot import StageOutcome
+from windsprig.gameplay.systems.stage_goal_system import PROVISIONAL_STAGE_CLEARED_TOPIC
 from windsprig.input.commands import InputFrame
 from windsprig.input.roster import DeviceRef
+
+
+def assert_view_and_hash_reject(
+    runtime: StageRuntime,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """Require the presentation and deterministic boundaries to reject alike."""
+    for read in (runtime.snapshot, runtime.world.snapshot, runtime.world.world_hash):
+        with pytest.raises(error, match=match):
+            read()
 
 
 def test_runtime_spawns_only_sorted_active_players_before_stage_entities() -> None:
@@ -55,6 +68,7 @@ def test_pause_lobby_sync_leaves_then_joins_in_sorted_slot_order() -> None:
     p3 = make_active_player(3)
     p4 = make_active_player(4)
     runtime = make_runtime(players=(p3, p1))
+    initial_hash = runtime.world.world_hash()
 
     events = runtime.sync_active_players((p4, p2))
 
@@ -66,6 +80,7 @@ def test_pause_lobby_sync_leaves_then_joins_in_sorted_slot_order() -> None:
     ]
     assert [slot.slot for _, slot in runtime.world.query(PlayerSlot)] == [2, 4]
     assert tuple(runtime.player_entities) == (2, 4)
+    assert runtime.world.world_hash() != initial_hash
 
 
 def test_sync_is_idempotent_and_metadata_updates_do_not_reallocate_entity() -> None:
@@ -106,8 +121,10 @@ def test_leader_authority_updates_snapshot_and_hash_without_reallocation() -> No
     ]
     assert runtime.snapshot().goal_gather.leader_slot == 2
     assert runtime.world.world_hash() != initial_hash
+    canonical_hash = runtime.world.world_hash()
     runtime.world.resources["active_players"] = (p1, p2)
     assert runtime.snapshot().goal_gather.leader_slot == 2
+    assert runtime.world.world_hash() == canonical_hash
 
 
 def test_device_and_visual_metadata_do_not_change_gameplay_hash() -> None:
@@ -180,6 +197,87 @@ def test_sync_rejects_duplicate_slots_without_mutation() -> None:
     assert runtime.world.resources["active_players"] == (p1,)
 
 
+@pytest.mark.parametrize(
+    ("case", "error", "match"),
+    (
+        ("list", TypeError, "active_players must be a sorted tuple of ActivePlayer values"),
+        ("non-player", TypeError, "active_players must be a sorted tuple of ActivePlayer values"),
+        ("unsorted", ValueError, "active_players must be sorted by slot"),
+        ("mismatched", ValueError, "active_players slots must match player_entities"),
+    ),
+)
+def test_malformed_active_player_resource_is_rejected_by_view_and_hash(
+    case: str,
+    error: type[Exception],
+    match: str,
+) -> None:
+    p1 = make_active_player(1, leader=True)
+    p2 = make_active_player(2)
+    runtime = make_runtime(players=(p1, p2))
+    malformed: object = {
+        "list": [p1, p2],
+        "non-player": (p1, object()),
+        "unsorted": (p2, p1),
+        "mismatched": (p1,),
+    }[case]
+    runtime.world.resources["active_players"] = malformed
+
+    assert_view_and_hash_reject(runtime, error, match)
+
+
+@pytest.mark.parametrize(
+    ("value", "error", "match"),
+    (
+        (True, TypeError, "run_energy_spheres must be an integer"),
+        (1.5, TypeError, "run_energy_spheres must be an integer"),
+        ("1", TypeError, "run_energy_spheres must be an integer"),
+        (-1, ValueError, "run_energy_spheres must be non-negative"),
+    ),
+)
+def test_invalid_run_mote_count_is_rejected_by_view_and_hash(
+    value: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    runtime = make_runtime()
+    runtime.world.resources["run_energy_spheres"] = value
+
+    assert_view_and_hash_reject(runtime, error, match)
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        "test_stage:mote:1",
+        {"test_stage:mote:1": True},
+        ["test_stage:mote:1", 2],
+    ),
+)
+def test_invalid_collected_mote_collection_is_rejected_by_view_and_hash(
+    value: object,
+) -> None:
+    runtime = make_runtime()
+    runtime.world.resources["collected_mote_ids"] = value
+
+    assert_view_and_hash_reject(
+        runtime,
+        TypeError,
+        "collected_mote_ids must be a collection of strings",
+    )
+
+
+def test_arbitrary_collected_mote_ids_share_one_canonical_view_and_hash() -> None:
+    runtime = make_runtime()
+    runtime.world.resources["collected_mote_ids"] = ["external:mote", "external:mote"]
+
+    snapshot = runtime.snapshot()
+    duplicate_hash = runtime.world.world_hash()
+    runtime.world.resources["collected_mote_ids"] = {"external:mote"}
+
+    assert snapshot.collected_mote_ids == ("external:mote",)
+    assert runtime.world.world_hash() == duplicate_hash
+
+
 def test_runtime_rejects_stage_without_player_spawn() -> None:
     with pytest.raises(ValueError, match="player spawn"):
         make_runtime(stage=make_stage(player_spawns=()))
@@ -231,7 +329,9 @@ def test_step_captures_each_system_event_in_its_matching_frame_only() -> None:
     completed = runtime.step(InputFrame.empty())
     following = runtime.step(InputFrame.empty())
 
-    assert [event.topic for event in completed.events] == ["stage_cleared"]
+    assert [event.topic for event in completed.events] == [
+        PROVISIONAL_STAGE_CLEARED_TOPIC
+    ]
     assert completed.simulation.event_count == len(completed.events) == 1
     assert completed.view.outcome is StageOutcome.COMPLETED
     assert following.events == ()
@@ -248,7 +348,10 @@ def test_step_returns_prequeued_and_in_step_events_once_in_queue_order() -> None
 
     frame = runtime.step(InputFrame.empty())
 
-    assert [event.topic for event in frame.events] == ["QueuedBeforeStep", "stage_cleared"]
+    assert [event.topic for event in frame.events] == [
+        "QueuedBeforeStep",
+        PROVISIONAL_STAGE_CLEARED_TOPIC,
+    ]
     assert len(frame.events) == frame.simulation.event_count == 2
     assert runtime.world.events.peek() == []
     following = runtime.step(InputFrame.empty())
@@ -332,7 +435,7 @@ def test_camera_snapshot_and_system_ignore_inactive_dead_and_disabled_targets() 
 
     assert runtime.snapshot().camera_targets == ()
     assert runtime.world.resources["camera_target"] is None
-    runtime.world.resources["active_players"] = (p1,)
+    runtime.sync_active_players((p1,))
     runtime.world.get_component(runtime.player_entities[1], Health).dead = False
     runtime.world.get_component(runtime.player_entities[1], CameraFocus).enabled = True
     assert tuple(view.slot for view in runtime.snapshot().camera_targets) == (1,)

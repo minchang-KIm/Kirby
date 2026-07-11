@@ -5,6 +5,9 @@ from windsprig.gameplay.components import Collider, Health, StageGoal, Team, Tra
 from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.math2d import Rect
 
+# Temporary compatibility topic until Task 9 publishes the final typed outcome events.
+PROVISIONAL_STAGE_CLEARED_TOPIC = "stage_cleared"
+
 
 class StageGoalSystem:
     def update(self, world: World, dt_ms: int) -> None:
@@ -26,7 +29,7 @@ class StageGoalSystem:
                 if goal_rect.intersects(player_rect):
                     world.resources["stage_outcome"] = StageOutcome.COMPLETED
                     world.events.publish(
-                        "stage_cleared",
+                        PROVISIONAL_STAGE_CLEARED_TOPIC,
                         {"node_id": goal.node_id, "world_id": goal.world_id, "stage_id": goal.stage_id},
                     )
                     return

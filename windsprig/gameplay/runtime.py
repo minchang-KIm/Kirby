@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from windsprig.config import GameConfig
 from windsprig.content.loader import StageSpec
@@ -56,6 +56,17 @@ from windsprig.gameplay.systems import (
 )
 from windsprig.input.commands import InputFrame
 from windsprig.input.roster import ActivePlayer
+
+
+@dataclass(frozen=True, slots=True)
+class _ValidatedGameplayResources:
+    """One strict canonical resource view shared by snapshots and hashes."""
+
+    active_players: tuple[ActivePlayer, ...]
+    active_authority: tuple[tuple[int, bool], ...]
+    stage_outcome: StageOutcome
+    run_energy_spheres: int
+    collected_mote_ids: tuple[str, ...]
 
 
 class StageRuntime:
@@ -239,12 +250,11 @@ class StageRuntime:
         self.factory.spawn_stage_goal(self.stage)
 
     def _current_players_for_reset(self) -> tuple[ActivePlayer, ...]:
+        resources = self._validate_gameplay_resources(self.world)
         metadata = {
             player.slot: player
-            for player in self._validate_active_players(self._active_players())
+            for player in resources.active_players
         }
-        if set(metadata) != set(self.player_entities):
-            raise ValueError("active player metadata does not match runtime entities")
         players: list[ActivePlayer] = []
         for slot in sorted(self.player_entities):
             entity_id = self.player_entities[slot]
@@ -253,22 +263,73 @@ class StageRuntime:
         return tuple(players)
 
     def _gameplay_resource_hash(self, world: World) -> dict[str, object]:
+        resources = self._validate_gameplay_resources(world)
+        return {
+            "active_players": resources.active_authority,
+            "stage_outcome": resources.stage_outcome.value,
+            "run_energy_spheres": resources.run_energy_spheres,
+            "collected_mote_ids": resources.collected_mote_ids,
+        }
+
+    def _validate_gameplay_resources(
+        self,
+        world: World,
+    ) -> _ValidatedGameplayResources:
+        raw_players = world.resources.get("active_players")
+        if not isinstance(raw_players, tuple):
+            raise TypeError(
+                "active_players must be a sorted tuple of ActivePlayer values"
+            )
+        players: list[ActivePlayer] = []
+        for player in raw_players:
+            if not isinstance(player, ActivePlayer):
+                raise TypeError(
+                    "active_players must be a sorted tuple of ActivePlayer values"
+                )
+            players.append(player)
+        active_players = tuple(players)
+        sorted_players = self._validate_active_players(active_players)
+        if active_players != sorted_players:
+            raise ValueError("active_players must be sorted by slot")
+        active_slots = tuple(player.slot for player in active_players)
+        entity_slots = tuple(sorted(self.player_entities))
+        if active_slots != entity_slots:
+            raise ValueError("active_players slots must match player_entities")
+
+        active_authority: list[tuple[int, bool]] = []
+        for slot in entity_slots:
+            try:
+                player_slot = world.get_component(self.player_entities[slot], PlayerSlot)
+            except KeyError:
+                raise ValueError(
+                    "player_entities must reference matching PlayerSlot components"
+                ) from None
+            if player_slot.slot != slot:
+                raise ValueError(
+                    "player_entities must reference matching PlayerSlot components"
+                )
+            active_authority.append((slot, player_slot.is_leader))
+
         outcome = world.resources.get("stage_outcome")
         if not isinstance(outcome, StageOutcome):
             raise TypeError("stage_outcome must be a StageOutcome")
         run_motes = world.resources.get("run_energy_spheres")
         if type(run_motes) is not int:
             raise TypeError("run_energy_spheres must be an integer")
+        if run_motes < 0:
+            raise ValueError("run_energy_spheres must be non-negative")
         collected = world.resources.get("collected_mote_ids")
         if not isinstance(collected, (tuple, list, set, frozenset)) or any(
             not isinstance(mote_id, str) for mote_id in collected
         ):
-            raise TypeError("collected_mote_ids must be a string collection")
-        return {
-            "stage_outcome": outcome.value,
-            "run_energy_spheres": run_motes,
-            "collected_mote_ids": tuple(sorted(collected)),
-        }
+            raise TypeError("collected_mote_ids must be a collection of strings")
+        return _ValidatedGameplayResources(
+            active_players=active_players,
+            active_authority=tuple(active_authority),
+            stage_outcome=outcome,
+            run_energy_spheres=run_motes,
+            collected_mote_ids=tuple(sorted(set(collected))),
+        )
 
     def _capture_step_event(self, event: GameEvent) -> None:
         if self._capturing_step_events:
@@ -291,7 +352,8 @@ class StageRuntime:
         return tuple(sorted(players, key=lambda player: player.slot))
 
     def _build_snapshot(self) -> StageSnapshot:
-        active_players = self._active_players()
+        resources = self._validate_gameplay_resources(self.world)
+        active_players = resources.active_players
         active_slots = {player.slot for player in active_players}
         players = self._player_views(active_slots)
         enemies = self._enemy_views()
@@ -324,14 +386,13 @@ class StageRuntime:
             )
         )
         leader_slot = leader_slots[0] if leader_slots else None
-        outcome = self._stage_outcome()
         return StageSnapshot(
             frame_index=self._snapshot_frame_index,
             elapsed_ms=self._elapsed_ms,
             stage_id=self.stage.stage_id,
             world_id=self.stage.world_id,
             node_id=self.stage.node_id,
-            outcome=outcome,
+            outcome=resources.stage_outcome,
             players=players,
             enemies=enemies,
             attacks=attacks,
@@ -348,14 +409,8 @@ class StageRuntime:
                 countdown_remaining_ms=0,
             ),
             camera_targets=camera_targets,
-            collected_mote_ids=self._collected_mote_ids(),
+            collected_mote_ids=self._collected_mote_ids(resources),
         )
-
-    def _active_players(self) -> tuple[ActivePlayer, ...]:
-        players = self.world.resources.get("active_players", ())
-        if not isinstance(players, tuple):
-            return ()
-        return tuple(player for player in players if isinstance(player, ActivePlayer))
 
     def _player_views(self, active_slots: set[int]) -> tuple[PlayerView, ...]:
         views: list[PlayerView] = []
@@ -481,19 +536,14 @@ class StageRuntime:
             )
         return tuple(sorted(views, key=lambda view: (view.slot, view.entity_id)))
 
-    def _collected_mote_ids(self) -> tuple[str, ...]:
-        collected = self.world.resources.get("collected_mote_ids", ())
-        if isinstance(collected, (tuple, list, set, frozenset)):
-            ids = {mote_id for mote_id in collected if isinstance(mote_id, str)}
-        else:
-            ids = set()
-        run_count = self.world.resources.get("run_energy_spheres", 0)
-        if type(run_count) is int and run_count > 0:
-            ids.update(mote.mote_id for mote in self.stage.motes[:run_count])
+    def _collected_mote_ids(
+        self,
+        resources: _ValidatedGameplayResources,
+    ) -> tuple[str, ...]:
+        ids = set(resources.collected_mote_ids)
+        if resources.run_energy_spheres > 0:
+            ids.update(
+                mote.mote_id
+                for mote in self.stage.motes[: resources.run_energy_spheres]
+            )
         return tuple(sorted(ids))
-
-    def _stage_outcome(self) -> StageOutcome:
-        outcome = self.world.resources.get("stage_outcome")
-        if not isinstance(outcome, StageOutcome):
-            raise TypeError("stage_outcome must be a StageOutcome")
-        return outcome

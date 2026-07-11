@@ -26,6 +26,7 @@ from windsprig.gameplay.session import (
     SessionSnapshot,
 )
 from windsprig.gameplay.snapshot import StageOutcome
+from windsprig.gameplay.systems.stage_goal_system import PROVISIONAL_STAGE_CLEARED_TOPIC
 from windsprig.input.commands import InputFrame, MoveCommand
 
 EXPECTED_TRANSITIONS = {
@@ -358,7 +359,13 @@ def test_completed_step_enters_victory_and_retains_semantic_events() -> None:
     assert snapshot.phase is SessionPhase.VICTORY
     assert snapshot.stage.outcome is StageOutcome.COMPLETED
     assert session.last_frame is not None
-    assert [event.topic for event in session.last_frame.events] == ["stage_cleared"]
+    assert [event.topic for event in session.last_frame.events] == [
+        PROVISIONAL_STAGE_CLEARED_TOPIC
+    ]
+    retained_event = session.last_frame.events[0]
+    with pytest.raises(TypeError):
+        retained_event.payload["stage_id"] = "mutated"  # type: ignore[index]
+    assert retained_event.payload["stage_id"] == "test_stage"
     frame_index = session.runtime.world.frame_index
     retained = session.last_frame
     session.step(InputFrame.empty())
@@ -461,8 +468,10 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     player_transform.x = goal_transform.x
     player_transform.y = goal_transform.y
     frame = runtime.step(InputFrame.empty())
-    assert [event.topic for event in observed] == ["stage_cleared"]
-    assert [event.topic for event in frame.events] == ["stage_cleared"]
+    assert [event.topic for event in observed] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
+    assert [event.topic for event in frame.events] == [
+        PROVISIONAL_STAGE_CLEARED_TOPIC
+    ]
     assert frame.simulation.event_count == 1
 
 
