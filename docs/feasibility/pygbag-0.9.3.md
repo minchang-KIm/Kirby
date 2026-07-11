@@ -8,7 +8,7 @@
 
 ## Source and toolchain
 
-- Source commit: `71d8836f0739181b104dfed6fbcbd7a5bedf1182`
+- Source commit: `f4c62f6fa27eafcd616552d2e34f880141754eee`
 
 | Component | Observed version |
 | --- | --- |
@@ -37,9 +37,9 @@
 | save written | `true` | exactly true | pass |
 | save restored | `true` | exactly true | pass |
 | gameplay active | `true` | exactly true | pass |
-| cold interactive | `2983` | ≤ 12000 ms | pass |
-| cached interactive | `1824` | ≤ 5000 ms | pass |
-| Gameplay FPS | `60.181` | ≥ 30, active StageRuntime only | pass |
+| cold interactive | `2993` | ≤ 12000 ms | pass |
+| cached interactive | `1784` | ≤ 5000 ms | pass |
+| Gameplay FPS | `60.03` | ≥ 30, active StageRuntime only | pass |
 | console errors | `[]` | exact empty list | pass |
 | compressed transfer | `165784` | ≤ 31457280 bytes | pass |
 
@@ -49,12 +49,12 @@ FPS is sampled only across consecutive rendered frames backed by an active real 
 
 | Metric | Observed | Rule |
 | --- | ---: | --- |
-| Gameplay FPS | 60.181 | ≥ 30, active StageRuntime only |
+| Gameplay FPS | 60.03 | ≥ 30, active StageRuntime only |
 
 | Run | Cold interactive (ms) | Cached interactive (ms) | Gameplay FPS | Gameplay active | Console errors |
 | --- | ---: | ---: | ---: | --- | --- |
-| local run 1 | 5217 | 1889 | 60.181 | true | [] |
-| local run 2 | 2915 | 1760 | 60.09 | true | [] |
+| local run 1 | 4989 | 1804 | 60.06 | true | [] |
+| local run 2 | 2993 | 1784 | 60.03 | true | [] |
 
 ## Artifact integrity
 
