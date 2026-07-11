@@ -581,16 +581,10 @@ class SaveManager:
         self._remember_primary(raw)
         return None
 
-    def _ensure_staging(
+    def _write_staging(
         self,
         recovery_raw: str,
     ) -> tuple[str | None, SaveWriteErrorCode | None]:
-        staging = self._read_copy(self.staging_key)
-        error = self._copy_error(staging)
-        if error is not None:
-            return None, error
-        if staging.state == "valid":
-            return staging.raw, None
         try:
             self.storage.write_text(self.staging_key, recovery_raw)
             verified = self.storage.read_text(self.staging_key)
@@ -600,6 +594,34 @@ class SaveManager:
         except Exception:
             return None, "storage_write_failed"
         return verified, None
+
+    def _ensure_staging(
+        self,
+        recovery_raw: str,
+    ) -> tuple[str | None, SaveWriteErrorCode | None]:
+        staging = self._read_copy(self.staging_key)
+        error = self._copy_error(staging)
+        if error is not None:
+            return None, error
+        if staging.state != "valid" or staging.raw is None:
+            return self._write_staging(recovery_raw)
+        if staging.raw == recovery_raw:
+            return staging.raw, None
+
+        canonical = self._read_copy(self.backup_key)
+        canonical_error = self._copy_error(canonical)
+        if canonical_error is not None:
+            return None, canonical_error
+        if canonical.state != "valid" or canonical.raw != staging.raw:
+            rotation_error = self._rotate_canonical(staging.raw)
+            if rotation_error is not None:
+                return None, rotation_error
+
+        recheck_error = self._recheck_primary(recovery_raw)
+        if recheck_error is not None:
+            return None, recheck_error
+        # Canonical now owns the older recovery point, so staging may advance.
+        return self._write_staging(recovery_raw)
 
     def _rotate_canonical(self, recovery_raw: str) -> SaveWriteErrorCode | None:
         try:

@@ -6,7 +6,12 @@ import pytest
 
 from windsprig.meta.save_manager import SaveManager
 from windsprig.meta.save_migrations import SaveMigrationCatalog
-from windsprig.meta.save_models import SaveData, SaveProfile, save_data_to_json
+from windsprig.meta.save_models import (
+    SaveData,
+    SaveProfile,
+    save_data_from_json,
+    save_data_to_json,
+)
 from windsprig.platform.services import StorageCapabilities
 
 
@@ -520,19 +525,67 @@ def test_same_data_repair_records_fingerprint_before_later_save() -> None:
     assert not any(operation == "write" for operation, _ in storage.events)
 
 
-def test_existing_valid_staging_copy_is_never_overwritten() -> None:
+def test_lingering_staging_rotates_the_immediate_predecessor_across_saves() -> None:
     storage = MemoryStorage()
     previous = _data("Previous")
-    staged = _data("Earlier Recovery")
-    staged_raw = save_data_to_json(staged, indent=2)
-    storage.values["save_data.json"] = save_data_to_json(previous, indent=2)
-    storage.values["save_data.backup.staging.json"] = staged_raw
+    middle = _data("Middle")
+    latest = _data("Latest")
+    previous_raw = save_data_to_json(previous, indent=2)
+    middle_raw = save_data_to_json(middle, indent=2)
+    storage.values["save_data.json"] = previous_raw
+    storage.fail_deletes = True
+    manager = SaveManager(storage, CATALOG, _now)
+
+    assert manager.save(middle).ok is True
+    assert storage.values["save_data.backup.json"] == previous_raw
+    assert storage.values["save_data.backup.staging.json"] == previous_raw
+
+    assert manager.save(latest).ok is True
+
+    assert save_data_from_json(storage.values["save_data.backup.json"]) == middle
+    assert storage.values["save_data.backup.staging.json"] == middle_raw
+    assert save_data_from_json(storage.values["save_data.json"]) == latest
+
+
+def test_partial_lingering_staging_refresh_aborts_before_primary_mutation() -> None:
+    storage = MemoryStorage()
+    older = _data("Older")
+    previous = _data("Previous")
+    middle = _data("Middle")
+    latest = _data("Latest")
+    older_raw = save_data_to_json(older, indent=2)
+    previous_raw = save_data_to_json(previous, indent=2)
+    middle_raw = save_data_to_json(middle, indent=2)
+    storage.values["save_data.json"] = previous_raw
+    storage.values["save_data.backup.json"] = older_raw
+    storage.fail_writes.add("save_data.backup.json")
+    manager = SaveManager(storage, CATALOG, _now)
+    assert manager.save(middle).ok is False
+    assert storage.values["save_data.backup.json"] == older_raw
+    storage.fail_writes.clear()
+    storage.partial_writes.add("save_data.backup.staging.json")
+    storage.events.clear()
+
+    result = manager.save(latest)
+
+    assert result.ok is False and result.error_code == "storage_write_failed"
+    assert storage.values["save_data.json"] == middle_raw
+    assert save_data_from_json(storage.values["save_data.backup.json"]) == previous
+    assert ("write", "save_data.json") not in storage.events
+
+
+def test_existing_staging_copy_matching_current_primary_is_reused() -> None:
+    storage = MemoryStorage()
+    current = _data("Current")
+    current_raw = save_data_to_json(current, indent=2)
+    storage.values["save_data.json"] = current_raw
+    storage.values["save_data.backup.staging.json"] = current_raw
     storage.fail_deletes = True
 
     result = SaveManager(storage, CATALOG, _now).save(_data("Updated"))
 
     assert result.ok is True
-    assert storage.values["save_data.backup.staging.json"] == staged_raw
+    assert storage.values["save_data.backup.staging.json"] == current_raw
     assert storage.events.count(("write", "save_data.backup.staging.json")) == 0
 
 
