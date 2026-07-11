@@ -19,23 +19,16 @@ from typing import Final, TypedDict
 
 import pygame
 
+from tools.web_source_manifest import inspect_runtime_source, runtime_source_files
+
 PYGBAG_VERSION: Final = "0.9.3"
 PYGAME_CE_VERSION: Final = "2.5.7"
 PYTHON_BUILD: Final = "3.12"
 COMPRESSED_LIMIT_BYTES: Final = 30 * 1024 * 1024
 PINNED_CDN: Final = f"https://pygame-web.github.io/cdn/{PYGBAG_VERSION}/"
 _NORMALIZED_MTIME: Final = 946_684_800
-_IGNORED_DIRS: Final = frozenset(
-    {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__", "test", "tests"}
-)
-_ALLOWED_SUFFIXES: Final = frozenset(
-    {".json", ".jpg", ".jpeg", ".ogg", ".otf", ".png", ".py", ".ttf", ".txt", ".webp"}
-)
-_SECRET_SUFFIXES: Final = frozenset({".key", ".p12", ".pem", ".pfx"})
 _PROBE_CAPABILITY_MEMBER: Final = "assets/windsprig/_build_flags.py"
-_ALLOWED_BUILD_TARGETS: Final = frozenset(
-    {Path("build/web-stage"), Path("dist/web")}
-)
+_ALLOWED_BUILD_TARGETS: Final = frozenset({Path("build/web-stage"), Path("dist/web")})
 
 
 class _OutputMeasurements(TypedDict):
@@ -48,14 +41,10 @@ def verify_toolchain_versions() -> None:
     """Refuse to mutate build paths unless both installed web-tool versions are exact."""
     installed_pygbag = version("pygbag")
     if installed_pygbag != PYGBAG_VERSION:
-        raise SystemExit(
-            f"pygbag version drift: expected {PYGBAG_VERSION}, found {installed_pygbag}"
-        )
+        raise SystemExit(f"pygbag version drift: expected {PYGBAG_VERSION}, found {installed_pygbag}")
     installed_pygame = version("pygame-ce")
     if installed_pygame != PYGAME_CE_VERSION:
-        raise SystemExit(
-            f"pygame-ce version drift: expected {PYGAME_CE_VERSION}, found {installed_pygame}"
-        )
+        raise SystemExit(f"pygame-ce version drift: expected {PYGAME_CE_VERSION}, found {installed_pygame}")
 
 
 def generate_favicon(path: Path) -> None:
@@ -73,45 +62,21 @@ def generate_favicon(path: Path) -> None:
     pygame.image.save(surface, path)
 
 
-def _is_runtime_file(path: Path) -> bool:
-    lowered = path.name.lower()
-    if lowered.startswith(".") or path.suffix.lower() in _SECRET_SUFFIXES:
-        return False
-    if any(token in lowered for token in ("credential", "secret")):
-        return False
-    return path.suffix.lower() in _ALLOWED_SUFFIXES
-
-
-def _copy_runtime_tree(source: Path, target: Path) -> None:
-    for path in sorted(source.rglob("*"), key=lambda item: item.as_posix()):
-        relative = path.relative_to(source)
-        if any(part.lower() in _IGNORED_DIRS for part in relative.parts):
-            continue
-        if not path.is_file() or not _is_runtime_file(path):
-            continue
-        destination = target / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, destination)
-
-
 def _probe_capability_source(probe: bool) -> bytes:
     return (
-        '"""Generated browser artifact capabilities; do not edit."""\n\n'
-        f"FOUNDATION_PROBE_AVAILABLE = {probe!r}\n"
+        f'"""Generated browser artifact capabilities; do not edit."""\n\nFOUNDATION_PROBE_AVAILABLE = {probe!r}\n'
     ).encode()
 
 
 def stage_sources(root: Path, stage: Path, *, probe: bool) -> None:
     """Copy only the browser entry, installable package, and level data into staging."""
     stage.mkdir(parents=True, exist_ok=False)
-    web = root / "web"
-    for filename in ("main.py", "template.tmpl", "favicon.png"):
-        source = web / filename
-        if not source.is_file():
-            raise SystemExit(f"required web source is missing: {source}")
-        shutil.copy2(source, stage / filename)
-    _copy_runtime_tree(root / "windsprig", stage / "windsprig")
-    _copy_runtime_tree(root / "levels", stage / "levels")
+    lexical_root = Path(root).absolute()
+    for source in runtime_source_files(lexical_root):
+        relative = source.relative_to(lexical_root)
+        destination = stage / source.name if relative.parent == Path("web") else stage / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
     (stage / "windsprig" / "_build_flags.py").write_bytes(_probe_capability_source(probe))
     if probe and not (stage / "windsprig" / "feasibility.py").is_file():
         raise SystemExit("probe build is missing windsprig/feasibility.py")
@@ -156,9 +121,7 @@ def _remove_build_target(root: Path, relative_target: Path) -> None:
     try:
         resolved_candidate.relative_to(resolved_root)
     except ValueError as error:
-        raise ValueError(
-            f"refusing to clean target that resolves outside repository root: {candidate}"
-        ) from error
+        raise ValueError(f"refusing to clean target that resolves outside repository root: {candidate}") from error
     if resolved_candidate != resolved_root / relative:
         raise ValueError(f"refusing to clean redirected build target: {candidate}")
 
@@ -247,9 +210,7 @@ def measure_output(output: Path) -> _OutputMeasurements:
     paths = sorted((path for path in output.rglob("*") if path.is_file()), key=lambda path: path.as_posix())
     files = [path.relative_to(output).as_posix() for path in paths]
     return {
-        "compressed_bytes": sum(
-            len(gzip.compress(path.read_bytes(), compresslevel=9, mtime=0)) for path in paths
-        ),
+        "compressed_bytes": sum(len(gzip.compress(path.read_bytes(), compresslevel=9, mtime=0)) for path in paths),
         "files": files,
         "uncompressed_bytes": sum(path.stat().st_size for path in paths),
     }
@@ -263,6 +224,7 @@ def build_web(probe: bool) -> dict[str, object]:
     output = root / "dist" / "web"
     verify_toolchain_versions()
     generate_favicon(source / "favicon.png")
+    runtime_manifest = inspect_runtime_source(root)
     _remove_build_target(root, Path("build/web-stage"))
     _remove_build_target(root, Path("dist/web"))
     stage_sources(root, stage, probe=probe)
@@ -313,6 +275,8 @@ def build_web(probe: bool) -> dict[str, object]:
         "pygame_ce": PYGAME_CE_VERSION,
         "python_build": PYTHON_BUILD,
         "release_version": "1.0.0",
+        "runtime_manifest_sha256": runtime_manifest.sha256,
+        "source_commit": runtime_manifest.source_commit,
     }
     artifacts = root / "artifacts"
     artifacts.mkdir(exist_ok=True)

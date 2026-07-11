@@ -18,6 +18,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Final, Literal, NoReturn, TypeGuard, cast
 
+from tools.web_source_manifest import SourceProvenanceError, inspect_runtime_source
+
 Decision = Literal["pass", "fallback_required"]
 BrowserRun = tuple[str, object]
 
@@ -43,6 +45,8 @@ _BUILD_KEYS: Final = frozenset(
         "pygbag",
         "python_build",
         "release_version",
+        "runtime_manifest_sha256",
+        "source_commit",
         "uncompressed_bytes",
     }
 )
@@ -57,8 +61,10 @@ _BROWSER_KEYS: Final = frozenset(
         "fps",
         "gameplay_active",
         "input",
+        "runtime_manifest_sha256",
         "save_restored",
         "save_written",
+        "source_commit",
         "stage_complete",
     }
 )
@@ -70,6 +76,8 @@ _REASON_ORDER: Final = (
     "pygame_ce",
     "python_build",
     "release_version",
+    "source_commit",
+    "runtime_manifest_sha256",
     "files",
     "uncompressed_bytes",
     "boot",
@@ -88,6 +96,7 @@ _REASON_ORDER: Final = (
     "compressed_bytes",
 )
 _COMMIT_PATTERN: Final = re.compile(r"[0-9a-f]{40}\Z")
+_SHA256_PATTERN: Final = re.compile(r"[0-9a-f]{64}\Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +166,12 @@ def evaluate(build: object, browser: object) -> tuple[Decision, tuple[str, ...]]
         for field, expected in expected_versions.items():
             if not _is_exact_string(build_report.get(field), expected):
                 failed.add(field)
+        build_source_commit = build_report.get("source_commit")
+        if type(build_source_commit) is not str or not _COMMIT_PATTERN.fullmatch(build_source_commit):
+            failed.add("source_commit")
+        build_manifest = build_report.get("runtime_manifest_sha256")
+        if type(build_manifest) is not str or not _SHA256_PATTERN.fullmatch(build_manifest):
+            failed.add("runtime_manifest_sha256")
         if not _matches_expected_files(build_report.get("files")):
             failed.add("files")
         if not _is_positive_int(build_report.get("uncompressed_bytes")):
@@ -171,6 +186,23 @@ def evaluate(build: object, browser: object) -> tuple[Decision, tuple[str, ...]]
     if browser_report is None:
         failed.add("browser_report")
     else:
+        browser_source_commit = browser_report.get("source_commit")
+        if type(browser_source_commit) is not str or not _COMMIT_PATTERN.fullmatch(browser_source_commit):
+            failed.add("source_commit")
+        browser_manifest = browser_report.get("runtime_manifest_sha256")
+        if type(browser_manifest) is not str or not _SHA256_PATTERN.fullmatch(browser_manifest):
+            failed.add("runtime_manifest_sha256")
+        if build_report is not None:
+            build_source_commit = build_report.get("source_commit")
+            build_manifest = build_report.get("runtime_manifest_sha256")
+            if (
+                type(browser_source_commit) is str
+                and type(build_source_commit) is str
+                and browser_source_commit != build_source_commit
+            ):
+                failed.add("source_commit")
+            if type(browser_manifest) is str and type(build_manifest) is str and browser_manifest != build_manifest:
+                failed.add("runtime_manifest_sha256")
         for field in (
             "boot",
             "input",
@@ -271,12 +303,33 @@ def _display(value: object) -> str:
         return "<missing>"
     if type(value) is str:
         encoded = json.dumps(value, ensure_ascii=True)[1:-1]
-        return encoded.replace("|", r"\u007c").replace("`", r"\u0060").replace("*", r"\u002a").replace("#", r"\u0023")
+        return _escape_markdown(encoded)
     try:
         encoded = json.dumps(value, ensure_ascii=True, sort_keys=True, allow_nan=False)
-        return encoded.replace("|", r"\u007c").replace("`", r"\u0060").replace("*", r"\u002a").replace("#", r"\u0023")
+        return _escape_markdown(encoded)
     except (OverflowError, RecursionError, TypeError, ValueError):
         return "<invalid>"
+
+
+def _escape_markdown(value: str) -> str:
+    """Encode active Markdown punctuation while preserving readable scalar values."""
+    escapes = {
+        "!": r"\u0021",
+        "#": r"\u0023",
+        "&": r"\u0026",
+        "(": r"\u0028",
+        ")": r"\u0029",
+        "*": r"\u002a",
+        "<": r"\u003c",
+        ">": r"\u003e",
+        "[": r"\u005b",
+        "]": r"\u005d",
+        "_": r"\u005f",
+        "`": r"\u0060",
+        "|": r"\u007c",
+        "~": r"\u007e",
+    }
+    return "".join(escapes.get(character, character) for character in value)
 
 
 def _observed(report: object, field: str) -> str:
@@ -312,6 +365,20 @@ def render(
 
     requirement_rows = (
         ("probe artifact", "probe", "build_report", _observed(build_report, "probe"), "exactly true"),
+        (
+            "source commit binding",
+            "source_commit",
+            "build_report",
+            _observed(build_report, "source_commit"),
+            "build, browser, and clean checkout match",
+        ),
+        (
+            "runtime manifest binding",
+            "runtime_manifest_sha256",
+            "build_report",
+            _observed(build_report, "runtime_manifest_sha256"),
+            "build, browser, and staged source match",
+        ),
         ("boot", "boot", "browser_report", _observed(browser_report, "boot"), "exactly true"),
         ("input", "input", "browser_report", _observed(browser_report, "input"), "exactly true"),
         (
@@ -407,6 +474,7 @@ def render(
 ## Source and toolchain
 
 - Source commit: `{_display(source_commit)}`
+- Runtime manifest SHA-256: `{_observed(build_report, "runtime_manifest_sha256")}`
 
 | Component | Observed version |
 | --- | --- |
@@ -489,7 +557,7 @@ def _resolve_source_commit(requested: str | None) -> tuple[str, tuple[str, ...]]
             timeout=10,
         )
         status_result = subprocess.run(
-            ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+            ["git", "status", "--porcelain=v1", "--untracked-files=all"],
             check=True,
             capture_output=True,
             text=True,
@@ -509,6 +577,22 @@ def _resolve_source_commit(requested: str | None) -> tuple[str, tuple[str, ...]]
     if status_result.stdout:
         reasons.append("source_tree")
     return head_commit, tuple(reasons)
+
+
+def _resolve_runtime_binding() -> tuple[str, str, tuple[str, ...]]:
+    """Recompute the clean tracked runtime identity used by this checkout."""
+    try:
+        manifest = inspect_runtime_source(Path(__file__).resolve().parents[1])
+    except (OSError, SourceProvenanceError):
+        return (
+            "<unavailable>",
+            "<unavailable>",
+            (
+                "source_commit",
+                "runtime_manifest_sha256",
+            ),
+        )
+    return manifest.source_commit, manifest.sha256, ()
 
 
 def _collect_tool_versions() -> dict[str, str]:
@@ -566,6 +650,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     _, report_reasons = evaluate(build, browser)
     artifacts, artifact_reasons = collect_artifacts(args.artifact_root, build)
     source_commit, source_reasons = _resolve_source_commit(args.source_commit)
+    runtime_commit, runtime_manifest, runtime_reasons = _resolve_runtime_binding()
+    build_report = _validated_report(build, _BUILD_KEYS)
+    binding_reasons: list[str] = []
+    if build_report is None or build_report.get("source_commit") != runtime_commit:
+        binding_reasons.append("source_commit")
+    if build_report is None or build_report.get("runtime_manifest_sha256") != runtime_manifest:
+        binding_reasons.append("runtime_manifest_sha256")
 
     local_runs: list[BrowserRun] = []
     local_run_reasons: list[str] = []
@@ -575,7 +666,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         _, run_reasons = evaluate(build, report)
         local_run_reasons.extend(f"local_run_{index}.{reason}" for reason in run_reasons if reason != "build_report")
 
-    reasons = _merge_reasons(report_reasons, artifact_reasons, source_reasons, local_run_reasons)
+    reasons = _merge_reasons(
+        report_reasons,
+        artifact_reasons,
+        source_reasons,
+        runtime_reasons,
+        binding_reasons,
+        local_run_reasons,
+    )
     decision: Decision = "pass" if not reasons else "fallback_required"
     evidence = render(
         decision,

@@ -27,6 +27,8 @@ EXPECTED_FILES = [
     "web-stage.apk",
     "web-stage.tar.gz",
 ]
+SOURCE_COMMIT = "a" * 40
+RUNTIME_MANIFEST_SHA256 = "b" * 64
 
 
 def passing_build() -> dict[str, object]:
@@ -39,6 +41,8 @@ def passing_build() -> dict[str, object]:
         "pygbag": "0.9.3",
         "python_build": "3.12",
         "release_version": "1.0.0",
+        "runtime_manifest_sha256": RUNTIME_MANIFEST_SHA256,
+        "source_commit": SOURCE_COMMIT,
         "uncompressed_bytes": 21_000_000,
     }
 
@@ -54,8 +58,10 @@ def passing_browser() -> dict[str, object]:
         "fps": 58.0,
         "gameplay_active": True,
         "input": True,
+        "runtime_manifest_sha256": RUNTIME_MANIFEST_SHA256,
         "save_restored": True,
         "save_written": True,
+        "source_commit": SOURCE_COMMIT,
         "stage_complete": True,
     }
 
@@ -65,6 +71,19 @@ def test_evaluator_requires_every_signal_and_budget() -> None:
 
     assert decision == "pass"
     assert reasons == ()
+
+
+def test_evaluator_requires_matching_source_and_runtime_manifest_binding() -> None:
+    build = passing_build()
+    browser = passing_browser()
+    assert evaluate(build, browser) == ("pass", ())
+
+    browser["source_commit"] = "c" * 40
+    browser["runtime_manifest_sha256"] = "d" * 64
+    assert evaluate(build, browser) == (
+        "fallback_required",
+        ("source_commit", "runtime_manifest_sha256"),
+    )
 
 
 def test_evaluator_never_calls_partial_success_a_pass() -> None:
@@ -174,6 +193,8 @@ def test_evaluator_requires_an_exact_empty_console_error_list(bad_value: object)
         ("pygame_ce", "2.5.6"),
         ("python_build", "3.13"),
         ("release_version", "1.0.1"),
+        ("source_commit", "not-a-commit"),
+        ("runtime_manifest_sha256", "not-a-digest"),
         ("files", list(reversed(EXPECTED_FILES))),
         ("files", EXPECTED_FILES + ["unexpected.txt"]),
         ("uncompressed_bytes", True),
@@ -395,6 +416,21 @@ def test_render_escapes_malformed_values_and_keeps_one_status_line() -> None:
     assert r"\n\u002a\u002aStatus:\u002a\u002a pass\n\u007c forged \u007c row \u007c" in evidence
 
 
+def test_render_neutralizes_markdown_images_in_every_dynamic_measurement() -> None:
+    browser = passing_browser()
+    browser["fps"] = "![forged pass](https://example.invalid/pass.svg)"
+
+    evidence = render(
+        "fallback_required",
+        ("fps",),
+        passing_build(),
+        browser,
+    )
+
+    assert "![forged pass]" not in evidence
+    assert r"\u0021\u005bforged pass\u005d\u0028https://example.invalid/pass.svg\u0029" in evidence
+
+
 def test_render_marks_child_requirements_failed_when_a_parent_report_is_malformed() -> None:
     evidence = render(
         "fallback_required",
@@ -421,7 +457,11 @@ def test_cli_writes_pass_evidence_and_returns_zero(
     browser_path.write_text(json.dumps(passing_browser()), encoding="utf-8")
     monkeypatch.setattr(
         "tools.evaluate_web_feasibility._resolve_source_commit",
-        lambda requested: (requested or "b" * 40, ()),
+        lambda requested: (requested or SOURCE_COMMIT, ()),
+    )
+    monkeypatch.setattr(
+        "tools.evaluate_web_feasibility._resolve_runtime_binding",
+        lambda: (SOURCE_COMMIT, RUNTIME_MANIFEST_SHA256, ()),
     )
 
     result = main(
@@ -433,7 +473,7 @@ def test_cli_writes_pass_evidence_and_returns_zero(
             "--artifact-root",
             str(artifact_root),
             "--source-commit",
-            "b" * 40,
+            SOURCE_COMMIT,
             "--write",
             str(output_path),
         ]
@@ -551,6 +591,50 @@ def test_cli_turns_excessively_deep_json_into_fallback_evidence(
     assert "build_report" in evidence
 
 
+def test_cli_rejects_stale_reports_rebound_to_a_later_clean_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact_root = tmp_path / "dist" / "web"
+    artifact_root.mkdir(parents=True)
+    build = _write_artifact_tree(artifact_root)
+    build_path = tmp_path / "web-build.json"
+    browser_path = tmp_path / "browser-probe.json"
+    output_path = tmp_path / "evidence.md"
+    build_path.write_text(json.dumps(build), encoding="utf-8")
+    browser_path.write_text(json.dumps(passing_browser()), encoding="utf-8")
+    later_commit = "c" * 40
+    later_manifest = "d" * 64
+    monkeypatch.setattr(
+        "tools.evaluate_web_feasibility._resolve_source_commit",
+        lambda _requested: (later_commit, ()),
+    )
+    monkeypatch.setattr(
+        "tools.evaluate_web_feasibility._resolve_runtime_binding",
+        lambda: (later_commit, later_manifest, ()),
+    )
+
+    result = main(
+        [
+            "--build",
+            str(build_path),
+            "--browser",
+            str(browser_path),
+            "--artifact-root",
+            str(artifact_root),
+            "--source-commit",
+            later_commit,
+            "--write",
+            str(output_path),
+        ]
+    )
+
+    evidence = output_path.read_text(encoding="utf-8")
+    assert result == 2
+    assert "`source_commit`" in evidence
+    assert "`runtime_manifest_sha256`" in evidence
+
+
 def test_source_commit_resolution_fails_closed_on_tracked_dirtiness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -559,7 +643,7 @@ def test_source_commit_resolution_fails_closed_on_tracked_dirtiness(
     def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
         if command[1:] == ["rev-parse", "HEAD"]:
             return SimpleNamespace(stdout=f"{commit}\n")
-        if command[1:] == ["status", "--porcelain=v1", "--untracked-files=no"]:
+        if command[1:] == ["status", "--porcelain=v1", "--untracked-files=all"]:
             return SimpleNamespace(stdout=" M windsprig/core/rng.py\n")
         raise AssertionError(f"unexpected command: {command}")
 
@@ -586,7 +670,11 @@ def test_cli_uses_two_explicit_local_run_measurements_when_available(
     run_two_path.write_text(json.dumps({**passing_browser(), "cold_ms": 9_100}), encoding="utf-8")
     monkeypatch.setattr(
         "tools.evaluate_web_feasibility._resolve_source_commit",
-        lambda requested: (requested or "e" * 40, ()),
+        lambda requested: (requested or SOURCE_COMMIT, ()),
+    )
+    monkeypatch.setattr(
+        "tools.evaluate_web_feasibility._resolve_runtime_binding",
+        lambda: (SOURCE_COMMIT, RUNTIME_MANIFEST_SHA256, ()),
     )
 
     result = main(
@@ -602,7 +690,7 @@ def test_cli_uses_two_explicit_local_run_measurements_when_available(
             "--artifact-root",
             str(artifact_root),
             "--source-commit",
-            "e" * 40,
+            SOURCE_COMMIT,
             "--write",
             str(output_path),
         ]

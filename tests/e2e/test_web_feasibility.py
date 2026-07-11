@@ -44,9 +44,7 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
     audio_status = signal(page, "audio")
     audio_indicator = page.locator("#audio-status")
     expect(audio_indicator).to_be_visible()
-    expect(audio_indicator).to_have_text(
-        "Audio: muted" if audio_status == "muted" else "Audio: ready"
-    )
+    expect(audio_indicator).to_have_text("Audio: muted" if audio_status == "muted" else "Audio: ready")
 
     page.keyboard.press("Enter")
     # Joining suppresses that device's same-frame commands by ownership contract.
@@ -99,6 +97,7 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
     )
     fps = float(signal(page, "fps") or "0")
 
+    build_report = json.loads((_ROOT / "artifacts" / "web-build.json").read_text(encoding="utf-8"))
     report = {
         "audio": audio_status in {"ready", "muted"},
         "audio_status": audio_status,
@@ -109,8 +108,10 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
         "fps": fps,
         "gameplay_active": signal(page, "gameplay") == "active",
         "input": input_status == "consumed_once",
+        "runtime_manifest_sha256": build_report["runtime_manifest_sha256"],
         "save_restored": signal(page, "save") == "restored",
         "save_written": written_status == "written",
+        "source_commit": build_report["source_commit"],
         "stage_complete": stage_status == "completed",
     }
     artifacts = _ROOT / "artifacts"
