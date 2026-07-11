@@ -178,6 +178,24 @@ def test_step_captures_each_system_event_in_its_matching_frame_only() -> None:
     assert following.simulation.event_count == 0
 
 
+def test_step_returns_prequeued_and_in_step_events_once_in_queue_order() -> None:
+    runtime = make_runtime()
+    runtime.world.events.publish("QueuedBeforeStep", {"order": 1})
+    player_transform = runtime.world.get_component(runtime.player_entities[1], Transform)
+    _, _, goal_transform = runtime.world.query(StageGoal, Transform)[0]
+    player_transform.x = goal_transform.x
+    player_transform.y = goal_transform.y
+
+    frame = runtime.step(InputFrame.empty())
+
+    assert [event.topic for event in frame.events] == ["QueuedBeforeStep", "stage_cleared"]
+    assert len(frame.events) == frame.simulation.event_count == 2
+    assert runtime.world.events.peek() == []
+    following = runtime.step(InputFrame.empty())
+    assert following.events == ()
+    assert following.simulation.event_count == 0
+
+
 def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
     runtime = make_runtime(players=(make_active_player(1, leader=True),))
 

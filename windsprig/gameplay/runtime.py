@@ -108,6 +108,8 @@ class StageRuntime:
             return StageFrame(self._last_simulation, self.snapshot(), (), self._result)
 
         self._step_events.clear()
+        # Events already waiting in the bus belong to this step's queued frame.
+        self._step_events.extend(self.world.events.peek())
         self._capturing_step_events = True
         try:
             simulation = self.world.step(self.config.fixed_dt_ms, input_frame)
