@@ -10,7 +10,7 @@ from windsprig.core.time import FixedStepClock
 from windsprig.gameplay.abilities import create_default_registry
 from windsprig.gameplay.components import Collider, Collectible, EnemyAI, Health, PlayerSlot, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
-from windsprig.input import InputDeviceMux
+from windsprig.input import ActiveRoster, DeviceRef, InputDeviceMux
 from windsprig.meta import CompletionTracker, SaveManager, UnlockRules, WorldMapService
 
 
@@ -33,6 +33,8 @@ class GameApp:
         self.unlocked_worlds = set(profile.unlocked_worlds)
         self.unlock_rules = UnlockRules(self.catalog)
         self.world_map_service = WorldMapService(self.catalog, self.unlock_rules)
+        self.active_roster = ActiveRoster(max_players=self.config.max_local_players)
+        self.active_roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
 
         self.runtime: StageRuntime | None = None
         self.selected_node_index = 0
@@ -71,6 +73,7 @@ class GameApp:
                             config=self.config,
                             stage=self.runtime.stage,
                             ability_registry=self.ability_registry,
+                            active_players=self.active_roster.players,
                             seed=derive_stage_seed(self.config.replay_seed, self.runtime.stage.stage_id),
                         )
 
@@ -128,6 +131,7 @@ class GameApp:
             config=self.config,
             stage=stage,
             ability_registry=self.ability_registry,
+            active_players=self.active_roster.players,
             seed=derive_stage_seed(self.config.replay_seed, node.stage_id),
         )
         self.mode = "stage"

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from windsprig.core.ecs import World
+
 
 @dataclass(frozen=True)
 class AttackShape:
@@ -20,13 +22,13 @@ class AttackShape:
 class AbilityStrategy(Protocol):
     name: str
 
-    def on_enter(self, actor: int, world: object) -> None:
+    def on_enter(self, actor: int, world: World) -> None:
         ...
 
-    def handle_input(self, actor: int, command: object, world: object) -> None:
+    def handle_input(self, actor: int, command: object, world: World) -> None:
         ...
 
-    def update(self, actor: int, world: object, dt_ms: int) -> None:
+    def update(self, actor: int, world: World, dt_ms: int) -> None:
         ...
 
     def get_attack_shapes(self, actor: int, frame_idx: int) -> list[AttackShape]:
@@ -42,11 +44,11 @@ class DataDrivenAbilityStrategy:
     projectile_speed: float
     is_super: bool = False
 
-    def on_enter(self, actor: int, world: object) -> None:
+    def on_enter(self, actor: int, world: World) -> None:
         # Strategy objects are stateless; per-actor cooldown lives in AbilityState component.
         _ = (actor, world)
 
-    def handle_input(self, actor: int, command: object, world: object) -> None:
+    def handle_input(self, actor: int, command: object, world: World) -> None:
         if command.__class__.__name__ != "AbilityUseCommand":
             return
         world.events.publish(
@@ -62,7 +64,7 @@ class DataDrivenAbilityStrategy:
             },
         )
 
-    def update(self, actor: int, world: object, dt_ms: int) -> None:
+    def update(self, actor: int, world: World, dt_ms: int) -> None:
         _ = (actor, world, dt_ms)
 
     def get_attack_shapes(self, actor: int, frame_idx: int) -> list[AttackShape]:

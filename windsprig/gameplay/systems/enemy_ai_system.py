@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import EnemyAI, Health, PlayerSlot, Transform, Velocity
 
 
 class EnemyAISystem:
-    def update(self, world, dt_ms: int) -> None:
+    def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         players: list[tuple[int, Transform]] = []
         for player_id, _, transform, health in world.query(PlayerSlot, Transform, Health):

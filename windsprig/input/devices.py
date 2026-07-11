@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pygame
 
 from .bindings import GAMEPAD_BINDING, KEYBOARD_BINDINGS, KeyboardProfile
 from .commands import (
     AbilityUseCommand,
     DodgeCommand,
-    DropAbilityCommand,
-    HoverCommand,
-    GuardCommand,
     DrawReleaseCommand,
     DrawStartCommand,
+    DropAbilityCommand,
+    GuardCommand,
+    HoverCommand,
+    InputCommand,
     InputFrame,
     JumpCommand,
     MoveCommand,
@@ -21,18 +24,26 @@ class InputDeviceMux:
     """Collects keyboard(2P) + gamepad(2P) into device-agnostic commands."""
 
     def __init__(self) -> None:
-        self._joysticks: dict[int, pygame.joystick.Joystick] = {}
+        self._joysticks: dict[int, pygame.joystick.JoystickType] = {}
+        self._instance_to_slot: dict[int, int] = {}
         self.refresh_joysticks()
 
     def refresh_joysticks(self) -> None:
         pygame.joystick.init()
         self._joysticks = {}
+        self._instance_to_slot = {}
         for index in range(min(2, pygame.joystick.get_count())):
             joy = pygame.joystick.Joystick(index)
             joy.init()
-            self._joysticks[index + 3] = joy  # slot 3~4
+            slot = index + 3
+            self._joysticks[slot] = joy
+            self._instance_to_slot[joy.get_instance_id()] = slot
 
-    def collect_frame(self, events: list[pygame.event.Event], keys: pygame.key.ScancodeWrapper) -> InputFrame:
+    def collect_frame(
+        self,
+        events: Sequence[pygame.event.Event],
+        keys: pygame.key.ScancodeWrapper,
+    ) -> InputFrame:
         edge_down: dict[int, set[int]] = {1: set(), 2: set()}
         edge_up: dict[int, set[int]] = {1: set(), 2: set()}
         gamepad_down: dict[int, set[int]] = {3: set(), 4: set()}
@@ -48,13 +59,13 @@ class InputDeviceMux:
                     if event.key in _profile_keys(profile):
                         edge_up[slot].add(event.key)
             elif event.type == pygame.JOYBUTTONDOWN:
-                slot = event.joy + 3
-                if slot in gamepad_down:
-                    gamepad_down[slot].add(event.button)
+                gamepad_slot = self._instance_to_slot.get(event.instance_id)
+                if gamepad_slot is not None:
+                    gamepad_down[gamepad_slot].add(event.button)
             elif event.type == pygame.JOYBUTTONUP:
-                slot = event.joy + 3
-                if slot in gamepad_up:
-                    gamepad_up[slot].add(event.button)
+                gamepad_slot = self._instance_to_slot.get(event.instance_id)
+                if gamepad_slot is not None:
+                    gamepad_up[gamepad_slot].add(event.button)
             elif event.type == pygame.JOYDEVICEADDED or event.type == pygame.JOYDEVICEREMOVED:
                 self.refresh_joysticks()
 
@@ -70,7 +81,12 @@ class InputDeviceMux:
 
         return frame
 
-    def _build_gamepad_commands(self, slot: int, edge_down: set[int], edge_up: set[int]):
+    def _build_gamepad_commands(
+        self,
+        slot: int,
+        edge_down: set[int],
+        edge_up: set[int],
+    ) -> list[InputCommand]:
         joy = self._joysticks.get(slot)
         if joy is None:
             return []
@@ -78,7 +94,7 @@ class InputDeviceMux:
         axis = joy.get_axis(GAMEPAD_BINDING.axis_move_x)
         move_axis = 1 if axis > 0.35 else -1 if axis < -0.35 else 0
 
-        commands = [
+        commands: list[InputCommand] = [
             MoveCommand(player_slot=slot, axis=move_axis),
             HoverCommand(player_slot=slot, held=joy.get_button(GAMEPAD_BINDING.jump_button) == 1),
             GuardCommand(player_slot=slot, held=joy.get_button(GAMEPAD_BINDING.guard_button) == 1),
@@ -104,9 +120,9 @@ def build_keyboard_commands(
     keys: pygame.key.ScancodeWrapper,
     edge_down: set[int],
     edge_up: set[int],
-) -> list[object]:
+) -> list[InputCommand]:
     move_axis = int(bool(keys[profile.move_right])) - int(bool(keys[profile.move_left]))
-    commands: list[object] = [
+    commands: list[InputCommand] = [
         MoveCommand(player_slot=slot, axis=move_axis),
         HoverCommand(player_slot=slot, held=bool(keys[profile.jump])),
         GuardCommand(player_slot=slot, held=bool(keys[profile.guard])),

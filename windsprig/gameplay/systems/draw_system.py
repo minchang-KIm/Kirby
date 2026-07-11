@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from typing import cast
+
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
     Collider,
     ControlIntent,
+    DrawState,
     EnemyDropAbility,
     Facing,
     Health,
-    DrawState,
     Team,
     Transform,
 )
@@ -16,7 +19,7 @@ from windsprig.gameplay.state_machine import transition
 
 
 class DrawSystem:
-    def update(self, world, dt_ms: int) -> None:
+    def update(self, world: World, dt_ms: int) -> None:
         enemy_rows = list(world.query(Team, Transform, Collider, Health, EnemyDropAbility))
         for player_id, team, transform, collider, intent, draw_state, ability, state, facing in world.query(
             Team,
@@ -74,7 +77,7 @@ class DrawSystem:
 
     def _on_draw_release(
         self,
-        world,
+        world: World,
         player_id: int,
         player_transform: Transform,
         ability: AbilityState,
@@ -95,7 +98,11 @@ class DrawSystem:
             world.destroy_entity(captured)
             state.name = transition(state.name, "Harmonize")
         else:
-            world.resources.setdefault("projectile_requests", []).append(
+            projectile_requests = cast(
+                list[dict[str, object]],
+                world.resources.setdefault("projectile_requests", []),
+            )
+            projectile_requests.append(
                 {
                     "owner": player_id,
                     "team": "player",

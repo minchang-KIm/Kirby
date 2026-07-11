@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
+from windsprig.core.ecs import World
+from windsprig.gameplay.abilities import AbilityRegistry
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
@@ -15,9 +19,12 @@ from windsprig.gameplay.state_machine import transition
 
 
 class AbilitySystem:
-    def update(self, world, dt_ms: int) -> None:
-        registry = world.resources["ability_registry"]
-        requests = world.resources.setdefault("projectile_requests", [])
+    def update(self, world: World, dt_ms: int) -> None:
+        registry = cast(AbilityRegistry, world.resources["ability_registry"])
+        requests = cast(
+            list[dict[str, Any]],
+            world.resources.setdefault("projectile_requests", []),
+        )
 
         for entity_id, team, transform, facing, intent, ability, state in world.query(
             Team, Transform, Facing, ControlIntent, AbilityState, ActorState

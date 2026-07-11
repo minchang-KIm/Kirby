@@ -3,57 +3,78 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class InputCommand:
     player_slot: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MoveCommand(InputCommand):
     axis: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class JumpCommand(InputCommand):
     pressed: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HoverCommand(InputCommand):
     held: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DrawStartCommand(InputCommand):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DrawReleaseCommand(InputCommand):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AbilityUseCommand(InputCommand):
     pressed: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GuardCommand(InputCommand):
     held: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DodgeCommand(InputCommand):
     pressed: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DropAbilityCommand(InputCommand):
     pressed: bool
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
+class NavigateCommand(InputCommand):
+    x: int
+    y: int
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmCommand(InputCommand):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class CancelCommand(InputCommand):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class PauseCommand(InputCommand):
+    pass
+
+
+@dataclass(slots=True)
 class InputFrame:
     commands_by_slot: dict[int, list[InputCommand]] = field(default_factory=dict)
 
@@ -63,13 +84,14 @@ class InputFrame:
     def commands_for(self, player_slot: int) -> list[InputCommand]:
         return self.commands_by_slot.get(player_slot, [])
 
-    def continuous_only(self) -> "InputFrame":
-        kept_types = {"MoveCommand", "HoverCommand", "GuardCommand"}
+    def continuous_only(self) -> InputFrame:
         filtered: dict[int, list[InputCommand]] = {}
         for slot, commands in self.commands_by_slot.items():
-            filtered[slot] = [cmd for cmd in commands if cmd.__class__.__name__ in kept_types]
+            filtered[slot] = [
+                command for command in commands if isinstance(command, (MoveCommand, HoverCommand, GuardCommand))
+            ]
         return InputFrame(commands_by_slot=filtered)
 
     @staticmethod
-    def empty() -> "InputFrame":
+    def empty() -> InputFrame:
         return InputFrame()

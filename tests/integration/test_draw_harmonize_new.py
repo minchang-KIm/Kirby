@@ -8,13 +8,22 @@ from windsprig.gameplay.abilities import create_default_registry
 from windsprig.gameplay.components import AbilityState, PlayerSlot, Transform
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.input.commands import DrawReleaseCommand, DrawStartCommand, InputFrame
+from windsprig.input.roster import ActiveRoster, DeviceRef
 
 
 def test_draw_harmonize_grants_echo_ability() -> None:
     config = GameConfig()
     catalog = load_campaign_catalog(Path("windsprig/content"))
     stage = catalog.stages["world_1_stage_1"]
-    runtime = StageRuntime(config, stage, create_default_registry(Path("windsprig/content")), seed=11)
+    roster = ActiveRoster()
+    roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    runtime = StageRuntime(
+        config,
+        stage,
+        create_default_registry(Path("windsprig/content")),
+        active_players=roster.players,
+        seed=11,
+    )
 
     # Spawn a guaranteed echo source right in front of P1.
     p1 = next(entity_id for entity_id, slot in runtime.world.query(PlayerSlot) if slot.slot == 1)

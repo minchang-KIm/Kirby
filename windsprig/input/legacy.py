@@ -13,5 +13,5 @@ class InputState:
     restart_pressed: bool = False
 
     @staticmethod
-    def neutral() -> "InputState":
+    def neutral() -> InputState:
         return InputState()

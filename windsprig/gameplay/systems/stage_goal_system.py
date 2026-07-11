@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import Collider, Health, StageGoal, Team, Transform
 from windsprig.math2d import Rect
 
 
 class StageGoalSystem:
-    def update(self, world, dt_ms: int) -> None:
+    def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         if world.resources.get("stage_cleared", False):
             return

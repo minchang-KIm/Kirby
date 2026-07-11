@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 import pygame
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class KeyboardProfile:
     move_left: int
     move_right: int
@@ -40,7 +41,7 @@ KEYBOARD_BINDINGS: dict[int, KeyboardProfile] = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GamepadProfile:
     axis_move_x: int
     jump_button: int
@@ -49,6 +50,7 @@ class GamepadProfile:
     guard_button: int
     dodge_button: int
     drop_button: int
+    start_button: int
 
 
 GAMEPAD_BINDING = GamepadProfile(
@@ -59,4 +61,5 @@ GAMEPAD_BINDING = GamepadProfile(
     guard_button=4,     # LB
     dodge_button=5,     # RB
     drop_button=3,      # Y
+    start_button=7,     # Start
 )

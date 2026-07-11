@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from typing import cast
+
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import ActorState, Collider, Transform, Velocity
 from windsprig.math2d import Rect, Vec2
-from windsprig.physics import PhysicsBody, move_body
+from windsprig.physics import PhysicsBody, TileCollisionWorld, move_body
 
 
 class CollisionSystem:
-    def update(self, world, dt_ms: int) -> None:
-        collision_world = world.resources["collision_world"]
+    def update(self, world: World, dt_ms: int) -> None:
+        collision_world = cast(TileCollisionWorld, world.resources["collision_world"])
         dt_s = dt_ms / 1000.0
         for entity_id, transform, velocity, collider in world.query(Transform, Velocity, Collider):
             body = PhysicsBody(
@@ -27,6 +30,9 @@ class CollisionSystem:
                 state.name = "Run" if abs(velocity.vx) > 40 else "Idle"
 
             if result.hit_hazard:
-                world.resources.setdefault("damage_queue", []).append(
+                cast(
+                    list[dict[str, int | float]],
+                    world.resources.setdefault("damage_queue", []),
+                ).append(
                     {"target": entity_id, "amount": 1, "knockback_x": 0.0, "knockback_y": -200.0}
                 )

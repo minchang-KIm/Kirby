@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from typing import cast
+
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import Collider, EnemyAI, Health, Projectile, Team, Transform, Velocity
 from windsprig.math2d import Rect
 
 
 class CombatSystem:
-    def update(self, world, dt_ms: int) -> None:
+    def update(self, world: World, dt_ms: int) -> None:
         dt_s = dt_ms / 1000.0
-        damage_queue: list[dict[str, object]] = world.resources.setdefault("damage_queue", [])
+        damage_queue = cast(
+            list[dict[str, int | float]],
+            world.resources.setdefault("damage_queue", []),
+        )
         to_destroy: set[int] = set()
 
         targets = list(world.query(Team, Transform, Collider, Health))

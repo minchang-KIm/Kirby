@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import ControlIntent, Facing, PlayerSlot
 from windsprig.input.commands import (
     AbilityUseCommand,
     DodgeCommand,
-    DropAbilityCommand,
-    HoverCommand,
-    GuardCommand,
     DrawReleaseCommand,
     DrawStartCommand,
+    DropAbilityCommand,
+    GuardCommand,
+    HoverCommand,
     InputFrame,
     JumpCommand,
     MoveCommand,
@@ -16,7 +17,7 @@ from windsprig.input.commands import (
 
 
 class InputCommandSystem:
-    def update(self, world, dt_ms: int) -> None:
+    def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         input_frame = world.frame_input
         if not isinstance(input_frame, InputFrame):

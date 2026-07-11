@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from types import SimpleNamespace
 
 import windsprig.app as app_module
 from windsprig.app import GameApp
 from windsprig.config import GameConfig
 from windsprig.core.rng import derive_stage_seed
+from windsprig.input.roster import ActivePlayer, ActiveRoster, DeviceRef
 
 
 def test_release_runtime_defaults_are_bounded() -> None:
@@ -44,12 +46,22 @@ def test_selected_stage_start_and_restart_share_derived_seed(monkeypatch) -> Non
     stage = SimpleNamespace(stage_id=stage_id)
     node = SimpleNamespace(stage_id=stage_id)
     created_seeds: list[int] = []
+    created_slots: list[tuple[int, ...]] = []
 
     class RuntimeProbe:
-        def __init__(self, *, config: GameConfig, stage: object, ability_registry: object, seed: int) -> None:
+        def __init__(
+            self,
+            *,
+            config: GameConfig,
+            stage: object,
+            ability_registry: object,
+            active_players: Sequence[ActivePlayer],
+            seed: int,
+        ) -> None:
             del config, ability_registry
             self.stage = stage
             created_seeds.append(seed)
+            created_slots.append(tuple(player.slot for player in active_players))
 
     restart_event = SimpleNamespace(type=2, key=5)
     quit_event = SimpleNamespace(type=1)
@@ -77,6 +89,8 @@ def test_selected_stage_start_and_restart_share_derived_seed(monkeypatch) -> Non
     app.config = config
     app.catalog = SimpleNamespace(stages={stage_id: stage})
     app.ability_registry = object()
+    app.active_roster = ActiveRoster()
+    app.active_roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
     app.selected_node_index = 0
     app.mode = "world_map"
     monkeypatch.setattr(app, "_visible_nodes", lambda: [node])
@@ -91,3 +105,4 @@ def test_selected_stage_start_and_restart_share_derived_seed(monkeypatch) -> Non
 
     expected_seed = derive_stage_seed(config.replay_seed, stage_id)
     assert created_seeds == [expected_seed, expected_seed]
+    assert created_slots == [(1,), (1,)]

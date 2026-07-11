@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import Collectible, Collider, Health, Team, Transform
 from windsprig.math2d import Rect
 
 
 class PickupSystem:
-    def update(self, world, dt_ms: int) -> None:
+    def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         players = [
             row

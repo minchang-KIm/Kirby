@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+from typing import cast
+
 from windsprig.config import GameConfig
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import ActorState, Health, PlayerSlot, Respawn, Velocity
 from windsprig.gameplay.state_machine import transition
 
 
 class DamageSystem:
-    def update(self, world, dt_ms: int) -> None:
-        config: GameConfig = world.resources["config"]
+    def update(self, world: World, dt_ms: int) -> None:
+        config = cast(GameConfig, world.resources["config"])
         for _, health in world.query(Health):
             health.invulnerable_ms = max(0, health.invulnerable_ms - dt_ms)
 
-        queue: list[dict[str, object]] = world.resources.setdefault("damage_queue", [])
+        queue = cast(
+            list[dict[str, int | float]],
+            world.resources.setdefault("damage_queue", []),
+        )
         while queue:
             item = queue.pop(0)
             target_id = int(item["target"])

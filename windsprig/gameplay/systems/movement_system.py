@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import cast
+
 from windsprig.config import GameConfig
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     ActorState,
     Collider,
@@ -14,8 +17,8 @@ from windsprig.gameplay.state_machine import transition
 
 
 class MovementSystem:
-    def update(self, world, dt_ms: int) -> None:
-        config: GameConfig = world.resources["config"]
+    def update(self, world: World, dt_ms: int) -> None:
+        config = cast(GameConfig, world.resources["config"])
         dt_s = dt_ms / 1000.0
 
         for entity_id, _, _, _, velocity, collider, intent, state in world.query(

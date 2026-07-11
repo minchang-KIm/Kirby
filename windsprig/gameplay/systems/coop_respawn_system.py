@@ -1,18 +1,26 @@
 from __future__ import annotations
 
+from typing import cast
+
+from windsprig.content.loader import StageSpec
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import ActorState, Collider, Health, PlayerSlot, Respawn, Transform, Velocity
 
 
 class CoopRespawnSystem:
-    def update(self, world, dt_ms: int) -> None:
-        stage_height = world.resources["stage_spec"].pixel_height
+    def update(self, world: World, dt_ms: int) -> None:
+        stage = cast(StageSpec, world.resources["stage_spec"])
+        stage_height = stage.pixel_height
         alive_positions: list[tuple[float, float]] = []
 
         for entity_id, _, transform, health in world.query(PlayerSlot, Transform, Health):
             if not health.dead:
                 alive_positions.append((transform.x, transform.y))
             elif transform.y > stage_height + 120:
-                world.resources.setdefault("damage_queue", []).append(
+                cast(
+                    list[dict[str, int | float]],
+                    world.resources.setdefault("damage_queue", []),
+                ).append(
                     {"target": entity_id, "amount": health.maximum, "knockback_x": 0.0, "knockback_y": -220.0}
                 )
 

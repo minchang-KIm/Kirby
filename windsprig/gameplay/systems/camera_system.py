@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import CameraFocus, Health, PlayerSlot, Transform
 
 
 class CameraSystem:
-    def update(self, world, dt_ms: int) -> None:
+    def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         weighted_x = 0.0
         weighted_y = 0.0
