@@ -19,6 +19,11 @@ async def run_native(config: GameConfig | None = None) -> int:
     try:
         active_config = config or GameConfig()
         services = create_native_services(active_config)
+        try:
+            await services.audio.initialize(after_user_gesture=False)
+        except Exception:
+            # Native audio may degrade to muted play without blocking startup.
+            pass
         factory = create_foundation_screen_factory(
             active_config,
             services,

@@ -171,6 +171,23 @@ def test_gamepad_start_uses_instance_identity_and_deduplicates_join_request() ->
     assert routed.frame.commands_by_slot == {}
 
 
+def test_same_frame_gamepad_start_and_removal_reports_disconnect_without_ghost_join() -> None:
+    router = InputRouter()
+    roster = ActiveRoster()
+    events = [
+        joy_button_event(pygame.JOYBUTTONDOWN, instance_id=42, button=7),
+        pygame.event.Event(pygame.JOYDEVICEREMOVED, instance_id=42, joy=0),
+    ]
+
+    routed = router.collect(events, FakeKeys(), roster)
+
+    assert routed.disconnected_devices == (
+        DeviceRef(kind="gamepad", uid="gamepad-42", label="Gamepad 42"),
+    )
+    assert routed.join_requests == ()
+    assert roster.players == ()
+
+
 def test_assigned_gamepad_routes_primary_cancel_pause_and_hat_edges() -> None:
     router = InputRouter()
     roster = ActiveRoster()

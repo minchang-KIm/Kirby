@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import replace
 from datetime import datetime
 from types import MappingProxyType
-from typing import cast
+from typing import Literal, cast
 
 import pygame
 
@@ -18,6 +18,7 @@ from windsprig.gameplay.abilities import AbilityRegistry, create_default_registr
 from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.input.commands import (
+    AbilityUseCommand,
     CancelCommand,
     ConfirmCommand,
     InputCommand,
@@ -48,6 +49,7 @@ _RELOAD_NOTICE_CODES = {
     "read_failed",
     "unsupported_version",
 }
+_SaveResolutionAction = Literal["reset", "reload", "retry"]
 
 
 class FoundationScreen(Screen):
@@ -79,7 +81,7 @@ class FoundationScreen(Screen):
         self.save_notice: SaveNotice | None = None
         self.save_write_result: SaveWriteResult | None = None
         self.save_status = "ready"
-        self._save_resolution_pending = False
+        self._save_resolution_action: _SaveResolutionAction | None = None
         self.tracker = CompletionTracker()
         self.unlocked_nodes: set[str] = set()
         self.unlocked_worlds: set[str] = set()
@@ -99,6 +101,8 @@ class FoundationScreen(Screen):
         if dt_ms != self.config.fixed_dt_ms:
             raise ValueError("foundation screen requires the configured fixed step")
         commands = tuple(self._commands(input_frame))
+        if self.screen_id != "recovery" and self.requires_save_resolution:
+            return ScreenTransition("recovery")
         if self.screen_id == "world_map":
             return self._update_world_map(commands)
         if self.screen_id == "playing":
@@ -134,10 +138,13 @@ class FoundationScreen(Screen):
         self.save_write_result = result
         if result.ok:
             self.save_status = "saved"
-            self._save_resolution_pending = False
+            self._save_resolution_action = None
+        elif result.error_code == "recovery_required":
+            self.save_status = "retry_required"
+            self._save_resolution_action = "reload"
         else:
             self.save_status = "reset_required"
-            self._save_resolution_pending = True
+            self._save_resolution_action = "reset"
         return result
 
     def reload_save(self) -> SaveLoadResult:
@@ -148,8 +155,8 @@ class FoundationScreen(Screen):
 
     @property
     def requires_save_resolution(self) -> bool:
-        """Return whether reset or authoritative reload must precede automatic saves."""
-        return self._save_resolution_pending
+        """Return whether an explicit retry, reload, or reset action is pending."""
+        return self._save_resolution_action is not None
 
     def _select_screen(self, screen_id: ScreenId) -> None:
         self.screen_id = screen_id
@@ -177,9 +184,15 @@ class FoundationScreen(Screen):
         input_frame: InputFrame,
         commands: tuple[InputCommand, ...],
     ) -> ScreenTransition | None:
-        if any(isinstance(command, CancelCommand) for command in commands):
-            self.runtime = None
-            return ScreenTransition("world_map")
+        ability_slots = {
+            command.player_slot for command in commands if isinstance(command, AbilityUseCommand)
+        }
+        cancel_slots = {
+            command.player_slot for command in commands if isinstance(command, CancelCommand)
+        }
+        # Gamepad B intentionally carries both ability and menu-cancel meanings.
+        if cancel_slots - ability_slots:
+            return ScreenTransition("paused")
         if any(isinstance(command, PauseCommand) for command in commands):
             return ScreenTransition("paused")
         runtime = self.runtime
@@ -187,7 +200,8 @@ class FoundationScreen(Screen):
             return ScreenTransition("world_map")
         runtime.step(input_frame)
         if self._on_stage_progress():
-            return ScreenTransition("world_map")
+            target: ScreenId = "recovery" if self.requires_save_resolution else "world_map"
+            return ScreenTransition(target)
         return None
 
     def _update_paused(self, commands: tuple[InputCommand, ...]) -> ScreenTransition | None:
@@ -202,26 +216,40 @@ class FoundationScreen(Screen):
 
     def _update_recovery(self, commands: tuple[InputCommand, ...]) -> ScreenTransition | None:
         if any(isinstance(command, ConfirmCommand) for command in commands):
-            if self.save_status == "reset_required" and self.confirm_save_reset().ok:
-                return ScreenTransition("world_map")
+            return self._resolve_save()
         if any(isinstance(command, CancelCommand) for command in commands):
-            self.reload_save()
-            if not self._save_resolution_pending:
+            if self._save_resolution_action == "reload":
+                self.reload_save()
+            if not self.requires_save_resolution:
                 return ScreenTransition("world_map")
         return None
+
+    def _resolve_save(self) -> ScreenTransition | None:
+        action = self._save_resolution_action
+        if action == "reset":
+            self.confirm_save_reset()
+        elif action == "reload":
+            self.reload_save()
+        elif action == "retry":
+            self._flush_save()
+        if self.requires_save_resolution:
+            return None
+        return ScreenTransition("world_map")
 
     def _adopt_load_result(self, result: SaveLoadResult) -> None:
         self.save_data = result.data
         self.save_notice = result.notice
         self.save_write_result = None
         notice_code = result.notice.code if result.notice is not None else None
-        self._save_resolution_pending = notice_code == "reset_required" or notice_code in _RELOAD_NOTICE_CODES
         if notice_code == "reset_required":
             self.save_status = "reset_required"
+            self._save_resolution_action = "reset"
         elif notice_code in _RELOAD_NOTICE_CODES:
             self.save_status = "retry_required"
+            self._save_resolution_action = "reload"
         else:
             self.save_status = "ready"
+            self._save_resolution_action = None
         self._rebuild_progress()
         if notice_code == "migrated_v1":
             self._apply_save_result(self.save_service.save(self.save_data))
@@ -247,14 +275,16 @@ class FoundationScreen(Screen):
         self.save_write_result = result
         if result.ok:
             self.save_status = "saved"
-            self._save_resolution_pending = False
+            self._save_resolution_action = None
         elif result.error_code == "reset_confirmation_required":
             self.save_status = "reset_required"
-            self._save_resolution_pending = True
+            self._save_resolution_action = "reset"
         else:
             self.save_status = "retry_required"
             if result.error_code in {"recovery_required", "unsupported_version"}:
-                self._save_resolution_pending = True
+                self._save_resolution_action = "reload"
+            else:
+                self._save_resolution_action = "retry"
 
     def _visible_nodes(self) -> list[WorldNode]:
         visible = self.world_map_service.unlocked_nodes(self.tracker, self.unlocked_worlds)
@@ -328,7 +358,7 @@ class FoundationScreen(Screen):
         )
         self.save_data = updated
         # Automatic progression writes must not probe or replace unresolved recovery sources.
-        if automatic and self._save_resolution_pending:
+        if automatic and self.requires_save_resolution:
             return
         self._apply_save_result(self.save_service.save(updated))
 
@@ -508,7 +538,7 @@ class FoundationScreen(Screen):
         if self.save_notice is None and self.save_status in {"ready", "saved"}:
             return
         notice_code = self.save_notice.code if self.save_notice is not None else "none"
-        action = "Confirm reset or reload" if self._save_resolution_pending else "Retry save"
+        action = "Confirm to resolve" if self.requires_save_resolution else "Save ready"
         message = small_font.render(
             f"Save: {self.save_status} ({notice_code}) - {action}",
             True,

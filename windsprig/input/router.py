@@ -121,6 +121,12 @@ class InputRouter:
         join_requests = self._join_requests(event_list, roster)
         # Remove first so a disconnected device's last held sample cannot enter the queue.
         disconnected = self._removed_gamepads(event_list, roster)
+        disconnected_identities = {(device.kind, device.uid) for device in disconnected}
+        join_requests = [
+            device
+            for device in join_requests
+            if (device.kind, device.uid) not in disconnected_identities
+        ]
         # Joining input is roster intent, not a gameplay/menu action in the same frame.
         suppressed = {(device.kind, device.uid) for device in join_requests}
         frame = InputFrame.empty()

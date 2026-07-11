@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 from windsprig.config import GameConfig
 from windsprig.content import load_campaign_catalog
 from windsprig.gameplay.abilities import create_default_registry
+from windsprig.input.commands import AbilityUseCommand, CancelCommand, ConfirmCommand, InputFrame
 from windsprig.input.roster import ActiveRoster
 from windsprig.meta import (
     SaveData,
@@ -13,25 +15,35 @@ from windsprig.meta import (
     SaveWriteResult,
     migration_catalog,
 )
+from windsprig.screens.base import ScreenTransition
 from windsprig.screens.foundation import FoundationScreen
 
 
 class RecordingSaveService:
-    def __init__(self, load_results: list[SaveLoadResult]) -> None:
+    def __init__(
+        self,
+        load_results: list[SaveLoadResult],
+        save_results: list[SaveWriteResult] | None = None,
+        confirm_results: list[SaveWriteResult] | None = None,
+    ) -> None:
         self.load_results = load_results
+        self.save_results = save_results or []
+        self.confirm_results = confirm_results or []
         self.saved: list[SaveData] = []
         self.confirmed: list[SaveData] = []
+        self.load_count = 0
 
     def load(self) -> SaveLoadResult:
+        self.load_count += 1
         return self.load_results.pop(0)
 
     def save(self, data: SaveData) -> SaveWriteResult:
         self.saved.append(data)
-        return SaveWriteResult(ok=True)
+        return self.save_results.pop(0) if self.save_results else SaveWriteResult(ok=True)
 
     def confirm_reset(self, data: SaveData) -> SaveWriteResult:
         self.confirmed.append(data)
-        return SaveWriteResult(ok=True)
+        return self.confirm_results.pop(0) if self.confirm_results else SaveWriteResult(ok=True)
 
 
 def make_foundation_screen(save_service: RecordingSaveService) -> FoundationScreen:
@@ -102,3 +114,146 @@ def test_reset_confirmation_remains_a_narrow_explicit_action() -> None:
     assert result.ok is True
     assert save_service.confirmed == [screen.save_data]
     assert screen.save_status == "saved"
+
+
+def test_gamepad_ability_cancel_pair_reaches_playing_runtime_once_without_transition() -> None:
+    screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+    stepped_frames: list[InputFrame] = []
+    runtime = SimpleNamespace(
+        world=SimpleNamespace(resources={"stage_cleared": False}),
+        step=stepped_frames.append,
+    )
+    screen.runtime = runtime
+    screen.screen_id = "playing"
+    frame = InputFrame(
+        commands_by_slot={
+            1: [
+                AbilityUseCommand(player_slot=1, pressed=True),
+                CancelCommand(player_slot=1),
+            ]
+        }
+    )
+
+    transition = screen.fixed_update(screen.config.fixed_dt_ms, frame)
+
+    assert transition is None
+    assert stepped_frames == [frame]
+    assert screen.runtime is runtime
+
+
+def test_standalone_playing_cancel_pauses_without_discarding_runtime() -> None:
+    screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+    runtime = SimpleNamespace(
+        world=SimpleNamespace(resources={"stage_cleared": False}),
+        step=lambda _frame: None,
+    )
+    screen.runtime = runtime
+    screen.screen_id = "playing"
+
+    transition = screen.fixed_update(
+        screen.config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [CancelCommand(player_slot=1)]}),
+    )
+
+    assert transition == ScreenTransition("paused")
+    assert screen.runtime is runtime
+
+
+def test_stage_completion_transitions_to_recovery_when_save_requires_reload() -> None:
+    save_service = RecordingSaveService(
+        [SaveLoadResult(SaveData())],
+        save_results=[SaveWriteResult(ok=False, error_code="recovery_required")],
+    )
+    screen = make_foundation_screen(save_service)
+    stage = screen.catalog.stages["world_1_stage_1"]
+    screen.runtime = SimpleNamespace(
+        stage=stage,
+        world=SimpleNamespace(
+            resources={"stage_cleared": True, "run_energy_spheres": 1},
+            frame_index=10,
+        ),
+        step=lambda _frame: None,
+    )
+    screen.screen_id = "playing"
+
+    transition = screen.fixed_update(screen.config.fixed_dt_ms, InputFrame.empty())
+
+    assert transition == ScreenTransition("recovery")
+    assert screen.save_status == "retry_required"
+    assert screen.runtime is None
+    assert len(save_service.saved) == 1
+
+
+def test_recovery_confirm_reloads_and_adopts_authoritative_data_before_returning_safe() -> None:
+    baseline = SaveData()
+    authoritative_profile = replace(baseline.profiles[0], display_name="Authority")
+    authoritative = replace(
+        baseline,
+        profiles=(authoritative_profile, baseline.profiles[1], baseline.profiles[2]),
+    )
+    save_service = RecordingSaveService(
+        [SaveLoadResult(baseline), SaveLoadResult(authoritative)],
+        save_results=[SaveWriteResult(ok=False, error_code="recovery_required")],
+    )
+    screen = make_foundation_screen(save_service)
+    screen._flush_save()
+    screen.screen_id = "recovery"
+
+    transition = screen.fixed_update(
+        screen.config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]}),
+    )
+
+    assert transition == ScreenTransition("world_map")
+    assert save_service.load_count == 2
+    assert screen.save_data == authoritative
+    assert screen.save_status == "ready"
+    assert save_service.confirmed == []
+
+
+def test_recovery_confirm_retries_unlocked_write_and_returns_safe_on_success() -> None:
+    save_service = RecordingSaveService(
+        [SaveLoadResult(SaveData())],
+        save_results=[
+            SaveWriteResult(ok=False, error_code="storage_write_failed"),
+            SaveWriteResult(ok=True),
+        ],
+    )
+    screen = make_foundation_screen(save_service)
+    screen._flush_save()
+    screen.screen_id = "recovery"
+
+    transition = screen.fixed_update(
+        screen.config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]}),
+    )
+
+    assert transition == ScreenTransition("world_map")
+    assert len(save_service.saved) == 2
+    assert screen.save_status == "saved"
+
+
+def test_recovery_confirm_explicitly_resets_and_failure_remains_recoverable() -> None:
+    save_service = RecordingSaveService(
+        [SaveLoadResult(SaveData(), SaveNotice("reset_required", "save.reset_required"))],
+        confirm_results=[
+            SaveWriteResult(ok=False, error_code="storage_write_failed"),
+            SaveWriteResult(ok=True),
+        ],
+    )
+    screen = make_foundation_screen(save_service)
+    screen.screen_id = "recovery"
+    confirm_frame = InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]})
+    assert save_service.confirmed == []
+
+    failed_transition = screen.fixed_update(screen.config.fixed_dt_ms, confirm_frame)
+
+    assert failed_transition is None
+    assert screen.save_status == "reset_required"
+    assert len(save_service.confirmed) == 1
+
+    successful_transition = screen.fixed_update(screen.config.fixed_dt_ms, confirm_frame)
+
+    assert successful_transition == ScreenTransition("world_map")
+    assert screen.save_status == "saved"
+    assert len(save_service.confirmed) == 2

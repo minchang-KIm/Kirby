@@ -118,6 +118,7 @@ class GameApp:
 
         if (
             not self._audio_initialization_attempted
+            and self.services.capabilities.audio_requires_gesture
             and not self.services.audio.status.ready
             and any(event.type in _POINTER_DOWN_TYPES for event in events)
         ):
@@ -132,7 +133,15 @@ class GameApp:
         # Queue against the old ownership snapshot, then explicitly invalidate reused slots.
         self.input_queue.push(routed.frame)
         self._remove_disconnected_players(routed.disconnected_devices)
-        self._join_requested_players(routed.join_requests)
+        disconnected_identities = {
+            (device.kind, device.uid) for device in routed.disconnected_devices
+        }
+        non_disconnected_joins = tuple(
+            device
+            for device in routed.join_requests
+            if (device.kind, device.uid) not in disconnected_identities
+        )
+        self._join_requested_players(non_disconnected_joins)
         self.disconnected_devices = routed.disconnected_devices
 
         for event in lifecycle_events:

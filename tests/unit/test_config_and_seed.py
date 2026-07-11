@@ -74,6 +74,7 @@ def test_selected_stage_start_and_paused_restart_share_derived_seed(monkeypatch)
     screen.selected_node_index = 0
     screen.screen_id = "world_map"
     screen.runtime = None
+    screen._save_resolution_action = None
     monkeypatch.setattr(screen, "_visible_nodes", lambda: [node])
     monkeypatch.setattr(foundation_module, "StageRuntime", RuntimeProbe)
 

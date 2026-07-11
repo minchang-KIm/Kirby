@@ -194,6 +194,7 @@ def make_harness(
     roster: ActiveRoster | None = None,
     queue: InputQueue | None = None,
     screens: Mapping[str, RecordingScreen] | None = None,
+    audio_requires_gesture: bool = False,
 ) -> AppHarness:
     audio = FakeAudio()
     display = FakeDisplay()
@@ -211,7 +212,7 @@ def make_harness(
             persistent_storage=False,
             fullscreen=False,
             gamepads=True,
-            audio_requires_gesture=False,
+            audio_requires_gesture=audio_requires_gesture,
         ),
     )
     router = FakeRouter()
@@ -322,7 +323,7 @@ async def test_focus_loss_clears_old_and_same_frame_input_then_audio_resumes_on_
 
 
 async def test_pointer_gesture_attempts_audio_initialization_once_and_failure_is_nonfatal() -> None:
-    harness = make_harness()
+    harness = make_harness(audio_requires_gesture=True)
     harness.audio.fail_initialize = True
     harness.events.extend(
         (
@@ -337,6 +338,16 @@ async def test_pointer_gesture_attempts_audio_initialization_once_and_failure_is
     assert harness.audio.initialize_count == 1
     assert len(harness.display.presented) == 2
     assert harness.time.yield_count == 2
+
+
+async def test_native_pointer_does_not_repeat_non_gesture_audio_initialization() -> None:
+    harness = make_harness(audio_requires_gesture=False)
+    harness.events.append(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
+
+    await harness.app.run_frame()
+    await harness.app.run_frame()
+
+    assert harness.audio.initialize_count == 0
 
 
 async def test_disconnect_clears_slot_before_reuse_and_joined_owner_gets_no_stale_input() -> None:
@@ -366,6 +377,32 @@ async def test_disconnect_clears_slot_before_reuse_and_joined_owner_gets_no_stal
     assert new_player is not None and new_player.slot == old_player.slot
     assert harness.roster.player_for_device(old_device) is None
     assert harness.screen.frames[0].commands_for(new_player.slot) == []
+
+
+async def test_same_frame_disconnect_overrides_matching_join_and_clears_old_owner() -> None:
+    roster = ActiveRoster()
+    device = DeviceRef("gamepad", "gamepad-7", "Old Controller")
+    old_player = roster.join(device)
+    queue = InputQueue()
+    queue.push(
+        InputFrame(
+            commands_by_slot={
+                old_player.slot: [MoveCommand(old_player.slot, 1), JumpCommand(old_player.slot, True)]
+            }
+        )
+    )
+    harness = make_harness(roster=roster, queue=queue)
+    harness.router.next_routed = RoutedInput(
+        frame=InputFrame(commands_by_slot={old_player.slot: [MoveCommand(old_player.slot, 0)]}),
+        join_requests=(device,),
+        disconnected_devices=(device,),
+    )
+    harness.time.elapsed = 16
+
+    await harness.app.run_frame()
+
+    assert harness.roster.players == ()
+    assert harness.screen.frames[0].commands_for(old_player.slot) == []
 
 
 async def test_transition_exits_and_enters_once_and_passes_an_immutable_payload_snapshot() -> None:
