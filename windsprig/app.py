@@ -71,7 +71,7 @@ class GameApp:
                             config=self.config,
                             stage=self.runtime.stage,
                             ability_registry=self.ability_registry,
-                            seed=self.config.replay_seed,
+                            seed=derive_stage_seed(self.config.replay_seed, self.runtime.stage.stage_id),
                         )
 
             if self.mode == "world_map":
