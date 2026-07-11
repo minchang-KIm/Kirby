@@ -8,7 +8,8 @@
 
 ## Source and toolchain
 
-- Source commit: `f4c62f6fa27eafcd616552d2e34f880141754eee`
+- Source commit: `cea0aff3400d738b74f4264108a67cab5a853b3f`
+- Runtime manifest SHA-256: `d0600655ae78cf9845824572c3ddb2475bf8cddf232a30fbd2c01c12c0cd776a`
 
 | Component | Observed version |
 | --- | --- |
@@ -29,6 +30,8 @@
 | Requirement | Observed | Rule | Result |
 | --- | --- | --- | --- |
 | probe artifact | `true` | exactly true | pass |
+| source commit binding | `cea0aff3400d738b74f4264108a67cab5a853b3f` | build, browser, and clean checkout match | pass |
+| runtime manifest binding | `d0600655ae78cf9845824572c3ddb2475bf8cddf232a30fbd2c01c12c0cd776a` | build, browser, and staged source match | pass |
 | boot | `true` | exactly true | pass |
 | input | `true` | exactly true | pass |
 | audio available or visibly muted | `true` | exactly true | pass |
@@ -37,9 +40,9 @@
 | save written | `true` | exactly true | pass |
 | save restored | `true` | exactly true | pass |
 | gameplay active | `true` | exactly true | pass |
-| cold interactive | `2993` | ≤ 12000 ms | pass |
-| cached interactive | `1784` | ≤ 5000 ms | pass |
-| Gameplay FPS | `60.03` | ≥ 30, active StageRuntime only | pass |
+| cold interactive | `2959` | ≤ 12000 ms | pass |
+| cached interactive | `1826` | ≤ 5000 ms | pass |
+| Gameplay FPS | `59.97` | ≥ 30, active StageRuntime only | pass |
 | console errors | `[]` | exact empty list | pass |
 | compressed transfer | `165784` | ≤ 31457280 bytes | pass |
 
@@ -49,12 +52,12 @@ FPS is sampled only across consecutive rendered frames backed by an active real 
 
 | Metric | Observed | Rule |
 | --- | ---: | --- |
-| Gameplay FPS | 60.03 | ≥ 30, active StageRuntime only |
+| Gameplay FPS | 59.97 | ≥ 30, active StageRuntime only |
 
 | Run | Cold interactive (ms) | Cached interactive (ms) | Gameplay FPS | Gameplay active | Console errors |
 | --- | ---: | ---: | ---: | --- | --- |
-| local run 1 | 4989 | 1804 | 60.06 | true | [] |
-| local run 2 | 2993 | 1784 | 60.03 | true | [] |
+| local run 1 | 2986 | 1708 | 60.09 | true | [] |
+| local run 2 | 2959 | 1826 | 59.97 | true | [] |
 
 ## Artifact integrity
 
