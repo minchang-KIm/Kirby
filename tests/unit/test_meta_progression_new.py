@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kirby_clone.content.loader import load_campaign_catalog
-from kirby_clone.meta import CompletionTracker, SaveManager, SaveSchema, UnlockRules
+from windsprig.content.loader import load_campaign_catalog
+from windsprig.meta import CompletionTracker, SaveManager, SaveSchema, UnlockRules
 
 
 def test_unlock_rules_progression() -> None:
-    catalog = load_campaign_catalog(Path("kirby_clone/content"))
+    catalog = load_campaign_catalog(Path("windsprig/content"))
     rules = UnlockRules(catalog)
     tracker = CompletionTracker()
     unlocked_worlds = {"world_1"}

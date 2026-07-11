@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from hypothesis import given, strategies as st
 
-from kirby_clone.math2d import Rect, Vec2
-from kirby_clone.physics import PhysicsBody, TileCollisionWorld, move_body
+from windsprig.math2d import Rect, Vec2
+from windsprig.physics import PhysicsBody, TileCollisionWorld, move_body
 
 
 def test_horizontal_collision_stops_at_wall() -> None:

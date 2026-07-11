@@ -6,11 +6,11 @@ project_root = SPECPATH
 datas = [
     (f"{project_root}/levels", "levels"),
     (f"{project_root}/assets", "assets"),
-    (f"{project_root}/kirby_clone/content", "kirby_clone/content"),
+    (f"{project_root}/windsprig/content", "windsprig/content"),
 ]
 
 a = Analysis(
-    [f"{project_root}/kirby_clone/__main__.py"],
+    [f"{project_root}/windsprig/__main__.py"],
     pathex=[project_root],
     binaries=[],
     datas=datas,
@@ -30,7 +30,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="kirby_practice_clone",
+    name="Windsprig",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -45,5 +45,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="kirby_practice_clone",
+    name="Windsprig",
 )

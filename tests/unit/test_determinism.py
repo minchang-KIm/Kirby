@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from hypothesis import given, strategies as st
 
-from kirby_clone.input import InputState
-from kirby_clone.level import LevelLoader
-from kirby_clone.settings import GameConfig
-from kirby_clone.simulation import Simulation
+from windsprig.config import GameConfig
+from windsprig.input import InputState
+from windsprig.level import LevelLoader
+from windsprig.simulation import Simulation
 
 
 def _input_from_tuple(values: tuple[int, bool, bool]) -> InputState:

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from kirby_clone.input.bindings import KEYBOARD_BINDINGS
-from kirby_clone.input.commands import (
+from windsprig.input.bindings import KEYBOARD_BINDINGS
+from windsprig.input.commands import (
     AbilityUseCommand,
-    InhaleStartCommand,
+    DrawStartCommand,
     InputFrame,
     JumpCommand,
     MoveCommand,
 )
-from kirby_clone.input.devices import build_keyboard_commands
+from windsprig.input.devices import build_keyboard_commands
 
 
 class FakeKeys:
@@ -26,12 +26,12 @@ def test_keyboard_command_mapping() -> None:
         slot=1,
         profile=profile,
         keys=keys,
-        edge_down={profile.jump, profile.inhale, profile.ability},
+        edge_down={profile.jump, profile.draw, profile.ability},
         edge_up=set(),
     )
     assert any(isinstance(cmd, MoveCommand) and cmd.axis == 1 for cmd in commands)
     assert any(isinstance(cmd, JumpCommand) for cmd in commands)
-    assert any(isinstance(cmd, InhaleStartCommand) for cmd in commands)
+    assert any(isinstance(cmd, DrawStartCommand) for cmd in commands)
     assert any(isinstance(cmd, AbilityUseCommand) for cmd in commands)
 
 
@@ -49,4 +49,4 @@ def test_continuous_only_keeps_axis_like_commands() -> None:
     filtered = frame.continuous_only()
     kept = filtered.commands_for(1)
     assert any(isinstance(cmd, MoveCommand) for cmd in kept)
-    assert all(cmd.__class__.__name__ in {"MoveCommand", "FloatCommand", "GuardCommand"} for cmd in kept)
+    assert all(cmd.__class__.__name__ in {"MoveCommand", "HoverCommand", "GuardCommand"} for cmd in kept)

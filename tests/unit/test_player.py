@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from kirby_clone.entities import WorldState
-from kirby_clone.input import InputState
-from kirby_clone.math2d import Vec2
-from kirby_clone.physics import TileCollisionWorld
-from kirby_clone.player import Player
-from kirby_clone.settings import GameConfig
+from windsprig.config import GameConfig
+from windsprig.entities import WorldState
+from windsprig.input import InputState
+from windsprig.math2d import Vec2
+from windsprig.physics import TileCollisionWorld
+from windsprig.player import Player
 
 
 def _world() -> WorldState:

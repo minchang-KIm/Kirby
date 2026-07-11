@@ -4,10 +4,10 @@ import argparse
 import json
 from pathlib import Path
 
-from kirby_clone.input import InputState
-from kirby_clone.level import LevelLoader
-from kirby_clone.settings import GameConfig
-from kirby_clone.simulation import Simulation
+from windsprig.config import GameConfig
+from windsprig.input import InputState
+from windsprig.level import LevelLoader
+from windsprig.simulation import Simulation
 
 
 def _frame_to_input(frame: dict[str, object]) -> InputState:
