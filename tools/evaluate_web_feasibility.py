@@ -7,8 +7,10 @@ import gzip
 import hashlib
 import json
 import math
+import os
 import platform
 import re
+import stat
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -98,9 +100,10 @@ class ArtifactEvidence:
 
 
 def _validated_report(value: object, expected_keys: frozenset[str]) -> dict[str, object] | None:
-    if not isinstance(value, dict):
+    # Exact built-ins keep hostile container subclasses outside the trust boundary.
+    if type(value) is not dict:
         return None
-    if any(not isinstance(key, str) for key in value):
+    if any(type(key) is not str for key in value):
         return None
     string_keys = cast("dict[str, object]", value)
     if set(string_keys) - expected_keys:
@@ -122,6 +125,18 @@ def _is_finite_number(value: object) -> TypeGuard[int | float]:
     return type(value) is float and math.isfinite(value)
 
 
+def _is_exact_string(value: object, expected: str) -> bool:
+    return type(value) is str and value == expected
+
+
+def _matches_expected_files(value: object) -> bool:
+    if type(value) is not list or len(value) != len(EXPECTED_FILES):
+        return False
+    if any(type(item) is not str for item in value):
+        return False
+    return tuple(cast("list[str]", value)) == EXPECTED_FILES
+
+
 def evaluate(build: object, browser: object) -> tuple[Decision, tuple[str, ...]]:
     """Return a total binary decision for exact, pinned build and browser reports."""
     failed: set[str] = set()
@@ -133,20 +148,21 @@ def evaluate(build: object, browser: object) -> tuple[Decision, tuple[str, ...]]
     else:
         if build_report.get("probe") is not True:
             failed.add("probe")
-        expected_versions = {
+        expected_versions: dict[str, str] = {
             "pygbag": PYGBAG_VERSION,
             "pygame_ce": PYGAME_CE_VERSION,
             "python_build": PYTHON_BUILD,
             "release_version": RELEASE_VERSION,
         }
         for field, expected in expected_versions.items():
-            if build_report.get(field) != expected:
+            if not _is_exact_string(build_report.get(field), expected):
                 failed.add(field)
-        if build_report.get("files") != list(EXPECTED_FILES):
+        if not _matches_expected_files(build_report.get("files")):
             failed.add("files")
         if not _is_positive_int(build_report.get("uncompressed_bytes")):
             failed.add("uncompressed_bytes")
-        if build_report.get("compressed_limit_bytes") != COMPRESSED_LIMIT_BYTES:
+        compressed_limit = build_report.get("compressed_limit_bytes")
+        if type(compressed_limit) is not int or compressed_limit != COMPRESSED_LIMIT_BYTES:
             failed.add("compressed_limit_bytes")
         compressed_bytes = build_report.get("compressed_bytes")
         if not _is_positive_int(compressed_bytes) or compressed_bytes > COMPRESSED_LIMIT_BYTES:
@@ -167,7 +183,7 @@ def evaluate(build: object, browser: object) -> tuple[Decision, tuple[str, ...]]
             if browser_report.get(field) is not True:
                 failed.add(field)
         audio_status = browser_report.get("audio_status")
-        if not isinstance(audio_status, str) or audio_status not in {"ready", "muted"}:
+        if type(audio_status) is not str or audio_status not in {"ready", "muted"}:
             failed.add("audio_status")
 
         cold_ms = browser_report.get("cold_ms")
@@ -179,11 +195,34 @@ def evaluate(build: object, browser: object) -> tuple[Decision, tuple[str, ...]]
         fps = browser_report.get("fps")
         if not _is_finite_number(fps) or fps < 30:
             failed.add("fps")
-        if type(browser_report.get("console_errors")) is not list or browser_report["console_errors"] != []:
+        console_errors = browser_report.get("console_errors")
+        if type(console_errors) is not list or len(console_errors) != 0:
             failed.add("console_errors")
 
     reasons = tuple(reason for reason in _REASON_ORDER if reason in failed)
     return ("pass", ()) if not reasons else ("fallback_required", reasons)
+
+
+def _is_link_or_reparse(path: Path) -> bool:
+    """Detect symbolic links, Windows junctions, and other reparse points."""
+    if path.is_symlink():
+        return True
+    isjunction = getattr(os.path, "isjunction", None)
+    if callable(isjunction) and isjunction(path):
+        return True
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except FileNotFoundError:
+        return False
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(attributes & reparse_flag)
+
+
+def _has_link_or_reparse_ancestor(path: Path) -> bool:
+    """Check the lexical path before any operation can follow a redirect."""
+    lexical = path.absolute()
+    components = (*reversed(lexical.parents), lexical)
+    return any(_is_link_or_reparse(component) for component in components)
 
 
 def collect_artifacts(
@@ -192,20 +231,22 @@ def collect_artifacts(
 ) -> tuple[tuple[ArtifactEvidence, ...], tuple[str, ...]]:
     """Hash the exact build manifest and verify its aggregate byte measurements."""
     build_report = _validated_report(build, _BUILD_KEYS)
-    if build_report is None or build_report.get("files") != list(EXPECTED_FILES):
+    if build_report is None or not _matches_expected_files(build_report.get("files")):
         return (), ("artifact_files",)
     try:
-        if not artifact_root.is_dir() or artifact_root.is_symlink():
+        if _has_link_or_reparse_ancestor(artifact_root) or not artifact_root.is_dir():
             return (), ("artifact_files",)
-        paths = sorted(
-            (path for path in artifact_root.rglob("*") if path.is_file()),
-            key=lambda path: path.as_posix(),
-        )
+        entries = sorted(artifact_root.rglob("*"), key=lambda path: path.as_posix())
+        if any(_has_link_or_reparse_ancestor(path) for path in entries):
+            return (), ("artifact_files",)
+        if any(not path.is_file() for path in entries):
+            return (), ("artifact_files",)
+        paths = entries
         relative_paths = [path.relative_to(artifact_root).as_posix() for path in paths]
-        if relative_paths != list(EXPECTED_FILES) or any(path.is_symlink() for path in paths):
+        if relative_paths != list(EXPECTED_FILES):
             return (), ("artifact_files",)
         payloads = [path.read_bytes() for path in paths]
-    except (OSError, ValueError):
+    except (OSError, RecursionError, ValueError):
         return (), ("artifact_files",)
 
     artifacts = tuple(
@@ -219,9 +260,7 @@ def collect_artifacts(
     reasons: list[str] = []
     if sum(artifact.size_bytes for artifact in artifacts) != build_report.get("uncompressed_bytes"):
         reasons.append("artifact_sizes")
-    compressed_bytes = sum(
-        len(gzip.compress(payload, compresslevel=9, mtime=0)) for payload in payloads
-    )
+    compressed_bytes = sum(len(gzip.compress(payload, compresslevel=9, mtime=0)) for payload in payloads)
     if compressed_bytes != build_report.get("compressed_bytes"):
         reasons.append("artifact_compressed_bytes")
     return artifacts, tuple(reasons)
@@ -230,22 +269,24 @@ def collect_artifacts(
 def _display(value: object) -> str:
     if value is None:
         return "<missing>"
-    if isinstance(value, str):
-        return value
+    if type(value) is str:
+        encoded = json.dumps(value, ensure_ascii=True)[1:-1]
+        return encoded.replace("|", r"\u007c").replace("`", r"\u0060").replace("*", r"\u002a").replace("#", r"\u0023")
     try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
-    except (TypeError, ValueError):
+        encoded = json.dumps(value, ensure_ascii=True, sort_keys=True, allow_nan=False)
+        return encoded.replace("|", r"\u007c").replace("`", r"\u0060").replace("*", r"\u002a").replace("#", r"\u0023")
+    except (OverflowError, RecursionError, TypeError, ValueError):
         return "<invalid>"
 
 
 def _observed(report: object, field: str) -> str:
-    if not isinstance(report, dict) or field not in report:
+    if type(report) is not dict or field not in report:
         return "<missing>"
     return _display(report[field])
 
 
-def _requirement_result(reason: str, reasons: tuple[str, ...]) -> str:
-    return "fail" if reason in reasons else "pass"
+def _requirement_result(reason: str, parent_reason: str, reasons: tuple[str, ...]) -> str:
+    return "fail" if reason in reasons or parent_reason in reasons else "pass"
 
 
 def render(
@@ -266,33 +307,64 @@ def render(
         else "Stop downstream implementation and create the TypeScript/Phaser replacement plans before resuming."
     )
     reason_text = "none" if not reasons else ", ".join(f"`{reason}`" for reason in reasons)
-    build_report = build if isinstance(build, dict) else {}
-    browser_report = browser if isinstance(browser, dict) else {}
+    build_report = build if type(build) is dict else {}
+    browser_report = browser if type(browser) is dict else {}
 
     requirement_rows = (
-        ("probe artifact", "probe", _observed(build_report, "probe"), "exactly true"),
-        ("boot", "boot", _observed(browser_report, "boot"), "exactly true"),
-        ("input", "input", _observed(browser_report, "input"), "exactly true"),
-        ("audio available or visibly muted", "audio", _observed(browser_report, "audio"), "exactly true"),
-        ("audio status", "audio_status", _observed(browser_report, "audio_status"), "ready or muted"),
-        ("stage complete", "stage_complete", _observed(browser_report, "stage_complete"), "exactly true"),
-        ("save written", "save_written", _observed(browser_report, "save_written"), "exactly true"),
-        ("save restored", "save_restored", _observed(browser_report, "save_restored"), "exactly true"),
-        ("gameplay active", "gameplay_active", _observed(browser_report, "gameplay_active"), "exactly true"),
-        ("cold interactive", "cold_ms", _observed(browser_report, "cold_ms"), "≤ 12000 ms"),
-        ("cached interactive", "cached_ms", _observed(browser_report, "cached_ms"), "≤ 5000 ms"),
-        ("Gameplay FPS", "fps", _observed(browser_report, "fps"), "≥ 30, active StageRuntime only"),
-        ("console errors", "console_errors", _observed(browser_report, "console_errors"), "exact empty list"),
+        ("probe artifact", "probe", "build_report", _observed(build_report, "probe"), "exactly true"),
+        ("boot", "boot", "browser_report", _observed(browser_report, "boot"), "exactly true"),
+        ("input", "input", "browser_report", _observed(browser_report, "input"), "exactly true"),
+        (
+            "audio available or visibly muted",
+            "audio",
+            "browser_report",
+            _observed(browser_report, "audio"),
+            "exactly true",
+        ),
+        ("audio status", "audio_status", "browser_report", _observed(browser_report, "audio_status"), "ready or muted"),
+        (
+            "stage complete",
+            "stage_complete",
+            "browser_report",
+            _observed(browser_report, "stage_complete"),
+            "exactly true",
+        ),
+        ("save written", "save_written", "browser_report", _observed(browser_report, "save_written"), "exactly true"),
+        (
+            "save restored",
+            "save_restored",
+            "browser_report",
+            _observed(browser_report, "save_restored"),
+            "exactly true",
+        ),
+        (
+            "gameplay active",
+            "gameplay_active",
+            "browser_report",
+            _observed(browser_report, "gameplay_active"),
+            "exactly true",
+        ),
+        ("cold interactive", "cold_ms", "browser_report", _observed(browser_report, "cold_ms"), "≤ 12000 ms"),
+        ("cached interactive", "cached_ms", "browser_report", _observed(browser_report, "cached_ms"), "≤ 5000 ms"),
+        ("Gameplay FPS", "fps", "browser_report", _observed(browser_report, "fps"), "≥ 30, active StageRuntime only"),
+        (
+            "console errors",
+            "console_errors",
+            "browser_report",
+            _observed(browser_report, "console_errors"),
+            "exact empty list",
+        ),
         (
             "compressed transfer",
             "compressed_bytes",
+            "build_report",
             _observed(build_report, "compressed_bytes"),
             f"≤ {COMPRESSED_LIMIT_BYTES} bytes",
         ),
     )
     requirements = "\n".join(
-        f"| {label} | `{observed}` | {rule} | {_requirement_result(reason, reasons)} |"
-        for label, reason, observed, rule in requirement_rows
+        f"| {label} | `{observed}` | {rule} | {_requirement_result(reason, parent, reasons)} |"
+        for label, reason, parent, observed, rule in requirement_rows
     )
 
     artifact_rows = "\n".join(
@@ -306,7 +378,7 @@ def render(
         "| "
         + " | ".join(
             (
-                label,
+                _display(label),
                 _observed(report, "cold_ms"),
                 _observed(report, "cached_ms"),
                 _observed(report, "fps"),
@@ -318,7 +390,7 @@ def render(
         for label, report in runs
     )
     extra_tool_rows = "\n".join(
-        f"| {name} | `{observed_version}` |"
+        f"| {_display(name)} | `{_display(observed_version)}` |"
         for name, observed_version in sorted((tool_versions or {}).items(), key=lambda item: item[0].casefold())
     )
     if extra_tool_rows:
@@ -334,14 +406,14 @@ def render(
 
 ## Source and toolchain
 
-- Source commit: `{source_commit}`
+- Source commit: `{_display(source_commit)}`
 
 | Component | Observed version |
 | --- | --- |
-| pygame-ce | `{_observed(build_report, "pygame_ce").strip('"')}` |
-| Pygbag | `{_observed(build_report, "pygbag").strip('"')}` |
-| Pygbag Python build | `{_observed(build_report, "python_build").strip('"')}` |
-| Windsprig release | `{_observed(build_report, "release_version").strip('"')}` |{extra_tool_rows}
+| pygame-ce | `{_observed(build_report, "pygame_ce")}` |
+| Pygbag | `{_observed(build_report, "pygbag")}` |
+| Pygbag Python build | `{_observed(build_report, "python_build")}` |
+| Windsprig release | `{_observed(build_report, "release_version")}` |{extra_tool_rows}
 
 ## Requirement evidence
 
@@ -403,16 +475,21 @@ def _load_report(path: Path) -> object:
                 parse_constant=_reject_json_constant,
             ),
         )
-    except (OSError, UnicodeError, ValueError):
+    except (OSError, RecursionError, UnicodeError, ValueError):
         return None
 
 
 def _resolve_source_commit(requested: str | None) -> tuple[str, tuple[str, ...]]:
-    if requested is not None:
-        return (requested, ()) if _COMMIT_PATTERN.fullmatch(requested) else ("<unavailable>", ("source_commit",))
     try:
-        completed = subprocess.run(
+        head_result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "--untracked-files=no"],
             check=True,
             capture_output=True,
             text=True,
@@ -420,8 +497,18 @@ def _resolve_source_commit(requested: str | None) -> tuple[str, tuple[str, ...]]
         )
     except (OSError, subprocess.SubprocessError):
         return "<unavailable>", ("source_commit",)
-    commit = completed.stdout.strip()
-    return (commit, ()) if _COMMIT_PATTERN.fullmatch(commit) else ("<unavailable>", ("source_commit",))
+    head_commit = head_result.stdout.strip()
+    if not _COMMIT_PATTERN.fullmatch(head_commit):
+        return "<unavailable>", ("source_commit",)
+
+    reasons: list[str] = []
+    if requested is not None and (
+        type(requested) is not str or not _COMMIT_PATTERN.fullmatch(requested) or requested != head_commit
+    ):
+        reasons.append("source_commit")
+    if status_result.stdout:
+        reasons.append("source_tree")
+    return head_commit, tuple(reasons)
 
 
 def _collect_tool_versions() -> dict[str, str]:

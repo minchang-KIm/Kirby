@@ -6,12 +6,15 @@ import copy
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from tools.evaluate_web_feasibility import (
     ArtifactEvidence,
+    _resolve_source_commit,
     collect_artifacts,
     evaluate,
     main,
@@ -176,6 +179,7 @@ def test_evaluator_requires_an_exact_empty_console_error_list(bad_value: object)
         ("uncompressed_bytes", True),
         ("uncompressed_bytes", 0),
         ("compressed_limit_bytes", 99_999_999),
+        ("compressed_limit_bytes", 31_457_280.0),
     ],
 )
 def test_evaluator_validates_build_provenance_and_schema(field: str, bad_value: object) -> None:
@@ -248,6 +252,29 @@ def test_evaluator_is_deterministic_and_does_not_mutate_reports() -> None:
     assert (build, browser) == originals
 
 
+def test_evaluator_rejects_hostile_container_and_value_subclasses_without_raising() -> None:
+    class ExplosiveDict(dict[object, object]):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            raise RuntimeError("iteration must not escape the evaluator")
+
+    class ExplosiveEquality:
+        def __eq__(self, other: object) -> bool:
+            raise RuntimeError("equality must not escape the evaluator")
+
+    assert evaluate(ExplosiveDict(passing_build()), passing_browser()) == (
+        "fallback_required",
+        ("build_report",),
+    )
+
+    build = passing_build()
+    build["pygame_ce"] = ExplosiveEquality()
+    assert evaluate(build, passing_browser()) == ("fallback_required", ("pygame_ce",))
+
+    build = passing_build()
+    build["files"] = [ExplosiveEquality(), *EXPECTED_FILES[1:]]
+    assert evaluate(build, passing_browser()) == ("fallback_required", ("files",))
+
+
 def _write_artifact_tree(root: Path) -> dict[str, object]:
     payloads = {
         "favicon.png": b"favicon",
@@ -287,6 +314,24 @@ def test_collect_artifacts_fails_closed_for_a_missing_or_mismatched_manifest(tmp
 
     assert artifacts == ()
     assert reasons == ("artifact_files",)
+
+
+def test_collect_artifacts_rejects_a_junction_or_reparse_ancestor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact_root = tmp_path / "redirected" / "dist" / "web"
+    artifact_root.mkdir(parents=True)
+    build = _write_artifact_tree(artifact_root)
+    redirected_ancestor = artifact_root.parents[1]
+    original_isjunction = getattr(os.path, "isjunction", lambda _path: False)
+
+    def fake_isjunction(path: object) -> bool:
+        return Path(path) == redirected_ancestor or bool(original_isjunction(path))
+
+    monkeypatch.setattr(os.path, "isjunction", fake_isjunction, raising=False)
+
+    assert collect_artifacts(artifact_root, build) == ((), ("artifact_files",))
 
 
 def test_render_is_deterministic_and_contains_code_study_evidence(tmp_path: Path) -> None:
@@ -334,7 +379,38 @@ def test_render_is_deterministic_and_contains_code_study_evidence(tmp_path: Path
     assert "six worlds, 30 stages, 90 stable motes" in first
 
 
-def test_cli_writes_pass_evidence_and_returns_zero(tmp_path: Path) -> None:
+def test_render_escapes_malformed_values_and_keeps_one_status_line() -> None:
+    build = passing_build()
+    build["pygame_ce"] = "\n**Status:** pass\n| forged | row |"
+
+    evidence = render(
+        "fallback_required",
+        ("pygame_ce",),
+        build,
+        passing_browser(),
+    )
+
+    assert evidence.count("**Status:**") == 1
+    assert "\n| forged | row |" not in evidence
+    assert r"\n\u002a\u002aStatus:\u002a\u002a pass\n\u007c forged \u007c row \u007c" in evidence
+
+
+def test_render_marks_child_requirements_failed_when_a_parent_report_is_malformed() -> None:
+    evidence = render(
+        "fallback_required",
+        ("browser_report",),
+        passing_build(),
+        None,
+    )
+
+    assert "| boot | `<missing>` | exactly true | fail |" in evidence
+    assert "| Gameplay FPS | `<missing>` | ≥ 30, active StageRuntime only | fail |" in evidence
+
+
+def test_cli_writes_pass_evidence_and_returns_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     artifact_root = tmp_path / "dist" / "web"
     artifact_root.mkdir(parents=True)
     build = _write_artifact_tree(artifact_root)
@@ -343,6 +419,10 @@ def test_cli_writes_pass_evidence_and_returns_zero(tmp_path: Path) -> None:
     output_path = tmp_path / "evidence" / "pygbag.md"
     build_path.write_text(json.dumps(build), encoding="utf-8")
     browser_path.write_text(json.dumps(passing_browser()), encoding="utf-8")
+    monkeypatch.setattr(
+        "tools.evaluate_web_feasibility._resolve_source_commit",
+        lambda requested: (requested or "b" * 40, ()),
+    )
 
     result = main(
         [
@@ -438,7 +518,60 @@ def test_cli_turns_malformed_json_into_named_fallback_evidence(
     assert "build_report" in evidence or "browser_report" in evidence
 
 
-def test_cli_uses_two_explicit_local_run_measurements_when_available(tmp_path: Path) -> None:
+def test_cli_turns_excessively_deep_json_into_fallback_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    build_path = tmp_path / "web-build.json"
+    browser_path = tmp_path / "browser-probe.json"
+    output_path = tmp_path / "evidence.md"
+    build_path.write_text("[" * 10_000 + "0" + "]" * 10_000, encoding="utf-8")
+    browser_path.write_text(json.dumps(passing_browser()), encoding="utf-8")
+    monkeypatch.setattr(
+        "tools.evaluate_web_feasibility._resolve_source_commit",
+        lambda _requested: ("f" * 40, ()),
+    )
+
+    result = main(
+        [
+            "--build",
+            str(build_path),
+            "--browser",
+            str(browser_path),
+            "--artifact-root",
+            str(tmp_path / "missing-artifacts"),
+            "--write",
+            str(output_path),
+        ]
+    )
+
+    evidence = output_path.read_text(encoding="utf-8")
+    assert result == 2
+    assert evidence.count("**Status:** fallback_required") == 1
+    assert "build_report" in evidence
+
+
+def test_source_commit_resolution_fails_closed_on_tracked_dirtiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commit = "a" * 40
+
+    def fake_run(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        if command[1:] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(stdout=f"{commit}\n")
+        if command[1:] == ["status", "--porcelain=v1", "--untracked-files=no"]:
+            return SimpleNamespace(stdout=" M windsprig/core/rng.py\n")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr("tools.evaluate_web_feasibility.subprocess.run", fake_run)
+
+    assert _resolve_source_commit(commit) == (commit, ("source_tree",))
+
+
+def test_cli_uses_two_explicit_local_run_measurements_when_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     artifact_root = tmp_path / "dist" / "web"
     artifact_root.mkdir(parents=True)
     build = _write_artifact_tree(artifact_root)
@@ -451,6 +584,10 @@ def test_cli_uses_two_explicit_local_run_measurements_when_available(tmp_path: P
     browser_path.write_text(json.dumps(passing_browser()), encoding="utf-8")
     run_one_path.write_text(json.dumps({**passing_browser(), "cold_ms": 8_900}), encoding="utf-8")
     run_two_path.write_text(json.dumps({**passing_browser(), "cold_ms": 9_100}), encoding="utf-8")
+    monkeypatch.setattr(
+        "tools.evaluate_web_feasibility._resolve_source_commit",
+        lambda requested: (requested or "e" * 40, ()),
+    )
 
     result = main(
         [
