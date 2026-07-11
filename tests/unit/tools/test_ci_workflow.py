@@ -54,7 +54,8 @@ def test_quality_job_checks_lock_lint_strict_types_and_public_identity() -> None
     assert "uv run --locked --no-sync ruff check ." in text
     assert (
         "uv run --locked --no-sync mypy windsprig/platform windsprig/input windsprig/meta "
-        "windsprig/app.py windsprig/screens tools/evaluate_web_feasibility.py"
+        "windsprig/app.py windsprig/screens tools/build_web.py tools/evaluate_web_feasibility.py "
+        "tools/web_source_manifest.py"
     ) in text
     assert "uv run --locked --no-sync pytest tests/unit/test_public_identity.py -v" in text
 

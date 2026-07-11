@@ -27,7 +27,7 @@ jobs:
       - run: uv lock --check
       - run: uv sync --all-extras --locked
       - run: uv run --locked --no-sync ruff check .
-      - run: uv run --locked --no-sync mypy windsprig/platform windsprig/input windsprig/meta windsprig/app.py windsprig/screens tools/evaluate_web_feasibility.py
+      - run: uv run --locked --no-sync mypy windsprig/platform windsprig/input windsprig/meta windsprig/app.py windsprig/screens tools/build_web.py tools/evaluate_web_feasibility.py tools/web_source_manifest.py
       - run: uv run --locked --no-sync pytest tests/unit/test_public_identity.py -v
 
   tests:
