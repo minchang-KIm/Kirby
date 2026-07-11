@@ -5,6 +5,7 @@ import pygame
 
 from windsprig.config import GameConfig
 from windsprig.content import load_campaign_catalog
+from windsprig.core.rng import derive_stage_seed
 from windsprig.core.time import FixedStepClock
 from windsprig.gameplay.abilities import create_default_registry
 from windsprig.gameplay.components import Collider, Collectible, EnemyAI, Health, PlayerSlot, StageGoal, Team, Transform
@@ -127,7 +128,7 @@ class GameApp:
             config=self.config,
             stage=stage,
             ability_registry=self.ability_registry,
-            seed=self.config.replay_seed + hash(node.stage_id) % 10000,
+            seed=derive_stage_seed(self.config.replay_seed, node.stage_id),
         )
         self.mode = "stage"
 

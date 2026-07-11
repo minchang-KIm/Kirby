@@ -4,6 +4,14 @@ import hashlib
 import random
 
 
+def derive_stage_seed(base_seed: int, stage_id: str) -> int:
+    if not stage_id.strip():
+        raise ValueError("stage_id must not be blank")
+    payload = f"windsprig:v1:{base_seed}:{stage_id}".encode("utf-8")
+    digest = hashlib.blake2s(payload, digest_size=8).digest()
+    return int.from_bytes(digest, byteorder="big", signed=False)
+
+
 class DeterministicRng:
     def __init__(self, seed: int) -> None:
         self.seed = seed
