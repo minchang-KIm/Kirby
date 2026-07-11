@@ -7,7 +7,9 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from tests.helpers.gameplay import make_active_player, make_runtime, make_stage
+from windsprig.config import GameConfig
 from windsprig.content.loader import CheckpointSpec, EnemySpawn
+from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     CameraFocus,
     Collider,
@@ -18,6 +20,7 @@ from windsprig.gameplay.components import (
     Transform,
     Velocity,
 )
+from windsprig.gameplay.factory import EntityFactory
 from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.input.commands import InputFrame
 from windsprig.input.roster import DeviceRef
@@ -82,6 +85,63 @@ def test_sync_is_idempotent_and_metadata_updates_do_not_reallocate_entity() -> N
 
     assert runtime.player_entities == {1: entity_id}
     assert runtime.world.resources["active_players"] == (reassigned,)
+
+
+def test_leader_authority_updates_snapshot_and_hash_without_reallocation() -> None:
+    p1 = make_active_player(1, leader=True)
+    p2 = make_active_player(2)
+    runtime = make_runtime(players=(p1, p2))
+    entity_ids = dict(runtime.player_entities)
+    initial_hash = runtime.world.world_hash()
+
+    events = runtime.sync_active_players(
+        (replace(p1, is_leader=False), replace(p2, is_leader=True))
+    )
+
+    assert events == ()
+    assert runtime.player_entities == entity_ids
+    assert [(slot.slot, slot.is_leader) for _, slot in runtime.world.query(PlayerSlot)] == [
+        (1, False),
+        (2, True),
+    ]
+    assert runtime.snapshot().goal_gather.leader_slot == 2
+    assert runtime.world.world_hash() != initial_hash
+    runtime.world.resources["active_players"] = (p1, p2)
+    assert runtime.snapshot().goal_gather.leader_slot == 2
+
+
+def test_device_and_visual_metadata_do_not_change_gameplay_hash() -> None:
+    p1 = make_active_player(1, leader=True)
+    runtime = make_runtime(players=(p1,))
+    initial_hash = runtime.world.world_hash()
+    entity_id = runtime.player_entities[1]
+    cosmetic_update = replace(
+        p1,
+        device=DeviceRef("keyboard", "replacement-uid", "Replacement Label"),
+        color_token="replacement-color",
+        icon_token="replacement-icon",
+    )
+
+    assert runtime.sync_active_players((cosmetic_update,)) == ()
+
+    assert runtime.player_entities == {1: entity_id}
+    assert runtime.world.world_hash() == initial_hash
+    assert runtime.snapshot().goal_gather.leader_slot == 1
+
+
+def test_factory_uses_configured_player_maximum_health() -> None:
+    config = GameConfig(player_max_hp=17)
+    world = World()
+    world.resources["config"] = config
+
+    entity_id = EntityFactory(world).spawn_player(
+        make_active_player(1, leader=True),
+        64.0,
+        160.0,
+    )
+
+    health = world.get_component(entity_id, Health)
+    assert (health.current, health.maximum) == (17, 17)
 
 
 def test_rejoining_a_slot_allocates_a_fresh_monotonic_entity_id() -> None:
@@ -300,6 +360,8 @@ def test_fresh_runtimes_have_identical_initial_and_stepped_hashes() -> None:
     second = make_runtime(players=tuple(reversed(players)))
 
     assert first.world.world_hash() == second.world.world_hash()
+    assert first.snapshot().goal_gather.leader_slot == 1
+    assert second.snapshot().goal_gather.leader_slot == 1
     first_frame = first.step(InputFrame.empty())
     second_frame = second.step(InputFrame.empty())
     assert first_frame.simulation.world_state_hash == second_frame.simulation.world_state_hash

@@ -43,9 +43,12 @@ class Team:
 
 @dataclass
 class PlayerSlot:
+    """Hashed gameplay ownership, leader authority, and remaining team lives."""
+
     slot: int
     is_human: bool = True
     lives: int = 3
+    is_leader: bool = False
 
 
 @dataclass

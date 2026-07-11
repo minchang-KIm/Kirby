@@ -153,6 +153,10 @@ class StageRuntime:
                     slot=slot,
                 )
             )
+        for slot in sorted(set(requested) & set(self.player_entities)):
+            entity_id = self.player_entities[slot]
+            player_slot = self.world.get_component(entity_id, PlayerSlot)
+            player_slot.is_leader = requested[slot].is_leader
 
         self.world.resources["active_players"] = requested_players
         for event in emitted:
@@ -238,10 +242,16 @@ class StageRuntime:
         goal_rows = self.world.query(StageGoal, Transform)
         goal_x = float(goal_rows[0][2].x) if goal_rows else 0.0
         goal_y = float(goal_rows[0][2].y) if goal_rows else 0.0
-        leader_slot = next(
-            (player.slot for player in active_players if player.is_leader),
-            None,
+        leader_slots = sorted(
+            slot.slot
+            for entity_id, slot in self.world.query(PlayerSlot)
+            if (
+                slot.slot in active_slots
+                and self.player_entities.get(slot.slot) == entity_id
+                and slot.is_leader
+            )
         )
+        leader_slot = leader_slots[0] if leader_slots else None
         outcome = (
             StageOutcome.COMPLETED
             if self.world.resources.get("stage_cleared", False)

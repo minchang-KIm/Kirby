@@ -75,6 +75,23 @@ class RecordingSaveService:
         return self.confirm_results.pop(0) if self.confirm_results else SaveWriteResult(ok=True)
 
 
+class RecordingFont:
+    """Record rendered copy while returning surfaces accepted by pygame blits."""
+
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+
+    def render(
+        self,
+        text: str,
+        antialias: bool,
+        color: tuple[int, int, int],
+    ) -> pygame.Surface:
+        _ = antialias, color
+        self.texts.append(text)
+        return pygame.Surface((1, 1), pygame.SRCALPHA)
+
+
 def make_foundation_screen(
     save_service: RecordingSaveService,
     probe: FoundationProbe | None = None,
@@ -114,6 +131,46 @@ def test_disabled_probe_completion_cannot_position_the_real_player_at_the_goal()
 
     assert (transform.x, transform.y) == original_position
     assert storage.values == {}
+
+
+def test_stage_hud_and_camera_ignore_contradictory_legacy_resources() -> None:
+    screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+    screen.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    assert screen._start_selected_stage() is True
+    assert screen.runtime is not None
+    runtime = screen.runtime
+    player_transform = runtime.world.get_component(runtime.player_entities[1], Transform)
+    player_transform.x = 1700.0
+    runtime.world.resources["camera_target"] = (0.0, 0.0)
+    runtime.world.resources["hud"] = {
+        "players": [{"slot": 9, "hp": 1, "max_hp": 99, "lives": 0, "ability": "legacy"}],
+        "energy_spheres": 99,
+    }
+    snapshot_target = runtime.snapshot().camera_targets[0]
+    expected_x = int(
+        max(
+            0,
+            min(
+                snapshot_target.x - screen.config.resolution[0] / 2,
+                runtime.stage.pixel_width - screen.config.resolution[0],
+            ),
+        )
+    )
+
+    assert screen._camera_offset(runtime) == (expected_x, 0)
+    assert expected_x > 0
+
+    title_font = RecordingFont()
+    small_font = RecordingFont()
+    screen._render_stage(
+        pygame.Surface(screen.config.resolution),
+        title_font,  # type: ignore[arg-type]
+        small_font,  # type: ignore[arg-type]
+    )
+
+    assert "P1 HP 10/10 LIFE 3 ABIL none" in small_font.texts
+    assert "Wind Motes (Run): 0" in small_font.texts
+    assert all("P9" not in text and "99" not in text for text in small_font.texts)
 
 
 def test_enabled_f9_uses_real_goal_system_then_marks_only_a_successful_save() -> None:

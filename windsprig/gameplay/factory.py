@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import cast
+
+from windsprig.config import GameConfig
 from windsprig.content.loader import StageSpec
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
@@ -34,13 +37,20 @@ class EntityFactory:
 
     def spawn_player(self, player: ActivePlayer, x: float, y: float) -> int:
         """Create the entity owned by one joined roster identity."""
+        config = cast(GameConfig, self.world.resources["config"])
         entity_id = self.world.create_entity()
         self.world.add_component(entity_id, Transform(x, y))
         self.world.add_component(entity_id, Velocity())
         self.world.add_component(entity_id, Collider(width=28, height=28))
         self.world.add_component(entity_id, Team("player"))
-        self.world.add_component(entity_id, PlayerSlot(slot=player.slot))
-        self.world.add_component(entity_id, Health(current=10, maximum=10))
+        self.world.add_component(
+            entity_id,
+            PlayerSlot(slot=player.slot, is_leader=player.is_leader),
+        )
+        self.world.add_component(
+            entity_id,
+            Health(current=config.player_max_hp, maximum=config.player_max_hp),
+        )
         self.world.add_component(entity_id, ActorState())
         self.world.add_component(entity_id, ControlIntent())
         self.world.add_component(entity_id, Facing(direction=1))
