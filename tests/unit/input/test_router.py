@@ -16,6 +16,7 @@ from windsprig.input.commands import (
     MoveCommand,
     NavigateCommand,
     PauseCommand,
+    ProbeCompleteCommand,
 )
 from windsprig.input.roster import ActiveRoster, DeviceRef
 from windsprig.input.router import InputRouter
@@ -153,6 +154,25 @@ def test_keyboard_routes_every_gameplay_edge_and_released_held_value() -> None:
     assert any(isinstance(command, DropAbilityCommand) for command in pressed)
     assert GuardCommand(player_slot=1, held=True) in pressed
     assert GuardCommand(player_slot=1, held=False) in released
+
+
+def test_f9_routes_only_as_the_probe_completion_command_for_an_active_keyboard() -> None:
+    router = InputRouter()
+    roster = ActiveRoster()
+    roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+
+    commands = router.collect(
+        [key_event(pygame.KEYDOWN, pygame.K_F9)],
+        FakeKeys(),
+        roster,
+    ).frame.commands_for(1)
+
+    assert commands == [
+        MoveCommand(player_slot=1, axis=0),
+        HoverCommand(player_slot=1, held=False),
+        GuardCommand(player_slot=1, held=False),
+        ProbeCompleteCommand(player_slot=1),
+    ]
 
 
 def test_gamepad_start_uses_instance_identity_and_deduplicates_join_request() -> None:

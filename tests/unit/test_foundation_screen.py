@@ -7,8 +7,16 @@ import pygame
 
 from windsprig.config import GameConfig
 from windsprig.content import load_campaign_catalog
+from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.abilities import create_default_registry
-from windsprig.input.commands import AbilityUseCommand, CancelCommand, ConfirmCommand, InputFrame
+from windsprig.gameplay.components import Transform
+from windsprig.input.commands import (
+    AbilityUseCommand,
+    CancelCommand,
+    ConfirmCommand,
+    InputFrame,
+    ProbeCompleteCommand,
+)
 from windsprig.input.queue import InputQueue
 from windsprig.input.roster import ActiveRoster, DeviceRef
 from windsprig.input.router import InputRouter
@@ -21,6 +29,23 @@ from windsprig.meta import (
 )
 from windsprig.screens.base import ScreenTransition
 from windsprig.screens.foundation import FoundationScreen
+
+
+class ProbeStorage:
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    def read_text(self, key: str) -> str | None:
+        return self.values.get(key)
+
+    def write_text(self, key: str, value: str) -> None:
+        self.values[key] = value
+
+    def delete(self, key: str) -> None:
+        self.values.pop(key, None)
+
+    def keys(self, prefix: str) -> tuple[str, ...]:
+        return tuple(key for key in sorted(self.values) if key.startswith(prefix))
 
 
 class RecordingSaveService:
@@ -50,17 +75,109 @@ class RecordingSaveService:
         return self.confirm_results.pop(0) if self.confirm_results else SaveWriteResult(ok=True)
 
 
-def make_foundation_screen(save_service: RecordingSaveService) -> FoundationScreen:
+def make_foundation_screen(
+    save_service: RecordingSaveService,
+    probe: FoundationProbe | None = None,
+) -> FoundationScreen:
     config = GameConfig()
     catalog = load_campaign_catalog(config.content_dir)
+    active_probe = probe or FoundationProbe(ProbeStorage(), enabled=False)
+    kwargs = {
+        "config": config,
+        "roster": ActiveRoster(config.max_local_players),
+        "save_service": save_service,
+        "catalog": catalog,
+        "ability_registry": create_default_registry(config.content_dir),
+        "migration_catalog": migration_catalog(catalog),
+        "probe": active_probe,
+    }
     return FoundationScreen(
-        config=config,
-        roster=ActiveRoster(config.max_local_players),
-        save_service=save_service,
-        catalog=catalog,
-        ability_registry=create_default_registry(config.content_dir),
-        migration_catalog=migration_catalog(catalog),
+        **kwargs,
     )
+
+
+def test_disabled_probe_completion_cannot_position_the_real_player_at_the_goal() -> None:
+    storage = ProbeStorage()
+    probe = FoundationProbe(storage, enabled=False)
+    screen = make_foundation_screen(
+        RecordingSaveService([SaveLoadResult(SaveData())]),
+        probe,
+    )
+    screen.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    assert screen._start_selected_stage() is True
+    assert screen.runtime is not None
+    player_id = screen.runtime.player_entities[0]
+    transform = screen.runtime.world.get_component(player_id, Transform)
+    original_position = (transform.x, transform.y)
+
+    screen.complete_probe_stage()
+
+    assert (transform.x, transform.y) == original_position
+    assert storage.values == {}
+
+
+def test_enabled_f9_uses_real_goal_system_then_marks_only_a_successful_save() -> None:
+    storage = ProbeStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    probe.start_session()
+    save_service = RecordingSaveService([SaveLoadResult(SaveData())])
+    screen = make_foundation_screen(save_service, probe)
+    screen.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    assert screen._start_selected_stage() is True
+    screen.screen_id = "playing"
+
+    transition = screen.fixed_update(
+        screen.config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [ProbeCompleteCommand(player_slot=1)]}),
+    )
+
+    assert transition == ScreenTransition("world_map")
+    assert storage.values["probe/stage"] == "completed"
+    assert storage.values["probe/stage_id"] == "world_1_stage_1"
+    assert storage.values["probe/save"] == "written"
+    assert save_service.saved == [screen.save_data]
+
+
+def test_failed_stage_completion_save_never_publishes_written_evidence() -> None:
+    storage = ProbeStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    probe.start_session()
+    save_service = RecordingSaveService(
+        [SaveLoadResult(SaveData())],
+        save_results=[SaveWriteResult(ok=False, error_code="storage_write_failed")],
+    )
+    screen = make_foundation_screen(save_service, probe)
+    screen.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    assert screen._start_selected_stage() is True
+    screen.screen_id = "playing"
+
+    screen.fixed_update(
+        screen.config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [ProbeCompleteCommand(player_slot=1)]}),
+    )
+
+    assert storage.values["probe/stage"] == "completed"
+    assert "probe/save" not in storage.values
+
+
+def test_initial_load_marks_restored_only_for_the_retained_completed_probe_stage() -> None:
+    storage = ProbeStorage()
+    storage.values["probe/stage_id"] = "world_1_stage_1"
+    probe = FoundationProbe(storage, enabled=True)
+    probe.start_session()
+    baseline = SaveData()
+    restored_profile = replace(
+        baseline.profiles[0],
+        clear_counts={"world_1_stage_1": 1},
+    )
+    restored = replace(
+        baseline,
+        profiles=(restored_profile, baseline.profiles[1], baseline.profiles[2]),
+    )
+
+    make_foundation_screen(RecordingSaveService([SaveLoadResult(restored)]), probe)
+
+    assert storage.values["probe/save"] == "restored"
 
 
 def test_stage_completion_never_auto_flushes_while_reset_is_unresolved() -> None:

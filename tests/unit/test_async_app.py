@@ -9,7 +9,8 @@ import pytest
 
 from windsprig.app import GameApp
 from windsprig.config import GameConfig
-from windsprig.input.commands import InputFrame, JumpCommand, MoveCommand
+from windsprig.feasibility import FoundationProbe
+from windsprig.input.commands import ConfirmCommand, InputFrame, JumpCommand, MoveCommand
 from windsprig.input.queue import InputQueue
 from windsprig.input.roster import ActiveRoster, DeviceRef
 from windsprig.input.router import RoutedInput
@@ -26,14 +27,17 @@ from windsprig.platform.services import (
 class FakeStorage:
     capabilities = StorageCapabilities(persistent=False, atomic_write=False, backup=False)
 
-    def read_text(self, _key: str) -> str | None:
-        return None
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
 
-    def write_text(self, _key: str, _value: str) -> None:
-        return None
+    def read_text(self, key: str) -> str | None:
+        return self.values.get(key)
 
-    def delete(self, _key: str) -> None:
-        return None
+    def write_text(self, key: str, value: str) -> None:
+        self.values[key] = value
+
+    def delete(self, key: str) -> None:
+        self.values.pop(key, None)
 
     def keys(self, _prefix: str) -> tuple[str, ...]:
         return ()
@@ -187,6 +191,7 @@ class AppHarness:
     roster: ActiveRoster
     screen: RecordingScreen
     events: list[pygame.event.Event]
+    storage: FakeStorage
 
 
 def make_harness(
@@ -195,15 +200,19 @@ def make_harness(
     queue: InputQueue | None = None,
     screens: Mapping[str, RecordingScreen] | None = None,
     audio_requires_gesture: bool = False,
+    display: FakeDisplay | None = None,
+    probe: FoundationProbe | None = None,
+    storage: FakeStorage | None = None,
 ) -> AppHarness:
     audio = FakeAudio()
-    display = FakeDisplay()
+    active_display = display or FakeDisplay()
+    active_storage = storage or FakeStorage()
     time = FakeTime()
     lifecycle = FakeLifecycle()
     services = PlatformServices(
-        storage=FakeStorage(),
+        storage=active_storage,
         audio=audio,
-        display=display,
+        display=active_display,
         time=time,
         lifecycle=lifecycle,
         browser=None,
@@ -222,20 +231,20 @@ def make_harness(
     screen_map = dict(screens or {"world_map": world_map})
     world_map = screen_map["world_map"]
     events: list[pygame.event.Event] = []
-    app = GameApp(
-        GameConfig(),
-        services,
-        RecordingFactory(screen_map),
-        input_router=router,
-        input_queue=input_queue,
-        roster=active_roster,
-        event_source=lambda: tuple(events),
-        key_source=FakeKeys,
-    )
+    app_kwargs = {
+        "input_router": router,
+        "input_queue": input_queue,
+        "roster": active_roster,
+        "event_source": lambda: tuple(events),
+        "key_source": FakeKeys,
+    }
+    if probe is not None:
+        app_kwargs["probe"] = probe
+    app = GameApp(GameConfig(), services, RecordingFactory(screen_map), **app_kwargs)
     return AppHarness(
         app=app,
         audio=audio,
-        display=display,
+        display=active_display,
         time=time,
         lifecycle=lifecycle,
         router=router,
@@ -243,12 +252,115 @@ def make_harness(
         roster=active_roster,
         screen=world_map,
         events=events,
+        storage=active_storage,
     )
+
+
+@pytest.mark.asyncio
+async def test_probe_marks_boot_only_after_the_first_render_is_presented() -> None:
+    order: list[str] = []
+
+    class OrderedDisplay(FakeDisplay):
+        def present(self, canvas: pygame.Surface) -> None:
+            super().present(canvas)
+            order.append("present")
+
+    class OrderedStorage(FakeStorage):
+        def write_text(self, key: str, value: str) -> None:
+            super().write_text(key, value)
+            if key == "probe/boot":
+                order.append("boot")
+
+    storage = OrderedStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    probe.start_session()
+    harness = make_harness(probe=probe, storage=storage, display=OrderedDisplay())
+    harness.time.elapsed = 16.0
+
+    await harness.app.run_frame()
+
+    assert order == ["present", "boot"]
+    assert harness.screen.rendered_alphas
+
+
+@pytest.mark.asyncio
+async def test_probe_counts_a_confirm_edge_at_the_fixed_step_boundary_once_during_catch_up() -> None:
+    storage = FakeStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    probe.start_session()
+    harness = make_harness(probe=probe, storage=storage)
+    harness.time.elapsed = 32.0
+    harness.router.next_routed = RoutedInput(
+        InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]})
+    )
+
+    await harness.app.run_frame()
+
+    assert storage.values["probe/input"] == "consumed_once"
+    assert len(harness.screen.frames) == 2
+    assert sum(
+        isinstance(command, ConfirmCommand)
+        for frame in harness.screen.frames
+        for command in frame.commands_for(1)
+    ) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("fail_initialize", "expected"), [(False, "ready"), (True, "muted")])
+async def test_probe_reports_real_audio_status_after_pointer_engagement(
+    fail_initialize: bool,
+    expected: str,
+) -> None:
+    storage = FakeStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    probe.start_session()
+    harness = make_harness(
+        audio_requires_gesture=True,
+        probe=probe,
+        storage=storage,
+    )
+    harness.audio.fail_initialize = fail_initialize
+    harness.events.append(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
+
+    await harness.app.run_frame()
+
+    assert storage.values["probe/audio"] == expected
 
 
 def test_game_app_exposes_native_async_run_contracts() -> None:
     assert inspect.iscoroutinefunction(GameApp.run)
     assert inspect.iscoroutinefunction(GameApp.run_frame)
+
+
+def test_default_foundation_factory_shares_an_explicit_probe_with_the_coordinator() -> None:
+    storage = FakeStorage()
+    probe = FoundationProbe(storage, enabled=True)
+    services = PlatformServices(
+        storage=storage,
+        audio=FakeAudio(),
+        display=FakeDisplay(),
+        time=FakeTime(),
+        lifecycle=FakeLifecycle(),
+        browser=None,
+        capabilities=PlatformCapabilities(
+            is_web=False,
+            persistent_storage=False,
+            fullscreen=False,
+            gamepads=False,
+            audio_requires_gesture=False,
+        ),
+    )
+
+    app = GameApp(
+        GameConfig(),
+        services,
+        probe=probe,
+        event_source=lambda: (),
+        key_source=FakeKeys,
+    )
+
+    assert app.probe is probe
+    assert app.foundation_screen.probe is probe
 
 
 async def test_async_app_keeps_edge_until_first_fixed_step_then_consumes_it_once() -> None:

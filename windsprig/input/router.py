@@ -23,6 +23,7 @@ from windsprig.input.commands import (
     MoveCommand,
     NavigateCommand,
     PauseCommand,
+    ProbeCompleteCommand,
 )
 from windsprig.input.roster import ActivePlayer, ActiveRoster, DeviceRef
 
@@ -352,6 +353,8 @@ def _keyboard_event_commands(
         commands.append(CancelCommand(slot))
     if key == route.join_key:
         commands.append(PauseCommand(slot))
+    if key == pygame.K_F9:
+        commands.append(ProbeCompleteCommand(slot))
     return commands
 
 

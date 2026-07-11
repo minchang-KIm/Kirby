@@ -14,6 +14,7 @@ from windsprig.config import GameConfig
 from windsprig.content import CampaignCatalog, load_campaign_catalog
 from windsprig.content.loader import WorldNode
 from windsprig.core.rng import derive_stage_seed
+from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.abilities import AbilityRegistry, create_default_registry
 from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
@@ -24,6 +25,7 @@ from windsprig.input.commands import (
     InputFrame,
     NavigateCommand,
     PauseCommand,
+    ProbeCompleteCommand,
 )
 from windsprig.input.roster import ActiveRoster
 from windsprig.meta import (
@@ -63,6 +65,7 @@ class FoundationScreen(Screen):
         catalog: CampaignCatalog,
         ability_registry: AbilityRegistry,
         migration_catalog: SaveMigrationCatalog,
+        probe: FoundationProbe,
     ) -> None:
         self.config = config
         self.roster = roster
@@ -70,6 +73,7 @@ class FoundationScreen(Screen):
         self.catalog = catalog
         self.ability_registry = ability_registry
         self.migration_catalog = migration_catalog
+        self.probe = probe
         self.unlock_rules = UnlockRules(catalog)
         self.world_map_service = WorldMapService(catalog, self.unlock_rules)
         self.screen_id: ScreenId = "world_map"
@@ -194,11 +198,26 @@ class FoundationScreen(Screen):
         runtime = self.runtime
         if runtime is None:
             return ScreenTransition("world_map")
+        if any(isinstance(command, ProbeCompleteCommand) for command in commands):
+            self.complete_probe_stage()
         runtime.step(input_frame)
         if self._on_stage_progress():
             target: ScreenId = "recovery" if self.requires_save_resolution else "world_map"
             return ScreenTransition(target)
         return None
+
+    def complete_probe_stage(self) -> None:
+        """Position the active real player at the real goal only for the opt-in probe."""
+        if not self.probe.enabled or self.runtime is None or not self.runtime.player_entities:
+            return
+        player_id = self.runtime.player_entities[0]
+        player_transform = self.runtime.world.get_component(player_id, Transform)
+        goals = self.runtime.world.query(StageGoal, Transform, Collider)
+        if not goals:
+            return
+        _, _, goal_transform, _ = goals[0]
+        player_transform.x = goal_transform.x
+        player_transform.y = goal_transform.y
 
     def _update_paused(self, commands: tuple[InputCommand, ...]) -> ScreenTransition | None:
         if any(isinstance(command, CancelCommand) for command in commands):
@@ -249,6 +268,9 @@ class FoundationScreen(Screen):
             self.save_status = "ready"
             self._save_resolution_action = None
         self._rebuild_progress()
+        probe_stage_id = self.probe.read("stage_id")
+        if probe_stage_id is not None and result.data.profiles[0].clear_counts.get(probe_stage_id, 0) > 0:
+            self.probe.mark("save", "restored")
         if notice_code == "migrated_v1":
             self._apply_save_result(self.save_service.save(self.save_data))
 
@@ -321,6 +343,8 @@ class FoundationScreen(Screen):
         if runtime is None or not runtime.world.resources.get("stage_cleared", False):
             return False
         stage = runtime.stage
+        self.probe.mark("stage_id", stage.stage_id)
+        self.probe.mark("stage", "completed")
         elapsed_ms = runtime.world.frame_index * self.config.fixed_dt_ms
         self.tracker.mark_stage_clear(stage.node_id, stage.stage_id, elapsed_ms)
         run_mote_count = runtime.world.resources.get("run_energy_spheres", 0)
@@ -337,10 +361,12 @@ class FoundationScreen(Screen):
             self.unlocked_nodes.add(next_node)
         self.unlocked_worlds = self.unlock_rules.apply_stage_rewards(stage.node_id, self.unlocked_worlds)
         self.runtime = None
-        self._flush_save(automatic=True)
+        save_result = self._flush_save(automatic=True)
+        if save_result is not None and save_result.ok:
+            self.probe.mark("save", "written")
         return True
 
-    def _flush_save(self, *, automatic: bool = False) -> None:
+    def _flush_save(self, *, automatic: bool = False) -> SaveWriteResult | None:
         profile = replace(
             self.save_data.profiles[0],
             unlocked_nodes=frozenset(self.unlocked_nodes),
@@ -357,8 +383,10 @@ class FoundationScreen(Screen):
         self.save_data = updated
         # Automatic progression writes must not probe or replace unresolved recovery sources.
         if automatic and self.requires_save_resolution:
-            return
-        self._apply_save_result(self.save_service.save(updated))
+            return None
+        result = self.save_service.save(updated)
+        self._apply_save_result(result)
+        return result
 
     def _fonts(self) -> tuple[pygame.font.Font, pygame.font.Font]:
         if self._font is None or self._small_font is None:
@@ -572,8 +600,14 @@ class FoundationScreenFactory(ScreenFactory):
         *,
         roster: ActiveRoster | None = None,
         save_service: SaveService | None = None,
+        probe: FoundationProbe | None = None,
     ) -> None:
         self.roster = roster or ActiveRoster(config.max_local_players)
+        if probe is None:
+            enabled = services.browser is not None and services.browser.query_param("foundation_probe") == "1"
+            probe = FoundationProbe(services.storage, enabled=enabled)
+        probe.start_session()
+        self.probe = probe
         catalog = load_campaign_catalog(config.content_dir)
         migrations = migration_catalog(catalog)
         service = save_service or SaveManager(services.storage, migrations, now_utc)
@@ -584,6 +618,7 @@ class FoundationScreenFactory(ScreenFactory):
             catalog=catalog,
             ability_registry=create_default_registry(config.content_dir),
             migration_catalog=migrations,
+            probe=self.probe,
         )
 
     def create(self, screen_id: ScreenId) -> FoundationScreen:
@@ -604,6 +639,7 @@ def create_foundation_screen_factory(
     *,
     roster: ActiveRoster | None = None,
     save_service: SaveService | None = None,
+    probe: FoundationProbe | None = None,
 ) -> FoundationScreenFactory:
     """Build the shared foundation screen and its platform-backed save service."""
     return FoundationScreenFactory(
@@ -612,4 +648,5 @@ def create_foundation_screen_factory(
         now_utc,
         roster=roster,
         save_service=save_service,
+        probe=probe,
     )

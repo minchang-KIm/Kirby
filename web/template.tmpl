@@ -1,0 +1,191 @@
+<html lang="en"><script src="https://cdnjs.cloudflare.com/ajax/libs/BrowserFS/2.0.0/browserfs.min.js"></script><script src="{{cookiecutter.cdn}}pythons.js" type="module" id="site" data-python="python{{cookiecutter.PYBUILD}}" data-LINES="42" data-COLUMNS="132" data-os="vtx,snd,gui" async defer>#<!--
+
+import asyncio
+from pathlib import Path
+import platform
+import sys
+
+
+# Pygbag 0.9.3 discovers this exact coroutine name from its template loader.
+async def custom_site():
+    import embed
+
+    platform.document.body.style.background = "#10231e"
+    platform.window.transfer.hidden = true
+    platform.window.canvas.style.visibility = "visible"
+    bundle = "{{cookiecutter.archive}}"
+    appdir = Path(f"/data/data/{bundle}")
+    appdir.mkdir()
+
+    if platform.window.location.host.find(".itch.zone") > 0:
+        import zipfile
+
+        async with platform.fopen("{{cookiecutter.archive}}.apk", "rb") as archive:
+            with zipfile.ZipFile(archive) as zip_ref:
+                zip_ref.extractall(appdir.as_posix())
+    else:
+        import tarfile
+
+        async with platform.fopen("{{cookiecutter.archive}}.tar.gz", "rb") as archive:
+            tar = tarfile.open(fileobj=archive, mode="r:gz")
+            tar.extractall(path=appdir.as_posix(), filter="tar")
+            tar.close()
+
+    platform.run_main(PyConfig, loaderhome=appdir / "assets", loadermain=None)
+    while embed.counter() < 0:
+        await asyncio.sleep(0.1)
+
+    main = appdir / "assets" / "main.py"
+    if not platform.window.MM.UME:
+        __import__(__name__).__file__ = main
+        platform.window.infobox.innerText = "Ready — click the game to enable audio"
+        while not platform.window.MM.UME:
+            await asyncio.sleep(0.1)
+
+    await TopLevel_async_handler.start_toplevel(platform.shell, console=window.python.config.debug)
+    __import__(__name__).__file__ = main
+
+    def ui_callback(package):
+        platform.window.infobox.innerText = f"Preparing {package}"
+
+    await shell.source(main, callback=ui_callback)
+    platform.window.infobox.style.display = "none"
+    platform.window.config.gui_divider = 1
+    platform.window.window_resize()
+    shell.interactive()
+
+
+asyncio.run(custom_site())
+
+# BEGIN BLOCK
+#
+# This exact separator is part of the Pygbag 0.9.3 template contract.
+# =============================================================================
+# --></script><head><!--
+--><script type="application/javascript">
+config = {
+    xtermjs: "{{cookiecutter.xtermjs}}",
+    _sdl2: "canvas",
+    user_canvas: 0,
+    user_canvas_managed: 0,
+    gui_divider: 2,
+    ume_block: {{cookiecutter.ume_block}},
+    can_close: {{cookiecutter.can_close}},
+    archive: "{{cookiecutter.archive}}",
+    gui_debug: 2,
+    cdn: "{{cookiecutter.cdn}}",
+    autorun: {{cookiecutter.autorun}},
+    PYBUILD: "{{cookiecutter.PYBUILD}}",
+    fb_ar: 1.77,
+    fb_width: "{{cookiecutter.width}}",
+    fb_height: "{{cookiecutter.height}}"
+};
+
+function show_infobox() {
+    infobox.style.display = "block";
+}
+</script>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>{{cookiecutter.title}}</title>
+<link rel="icon" type="image/png" href="favicon.png" sizes="64x64">
+<style>
+    :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+        background: #10231e;
+        color: #eefcf5;
+    }
+    body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at top, #1c493b, #0a1714 72%);
+    }
+    main {
+        width: min(100vw, 1280px);
+        text-align: center;
+    }
+    #brand {
+        margin: 0.5rem 0 0.25rem;
+        color: #79e0b4;
+        letter-spacing: 0.04em;
+    }
+    #requirements {
+        margin: 0.25rem 1rem 0.75rem;
+        color: #f6c95d;
+    }
+    #game-shell {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        max-height: 720px;
+        background: #050b09;
+        overflow: hidden;
+    }
+    canvas.emscripten {
+        border: 0;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        inset: 0;
+        visibility: hidden;
+    }
+    #infobox {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        z-index: 10;
+        color: #eefcf5;
+        background: #10231e;
+        font-size: 1.15rem;
+        font-weight: 700;
+    }
+    #transfer, #pyconsole, #system, #box, #dlg, #info {
+        display: none;
+    }
+</style>
+</head>
+<body>
+<main>
+    <h1 id="brand">Windsprig: Echoes of the Gale</h1>
+    <p id="requirements">Gameplay requires a physical keyboard or compatible gamepad.</p>
+    <div id="game-shell">
+        <div id="infobox">Loading Windsprig…</div>
+        <div id="transfer">
+            <div id="status">Loading Windsprig…</div>
+            <progress value="0" max="100" id="progress"></progress>
+        </div>
+        <canvas class="emscripten" id="canvas" width="1px" height="1px" oncontextmenu="event.preventDefault()" tabindex="1"></canvas>
+        <canvas class="emscripten" id="canvas3d" width="{{cookiecutter.width}}px" height="{{cookiecutter.height}}px" oncontextmenu="event.preventDefault()" tabindex="1" hidden></canvas>
+    </div>
+    <noscript>Windsprig needs JavaScript and WebAssembly to start. Enable JavaScript, then reload this page.</noscript>
+</main>
+<div id="html"></div>
+<div id="crt"><div id="system"></div><div id="box"><div id="info"></div></div></div>
+<div id="dlg"><input type="file" id="dlg_multifile" multiple></div>
+<div id="pyconsole"><div id="terminal" tabindex="1"></div></div>
+<script type="application/javascript">
+globalThis.__canvas_resized = () => {};
+
+async function custom_onload(debug_hidden) {
+    pyconsole.hidden = debug_hidden;
+    system.hidden = debug_hidden;
+    transfer.hidden = debug_hidden;
+    info.hidden = debug_hidden;
+    box.hidden = debug_hidden;
+    show_infobox();
+}
+
+function custom_prerun() {}
+function custom_postrun() {}
+</script>
+</body>
+</html>

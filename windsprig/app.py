@@ -12,7 +12,9 @@ import pygame
 from windsprig.config import GameConfig
 from windsprig.content import CampaignCatalog
 from windsprig.core.time import FixedStepClock
+from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.runtime import StageRuntime
+from windsprig.input.commands import ConfirmCommand, InputFrame
 from windsprig.input.queue import InputQueue
 from windsprig.input.roster import ActiveRoster, DeviceRef
 from windsprig.input.router import InputRouter, KeyState, RoutedInput
@@ -66,6 +68,7 @@ class GameApp:
         event_source: Callable[[], Sequence[pygame.event.Event]] | None = None,
         key_source: Callable[[], KeyState] | None = None,
         initial_screen_id: ScreenId | None = None,
+        probe: FoundationProbe | None = None,
     ) -> None:
         self.config = config or GameConfig()
         self.services = services or create_native_services(self.config)
@@ -76,6 +79,7 @@ class GameApp:
                 self.services,
                 lambda: datetime.now(UTC),
                 roster=active_roster,
+                probe=probe,
             )
             self.screen_factory: ScreenFactory = foundation_factory
             self.roster = active_roster
@@ -93,6 +97,12 @@ class GameApp:
         self.fixed_clock = fixed_clock or FixedStepClock(self.config.fixed_dt_ms)
         self.event_source = event_source or _pygame_events
         self.key_source = key_source or _pygame_keys
+        if probe is not None:
+            self.probe = probe
+        elif isinstance(self.screen_factory, FoundationScreenFactory):
+            self.probe = self.screen_factory.probe
+        else:
+            self.probe = FoundationProbe(self.services.storage, enabled=False)
         self.canvas = pygame.Surface(self.config.resolution)
         self.performance_diagnostics: list[str] = []
         self.disconnected_devices: tuple[DeviceRef, ...] = ()
@@ -124,10 +134,14 @@ class GameApp:
         ):
             self._audio_initialization_attempted = True
             try:
-                await self.services.audio.initialize(after_user_gesture=True)
+                audio_status = await self.services.audio.initialize(after_user_gesture=True)
             except Exception:
                 # Audio is an explicitly nonfatal platform capability.
-                pass
+                audio_status = self.services.audio.status
+            if audio_status.ready:
+                self.probe.mark("audio", "ready")
+            elif audio_status.muted:
+                self.probe.mark("audio", "muted")
 
         routed = self.input_router.collect(events, self.key_source(), self.roster)
         # Queue against the old ownership snapshot, then explicitly invalidate reused slots.
@@ -159,9 +173,11 @@ class GameApp:
             self.performance_diagnostics.append(f"fixed_step_drop:{int(batch.dropped_ms)}")
         for _ in range(batch.steps):
             # Input is consumed before transition so a later catch-up step targets the new screen.
+            input_frame = self.input_queue.consume_step()
+            self._observe_probe_input(input_frame)
             transition = self.screen.fixed_update(
                 self.config.fixed_dt_ms,
-                self.input_queue.consume_step(),
+                input_frame,
             )
             if transition is None:
                 continue
@@ -172,7 +188,14 @@ class GameApp:
 
         self.screen.render(self.canvas, batch.alpha)
         self.services.display.present(self.canvas)
+        self.probe.presented_frame(raw_elapsed_ms)
         await self.services.time.yield_frame()
+
+    def _observe_probe_input(self, input_frame: InputFrame) -> None:
+        for commands in input_frame.commands_by_slot.values():
+            for command in commands:
+                if isinstance(command, ConfirmCommand):
+                    self.probe.consumed_input_edge()
 
     def confirm_save_reset(self) -> SaveWriteResult:
         """Expose the foundation screen's narrow verified reset action."""

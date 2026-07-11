@@ -77,6 +77,13 @@ class PauseCommand(InputCommand):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class ProbeCompleteCommand(InputCommand):
+    """Request the opt-in browser probe's goal-position diagnostic."""
+
+    pass
+
+
 @dataclass(slots=True)
 class InputFrame:
     commands_by_slot: dict[int, list[InputCommand]] = field(default_factory=dict)

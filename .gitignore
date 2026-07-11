@@ -139,7 +139,7 @@ celerybeat.pid
 # Environments
 .env
 .envrc
-.venv
+.venv/
 .worktrees/
 env/
 venv/
@@ -203,6 +203,14 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Windsprig generated feasibility artifacts
+artifacts/
+dist/
+build/web-stage/
+__pycache__/
+.pytest_cache/
+.coverage
 
 # Marimo
 marimo/_static/

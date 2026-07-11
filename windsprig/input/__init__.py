@@ -16,6 +16,7 @@ from .commands import (
     MoveCommand,
     NavigateCommand,
     PauseCommand,
+    ProbeCompleteCommand,
 )
 from .devices import InputDeviceMux
 from .legacy import InputState
@@ -43,6 +44,7 @@ __all__ = [
     "MoveCommand",
     "NavigateCommand",
     "PauseCommand",
+    "ProbeCompleteCommand",
     "InputDeviceMux",
     "InputQueue",
     "ActivePlayer",
