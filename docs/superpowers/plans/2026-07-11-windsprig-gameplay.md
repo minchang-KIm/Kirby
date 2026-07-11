@@ -23,6 +23,7 @@
 - Runtime hashes include gameplay components/resources only and exclude render interpolation, surfaces, particles, audio channels, screen shake, afterimages, and other presentation-only state.
 - Release, launch, harmonize, damage, guard, dodge, capture, ability equip/drop/use, projectile cut, mote collection, checkpoint, respawn, gather, defeat, and victory publish semantic events. Presentation subscribers never alter deterministic state in response.
 - The public ability IDs are exactly `bloomblade`, `cinder`, `voltsong`, `galehook`, `stoneheart`, and `tempest`; `none` is the only empty sentinel.
+- Stable Wind Mote IDs use the save-compatible form `{stage_id}:mote:{number}` frozen by the foundation migration; gameplay must not introduce a second delimiter format.
 - Tempest costs a full `100` meter, immediately restores the previously equipped non-super ability after use, and cannot be a permanent dominant loadout.
 - Stage completion freezes simulation, returns a `StageResult`, and waits for an explicit results choice. Defeat freezes simulation and waits for checkpoint retry, stage retry, or world-map choice.
 - No inactive or dead player can trigger a goal. In co-op, all eligible active players must reach the goal, or the roster leader must explicitly start the `3000 ms` gather countdown.
@@ -642,9 +643,9 @@ from windsprig.gameplay.events import GameplayTopic, make_event
 def test_current_catalog_adapts_to_stable_public_gameplay_fields() -> None:
     stage = load_campaign_catalog(Path("windsprig/content")).stages["world_1_stage_1"]
     assert tuple(m.mote_id for m in stage.motes) == (
-        "world_1_stage_1.mote.1",
-        "world_1_stage_1.mote.2",
-        "world_1_stage_1.mote.3",
+        "world_1_stage_1:mote:1",
+        "world_1_stage_1:mote:2",
+        "world_1_stage_1:mote:3",
     )
     assert stage.checkpoints[0].checkpoint_id == "world_1_stage_1.start"
     assert all(enemy.ability_id in {"bloomblade", "cinder", "voltsong", "galehook", "stoneheart", "tempest"}
@@ -709,7 +710,7 @@ def _load_motes(raw: dict[str, object]) -> tuple[MoteSpec, ...]:
     if "motes" in raw:
         return tuple(MoteSpec(str(item["mote_id"]), int(item["tile_x"]), int(item["tile_y"]))
                      for item in raw["motes"])
-    return tuple(MoteSpec(f"{stage_id}.mote.{index}", int(tile[0]), int(tile[1]))
+    return tuple(MoteSpec(f"{stage_id}:mote:{index}", int(tile[0]), int(tile[1]))
                  for index, tile in enumerate(raw.get("energy_spheres", []), start=1))
 
 
