@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
+from dataclasses import replace
+from datetime import UTC, datetime
 
 import pygame
 
@@ -15,31 +16,67 @@ from windsprig.input import ActiveRoster, DeviceRef, InputDeviceMux
 from windsprig.meta import (
     CompletionTracker,
     SaveManager,
+    SaveService,
+    SaveWriteResult,
     UnlockRules,
     WorldMapService,
-    migrate_v1,
     migration_catalog,
 )
+from windsprig.platform.native import create_native_services
+from windsprig.platform.services import PlatformServices
 
 
 class GameApp:
-    def __init__(self, config: GameConfig | None = None) -> None:
+    """Own the prototype runtime and its platform-backed immutable save state."""
+
+    def __init__(
+        self,
+        config: GameConfig | None = None,
+        services: PlatformServices | None = None,
+    ) -> None:
         self.config = config or GameConfig()
-        self.root_dir = Path(__file__).resolve().parent
-        self.content_dir = self.root_dir / "content"
+        self.services = services or create_native_services(self.config)
+        self.content_dir = self.config.content_dir
         self.catalog = load_campaign_catalog(self.content_dir)
         self.ability_registry = create_default_registry(self.content_dir)
-        self.save_manager = SaveManager(Path("save/save_data.json"))
-        self.save_schema = self.save_manager.load()
         self.migration_catalog = migration_catalog(self.catalog)
-        profile = migrate_v1(self.save_schema.to_json_dict(), self.migration_catalog).profiles[0]
+        self.save_service: SaveService = SaveManager(
+            self.services.storage,
+            self.migration_catalog,
+            lambda: datetime.now(UTC),
+        )
+        load_result = self.save_service.load()
+        self.save_data = load_result.data
+        self.save_notice = load_result.notice
+        self.save_write_result: SaveWriteResult | None = None
+        self.save_status = "ready"
+        if self.save_notice is not None and self.save_notice.code == "migrated_v1":
+            self.save_write_result = self.save_service.save(self.save_data)
+            self.save_status = "saved" if self.save_write_result.ok else "retry_required"
+        elif self.save_notice is not None and self.save_notice.code in {
+            "backup_restore_failed",
+            "quarantine_failed",
+            "read_failed",
+            "unsupported_version",
+        }:
+            self.save_status = "retry_required"
+        elif self.save_notice is not None and self.save_notice.code == "reset_required":
+            self.save_status = "reset_required"
+
+        profile = self.save_data.profiles[0]
+        cleared_nodes = {
+            node_id
+            for node_id, stage_id in self.migration_catalog.stage_id_by_node.items()
+            if profile.clear_counts.get(stage_id, 0) > 0
+        }
         self.tracker = CompletionTracker(
-            cleared_nodes=set(self.save_schema.profiles[0].cleared_nodes),
+            cleared_nodes=cleared_nodes,
             collected_mote_ids=set(profile.collected_mote_ids),
             challenge_rewards=set(profile.challenge_rewards),
             best_times_ms=dict(profile.best_times_ms),
             clear_counts=dict(profile.clear_counts),
         )
+        self.unlocked_nodes = set(profile.unlocked_nodes)
         self.unlocked_worlds = set(profile.unlocked_worlds)
         self.unlock_rules = UnlockRules(self.catalog)
         self.world_map_service = WorldMapService(self.catalog, self.unlock_rules)
@@ -161,6 +198,10 @@ class GameApp:
         # The prototype runtime exposes only a count; fixed catalog order prevents replay-minted currency.
         for mote_id in available_mote_ids[: max(0, min(run_mote_count, len(available_mote_ids)))]:
             self.tracker.collect_mote(mote_id)
+        self.unlocked_nodes.add(stage.node_id)
+        next_node = self.migration_catalog.next_node_by_node.get(stage.node_id)
+        if next_node is not None:
+            self.unlocked_nodes.add(next_node)
         self.unlocked_worlds = self.unlock_rules.apply_stage_rewards(stage.node_id, self.unlocked_worlds)
         self._flush_save()
         self.mode = "world_map"
@@ -168,20 +209,21 @@ class GameApp:
         self.runtime = None
 
     def _flush_save(self) -> None:
-        profile = self.save_schema.profiles[0]
-        profile.unlocked_worlds = set(self.unlocked_worlds)
-        profile.cleared_nodes = set(self.tracker.cleared_nodes)
-        profile.energy_spheres = {
-            stage_id: sum(mote_id in self.tracker.collected_mote_ids for mote_id in mote_ids)
-            for stage_id, mote_ids in self.migration_catalog.mote_ids_by_stage.items()
-            if any(mote_id in self.tracker.collected_mote_ids for mote_id in mote_ids)
-        }
-        # Task 7 replaces this v1 bridge; these extension fields keep v2 identities lossless meanwhile.
-        profile.collected_mote_ids = set(self.tracker.collected_mote_ids)
-        profile.challenge_unlocks = set(self.tracker.challenge_rewards)
-        profile.best_times = dict(self.tracker.best_times_ms)
-        profile.clear_counts = dict(self.tracker.clear_counts)
-        self.save_manager.save(self.save_schema)
+        profile = replace(
+            self.save_data.profiles[0],
+            unlocked_nodes=frozenset(self.unlocked_nodes),
+            unlocked_worlds=frozenset(self.unlocked_worlds),
+            collected_mote_ids=frozenset(self.tracker.collected_mote_ids),
+            best_times_ms=dict(self.tracker.best_times_ms),
+            clear_counts=dict(self.tracker.clear_counts),
+            challenge_rewards=frozenset(self.tracker.challenge_rewards),
+        )
+        profiles = (profile, self.save_data.profiles[1], self.save_data.profiles[2])
+        updated = replace(self.save_data, profiles=profiles)
+        result = self.save_service.save(updated)
+        self.save_data = updated
+        self.save_write_result = result
+        self.save_status = "saved" if result.ok else "retry_required"
 
     def _render_world_map(self, screen: pygame.Surface, font: pygame.font.Font, small_font: pygame.font.Font) -> None:
         screen.fill((25, 33, 64))

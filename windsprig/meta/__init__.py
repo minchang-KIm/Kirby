@@ -1,7 +1,13 @@
 """Public progression, save, migration, and world-map contracts."""
 
 from .completion import CompletionTracker
-from .save_manager import SaveManager, SaveSchema
+from .save_manager import (
+    SaveLoadResult,
+    SaveManager,
+    SaveNotice,
+    SaveService,
+    SaveWriteResult,
+)
 from .save_migrations import SaveMigrationCatalog, migrate_v1, migration_catalog
 from .save_models import (
     AccessibilitySettings,
@@ -27,10 +33,13 @@ __all__ = [
     "DisplaySettings",
     "GlobalSettings",
     "SaveData",
+    "SaveLoadResult",
     "SaveManager",
     "SaveMigrationCatalog",
+    "SaveNotice",
     "SaveProfile",
-    "SaveSchema",
+    "SaveService",
+    "SaveWriteResult",
     "UnlockRules",
     "WorldMapService",
     "migrate_v1",

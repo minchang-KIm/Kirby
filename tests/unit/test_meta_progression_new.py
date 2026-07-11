@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 from windsprig.content.loader import load_campaign_catalog
-from windsprig.meta import CompletionTracker, SaveManager, SaveSchema, UnlockRules
+from windsprig.meta import CompletionTracker, SaveData, SaveManager, UnlockRules, migration_catalog
+from windsprig.platform.native import NativeStorage
 
 
 def test_unlock_rules_progression() -> None:
@@ -26,10 +29,19 @@ def test_unlock_rules_progression() -> None:
     assert "world_2" in unlocked_worlds
 
 
-def test_save_schema_roundtrip(tmp_path: Path) -> None:
-    manager = SaveManager(tmp_path / "save_data.json")
-    schema = SaveSchema()
-    schema.profiles[0].cleared_nodes = {"world_1_node_1"}
-    manager.save(schema)
-    loaded = manager.load()
-    assert "world_1_node_1" in loaded.profiles[0].cleared_nodes
+def test_save_v2_roundtrip_uses_storage_service(tmp_path: Path) -> None:
+    catalog = load_campaign_catalog(Path("windsprig/content"))
+    manager = SaveManager(
+        NativeStorage(tmp_path / "Windsprig"),
+        migration_catalog(catalog),
+        lambda: datetime(2026, 7, 11, tzinfo=UTC),
+    )
+    data = SaveData()
+    profile = replace(
+        data.profiles[0],
+        unlocked_nodes=frozenset({"world_1_node_1", "world_1_node_2"}),
+    )
+    updated = replace(data, profiles=(profile, data.profiles[1], data.profiles[2]))
+
+    assert manager.save(updated).ok is True
+    assert manager.load().data == updated
