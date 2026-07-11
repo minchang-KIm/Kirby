@@ -31,10 +31,14 @@ KEYBOARD_ARROWS_DEVICE = DeviceRef("keyboard", "keyboard-arrows", "Keyboard Arro
 
 
 class KeyState(Protocol):
+    """Minimal keyboard-state contract required for held sampling."""
+
     def __getitem__(self, key: int) -> int | bool: ...
 
 
 class JoystickState(Protocol):
+    """Joystick operations used by routing and hotplug identity management."""
+
     def get_axis(self, axis: int) -> float: ...
 
     def get_button(self, button: int) -> int | bool: ...
@@ -74,12 +78,16 @@ KEYBOARD_ROUTES = (
 
 @dataclass(frozen=True, slots=True)
 class RoutedInput:
+    """One render frame of commands plus roster and disconnection requests."""
+
     frame: InputFrame
     join_requests: tuple[DeviceRef, ...] = ()
     disconnected_devices: tuple[DeviceRef, ...] = ()
 
 
 class InputRouter:
+    """Translate pygame input into roster-scoped gameplay and menu commands."""
+
     def __init__(self) -> None:
         self._joysticks: dict[int, JoystickState] = {}
         self._axis_menu_state: dict[tuple[int, int], int] = {}
@@ -87,6 +95,7 @@ class InputRouter:
         self.refresh_joysticks()
 
     def refresh_joysticks(self) -> None:
+        """Rebuild connected gamepad state keyed by stable pygame instance ID."""
         try:
             pygame.joystick.init()
             connected: dict[int, JoystickState] = {}
@@ -105,11 +114,14 @@ class InputRouter:
         keys: KeyState,
         roster: ActiveRoster,
     ) -> RoutedInput:
+        """Collect one render frame without mutating the active roster."""
         event_list = tuple(events)
         self._register_added_gamepads(event_list)
 
         join_requests = self._join_requests(event_list, roster)
+        # Remove first so a disconnected device's last held sample cannot enter the queue.
         disconnected = self._removed_gamepads(event_list, roster)
+        # Joining input is roster intent, not a gameplay/menu action in the same frame.
         suppressed = {(device.kind, device.uid) for device in join_requests}
         frame = InputFrame.empty()
 

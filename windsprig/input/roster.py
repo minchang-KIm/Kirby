@@ -14,6 +14,8 @@ SLOT_VISUALS: dict[int, tuple[str, str]] = {
 
 @dataclass(frozen=True, slots=True)
 class DeviceRef:
+    """Stable input-device identity; labels are descriptive and not part of matching."""
+
     kind: DeviceKind
     uid: str
     label: str
@@ -21,6 +23,8 @@ class DeviceRef:
 
 @dataclass(frozen=True, slots=True)
 class ActivePlayer:
+    """Immutable joined-player identity with visuals that remain bound to its slot."""
+
     slot: int
     device: DeviceRef
     color_token: str
@@ -29,6 +33,8 @@ class ActivePlayer:
 
 
 class ActiveRoster:
+    """Own joined-device assignments and maintain exactly one leader when non-empty."""
+
     def __init__(self, max_players: int = 4) -> None:
         if not 1 <= max_players <= 4:
             raise ValueError("max_players must be between 1 and 4")
@@ -37,13 +43,16 @@ class ActiveRoster:
 
     @property
     def players(self) -> tuple[ActivePlayer, ...]:
+        """Return active players in deterministic slot order."""
         return tuple(self._players[slot] for slot in sorted(self._players))
 
     @property
     def leader_slot(self) -> int | None:
+        """Return the current leader slot, or ``None`` when the roster is empty."""
         return next((player.slot for player in self.players if player.is_leader), None)
 
     def join(self, device: DeviceRef) -> ActivePlayer:
+        """Return an existing assignment or join the device in the lowest free slot."""
         current = self.player_for_device(device)
         if current is not None:
             return current
@@ -65,6 +74,7 @@ class ActiveRoster:
         return player
 
     def leave(self, slot: int) -> ActivePlayer | None:
+        """Remove a slot and promote the lowest remaining slot when its leader leaves."""
         removed = self._players.pop(slot, None)
         if removed is not None and removed.is_leader and self._players:
             promoted_slot = min(self._players)
@@ -72,6 +82,10 @@ class ActiveRoster:
         return removed
 
     def reassign(self, slot: int, device: DeviceRef) -> ActivePlayer:
+        """Replace a slot's device without changing its visuals or leadership.
+
+        Callers must clear buffered input for the slot before routing the new owner.
+        """
         if self.player_for_device(device) is not None:
             raise ValueError("device is already assigned")
         player = self._players[slot]
@@ -80,6 +94,7 @@ class ActiveRoster:
         return reassigned
 
     def player_for_device(self, device: DeviceRef) -> ActivePlayer | None:
+        """Find an assignment by device kind and stable UID, ignoring its label."""
         return next(
             (
                 player
@@ -90,4 +105,5 @@ class ActiveRoster:
         )
 
     def is_active(self, slot: int) -> bool:
+        """Return whether the slot currently belongs to a joined player."""
         return slot in self._players
