@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import replace
 from datetime import datetime
 from types import MappingProxyType
-from typing import Literal, cast
+from typing import Literal
 
 import pygame
 
@@ -211,7 +211,7 @@ class FoundationScreen(Screen):
         """Position the active real player at the real goal only for the opt-in probe."""
         if not self.probe.enabled or self.runtime is None or not self.runtime.player_entities:
             return
-        player_id = self.runtime.player_entities[0]
+        player_id = self.runtime.player_entities[min(self.runtime.player_entities)]
         player_transform = self.runtime.world.get_component(player_id, Transform)
         goals = self.runtime.world.query(StageGoal, Transform, Collider)
         if not goals:
@@ -440,6 +440,7 @@ class FoundationScreen(Screen):
             return
         stage = runtime.stage
         world = runtime.world
+        snapshot = runtime.snapshot()
         canvas.fill((92, 160, 244))
         camera_x, camera_y = self._camera_offset(runtime)
         for tile_x, tile_y in stage.solids:
@@ -540,25 +541,21 @@ class FoundationScreen(Screen):
                     ),
                 )
         canvas.blit(font.render(f"{stage.stage_id} | Cancel: map / Pause: pause", True, (250, 250, 255)), (16, 12))
-        hud_object = world.resources.get("hud", {})
-        hud = cast(dict[str, object], hud_object) if isinstance(hud_object, dict) else {}
-        players_object = hud.get("players", [])
-        player_rows = cast(list[object], players_object) if isinstance(players_object, list) else []
-        for index, player_object in enumerate(player_rows):
-            if not isinstance(player_object, dict):
-                continue
-            player = cast(dict[str, object], player_object)
+        for index, player in enumerate(snapshot.players):
             label = small_font.render(
-                f"P{player.get('slot')} HP {player.get('hp')}/{player.get('max_hp')} "
-                f"LIFE {player.get('lives')} ABIL {player.get('ability')}",
+                f"P{player.slot} HP {player.hp}/{player.maximum_hp} "
+                f"LIFE {player.lives_remaining} ABIL {player.ability_id}",
                 True,
                 (245, 245, 255),
             )
             canvas.blit(label, (16, 44 + index * 22))
-        energy = hud.get("energy_spheres", 0)
         canvas.blit(
-            small_font.render(f"Wind Motes (Run): {energy}", True, (255, 245, 170)),
-            (16, 50 + len(player_rows) * 22),
+            small_font.render(
+                f"Wind Motes (Run): {len(snapshot.collected_mote_ids)}",
+                True,
+                (255, 245, 170),
+            ),
+            (16, 50 + len(snapshot.players) * 22),
         )
 
     def _render_save_state(self, canvas: pygame.Surface, small_font: pygame.font.Font) -> None:
@@ -574,16 +571,13 @@ class FoundationScreen(Screen):
         canvas.blit(message, (20, canvas.get_height() - 56))
 
     def _camera_offset(self, runtime: StageRuntime) -> tuple[int, int]:
-        target = runtime.world.resources.get("camera_target", (0.0, 0.0))
-        if (
-            isinstance(target, tuple)
-            and len(target) == 2
-            and isinstance(target[0], (int, float))
-            and isinstance(target[1], (int, float))
-        ):
-            target_x, target_y = float(target[0]), float(target[1])
+        targets = runtime.snapshot().camera_targets
+        total_weight = sum(target.weight for target in targets)
+        if total_weight > 0:
+            target_x = sum(target.x * target.weight for target in targets) / total_weight
+            target_y = sum(target.y * target.weight for target in targets) / total_weight
         else:
-            target_x, target_y = 0.0, 0.0
+            target_x = target_y = 0.0
         view_width, view_height = self.config.resolution
         camera_x = int(max(0, min(target_x - view_width / 2, runtime.stage.pixel_width - view_width)))
         camera_y = int(max(0, min(target_y - view_height / 2, runtime.stage.pixel_height - view_height)))

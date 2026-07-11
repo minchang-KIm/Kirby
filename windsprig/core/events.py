@@ -25,7 +25,16 @@ class EventBus:
     def publish(self, topic: str, payload: dict[str, object] | None = None) -> None:
         event = GameEvent(topic=topic, payload=payload or {})
         self._queue.append(event)
-        for callback in self._subscribers.get(topic, []):
+        self.notify(event)
+
+    def notify(self, event: GameEvent) -> None:
+        """Deliver an event without queueing it when the caller owns consumption.
+
+        Fixed-step systems use :meth:`publish` so ``World.step`` owns the queued
+        event. Boundaries that return an event directly use this method to avoid
+        replaying the same event on the next simulation step.
+        """
+        for callback in self._subscribers.get(event.topic, []):
             callback(event)
         for callback in self._subscribers.get("*", []):
             callback(event)

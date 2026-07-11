@@ -23,19 +23,23 @@ from windsprig.gameplay.components import (
     Transform,
     Velocity,
 )
+from windsprig.input.roster import ActivePlayer
 
 
 class EntityFactory:
+    """Materialize validated stage and roster records as ECS entities."""
+
     def __init__(self, world: World) -> None:
         self.world = world
 
-    def spawn_player(self, slot: int, x: float, y: float) -> int:
+    def spawn_player(self, player: ActivePlayer, x: float, y: float) -> int:
+        """Create the entity owned by one joined roster identity."""
         entity_id = self.world.create_entity()
         self.world.add_component(entity_id, Transform(x, y))
         self.world.add_component(entity_id, Velocity())
         self.world.add_component(entity_id, Collider(width=28, height=28))
         self.world.add_component(entity_id, Team("player"))
-        self.world.add_component(entity_id, PlayerSlot(slot=slot))
+        self.world.add_component(entity_id, PlayerSlot(slot=player.slot))
         self.world.add_component(entity_id, Health(current=10, maximum=10))
         self.world.add_component(entity_id, ActorState())
         self.world.add_component(entity_id, ControlIntent())

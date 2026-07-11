@@ -59,17 +59,20 @@ def test_runtime_spawns_one_player_without_inactive_hud_camera_lives_or_input() 
     registry = create_default_registry(Path("windsprig/content"))
     runtime = StageRuntime(config, stage, registry, active_players=joined_players(1), seed=11)
 
-    runtime.step(InputFrame(commands_by_slot={2: [MoveCommand(player_slot=2, axis=1)]}))
+    frame = runtime.step(InputFrame(commands_by_slot={2: [MoveCommand(player_slot=2, axis=1)]}))
 
     player_rows = list(runtime.world.query(PlayerSlot, Transform, ControlIntent))
-    assert len(runtime.player_entities) == 1
+    assert runtime.player_entities == {1: 1}
     assert [(slot.slot, slot.lives) for _, slot, _, _ in player_rows] == [(1, 3)]
     assert player_rows[0][3].move_axis == 0
-    assert runtime.world.resources["hud"]["players"] == [
-        {"slot": 1, "hp": 10, "max_hp": 10, "lives": 3, "ability": "none"}
+    assert [(player.slot, player.hp, player.maximum_hp) for player in frame.view.players] == [
+        (1, 10, 10)
     ]
+    assert "hud" not in runtime.world.resources
     transform = player_rows[0][2]
-    assert runtime.world.resources["camera_target"] == (transform.x, transform.y)
+    assert [(target.x, target.y) for target in frame.view.camera_targets] == [
+        (transform.x, transform.y)
+    ]
     assert runtime.world.resources["stage_cleared"] is False
 
 
@@ -81,5 +84,5 @@ def test_runtime_spawns_exactly_two_joined_slots() -> None:
 
     runtime = StageRuntime(config, stage, registry, active_players=joined_players(2), seed=12)
 
-    assert len(runtime.player_entities) == 2
+    assert tuple(runtime.player_entities) == (1, 2)
     assert sorted(slot.slot for _, slot in runtime.world.query(PlayerSlot)) == [1, 2]

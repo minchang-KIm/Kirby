@@ -106,7 +106,7 @@ def test_disabled_probe_completion_cannot_position_the_real_player_at_the_goal()
     screen.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
     assert screen._start_selected_stage() is True
     assert screen.runtime is not None
-    player_id = screen.runtime.player_entities[0]
+    player_id = screen.runtime.player_entities[1]
     transform = screen.runtime.world.get_component(player_id, Transform)
     original_position = (transform.x, transform.y)
 

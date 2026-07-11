@@ -429,7 +429,7 @@ def test_staged_non_probe_capability_blocks_query_and_f9_in_active_runtime(
     assert screen._start_selected_stage() is True
     screen.screen_id = "playing"
     assert screen.runtime is not None
-    player_id = screen.runtime.player_entities[0]
+    player_id = screen.runtime.player_entities[1]
     transform = screen.runtime.world.get_component(player_id, Transform)
     original_position = (transform.x, transform.y)
 

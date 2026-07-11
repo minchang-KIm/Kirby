@@ -8,7 +8,6 @@ from .coop_respawn_system import CoopRespawnSystem
 from .damage_system import DamageSystem
 from .draw_system import DrawSystem
 from .enemy_ai_system import EnemyAISystem
-from .hud_system import HudSystem
 from .input_command_system import InputCommandSystem
 from .movement_system import MovementSystem
 from .pickup_system import PickupSystem
@@ -22,7 +21,6 @@ __all__ = [
     "CoopRespawnSystem",
     "DamageSystem",
     "EnemyAISystem",
-    "HudSystem",
     "DrawSystem",
     "InputCommandSystem",
     "MovementSystem",

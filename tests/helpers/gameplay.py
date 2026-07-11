@@ -2,8 +2,24 @@
 
 from __future__ import annotations
 
+from windsprig.config import GameConfig
 from windsprig.content.loader import CheckpointSpec, EnemySpawn, MoteSpec, StageSpec
+from windsprig.core.events import GameEvent
+from windsprig.gameplay.abilities import create_default_registry
+from windsprig.gameplay.runtime import StageRuntime
+from windsprig.input.commands import InputCommand, InputFrame
 from windsprig.input.roster import ActivePlayer, DeviceRef
+
+
+class _RecordingStageRuntime(StageRuntime):
+    """Stage runtime subtype carrying only test-observer state."""
+
+    test_events: list[GameEvent]
+
+
+def frame(slot: int, *commands: InputCommand) -> InputFrame:
+    """Build one deterministic command frame without routing through devices."""
+    return InputFrame(commands_by_slot={slot: list(commands)})
 
 
 def make_active_player(slot: int, leader: bool = False) -> ActivePlayer:
@@ -47,3 +63,23 @@ def make_stage(
         one_way_tiles=(),
         solids=tuple((tile_x, 8) for tile_x in range(20)),
     )
+
+
+def make_runtime(
+    players: tuple[ActivePlayer, ...] | None = None,
+    stage: StageSpec | None = None,
+) -> _RecordingStageRuntime:
+    """Build a fresh seeded runtime and attach a test-only event recorder."""
+    active_players = players if players is not None else (make_active_player(1, leader=True),)
+    config = GameConfig()
+    runtime = _RecordingStageRuntime(
+        config,
+        stage or make_stage(),
+        create_default_registry(config.content_dir),
+        active_players,
+        seed=77,
+    )
+    recorded_events: list[GameEvent] = []
+    runtime.world.events.subscribe("*", recorded_events.append)
+    runtime.test_events = recorded_events
+    return runtime
