@@ -428,7 +428,7 @@ def test_render_neutralizes_markdown_images_in_every_dynamic_measurement() -> No
     )
 
     assert "![forged pass]" not in evidence
-    assert r"\u0021\u005bforged pass\u005d\u0028https://example.invalid/pass.svg\u0029" in evidence
+    assert r"\u0021[forged pass]\u0028https://example.invalid/pass.svg\u0029" in evidence
 
 
 def test_render_marks_child_requirements_failed_when_a_parent_report_is_malformed() -> None:

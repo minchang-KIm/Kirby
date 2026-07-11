@@ -327,8 +327,6 @@ def _escape_markdown(value: str) -> str:
         "*": r"\u002a",
         "<": r"\u003c",
         ">": r"\u003e",
-        "[": r"\u005b",
-        "]": r"\u005d",
         "_": r"\u005f",
         "`": r"\u0060",
         "|": r"\u007c",
