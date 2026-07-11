@@ -19,6 +19,7 @@ from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.abilities import AbilityRegistry, create_default_registry
 from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
+from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.input.commands import (
     CancelCommand,
     ConfirmCommand,
@@ -341,7 +342,7 @@ class FoundationScreen(Screen):
 
     def _on_stage_progress(self) -> bool:
         runtime = self.runtime
-        if runtime is None or not runtime.world.resources.get("stage_cleared", False):
+        if runtime is None or runtime.snapshot().outcome is not StageOutcome.COMPLETED:
             return False
         stage = runtime.stage
         self.probe.mark("stage_id", stage.stage_id)

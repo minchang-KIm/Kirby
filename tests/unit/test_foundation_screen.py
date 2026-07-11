@@ -10,6 +10,7 @@ from windsprig.content import load_campaign_catalog
 from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.abilities import create_default_registry
 from windsprig.gameplay.components import Transform
+from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.input.commands import (
     AbilityUseCommand,
     CancelCommand,
@@ -90,6 +91,11 @@ class RecordingFont:
         _ = antialias, color
         self.texts.append(text)
         return pygame.Surface((1, 1), pygame.SRCALPHA)
+
+
+def stage_view(outcome: StageOutcome) -> SimpleNamespace:
+    """Return the narrow typed outcome view consumed by FoundationScreen."""
+    return SimpleNamespace(outcome=outcome)
 
 
 def make_foundation_screen(
@@ -251,9 +257,10 @@ def test_stage_completion_never_auto_flushes_while_reset_is_unresolved() -> None
     screen.runtime = SimpleNamespace(
         stage=stage,
         world=SimpleNamespace(
-            resources={"stage_cleared": True, "run_energy_spheres": 1},
+            resources={"run_energy_spheres": 1},
             frame_index=10,
         ),
+        snapshot=lambda: stage_view(StageOutcome.COMPLETED),
     )
 
     screen._on_stage_progress()
@@ -304,8 +311,9 @@ def test_gamepad_ability_cancel_pair_reaches_playing_runtime_once_without_transi
     )
     stepped_frames: list[InputFrame] = []
     runtime = SimpleNamespace(
-        world=SimpleNamespace(resources={"stage_cleared": False}),
+        world=SimpleNamespace(resources={}),
         step=stepped_frames.append,
+        snapshot=lambda: stage_view(StageOutcome.RUNNING),
     )
     screen.runtime = runtime
     screen.screen_id = "playing"
@@ -321,8 +329,9 @@ def test_buffered_keyboard_ability_then_genuine_cancel_still_pauses() -> None:
     screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
     stepped_frames: list[InputFrame] = []
     runtime = SimpleNamespace(
-        world=SimpleNamespace(resources={"stage_cleared": False}),
+        world=SimpleNamespace(resources={}),
         step=stepped_frames.append,
+        snapshot=lambda: stage_view(StageOutcome.RUNNING),
     )
     screen.runtime = runtime
     screen.screen_id = "playing"
@@ -357,8 +366,9 @@ def test_gamepad_b_remains_a_menu_cancel_on_world_map() -> None:
 def test_standalone_playing_cancel_pauses_without_discarding_runtime() -> None:
     screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
     runtime = SimpleNamespace(
-        world=SimpleNamespace(resources={"stage_cleared": False}),
+        world=SimpleNamespace(resources={}),
         step=lambda _frame: None,
+        snapshot=lambda: stage_view(StageOutcome.RUNNING),
     )
     screen.runtime = runtime
     screen.screen_id = "playing"
@@ -382,10 +392,11 @@ def test_stage_completion_transitions_to_recovery_when_save_requires_reload() ->
     screen.runtime = SimpleNamespace(
         stage=stage,
         world=SimpleNamespace(
-            resources={"stage_cleared": True, "run_energy_spheres": 1},
+            resources={"run_energy_spheres": 1},
             frame_index=10,
         ),
         step=lambda _frame: None,
+        snapshot=lambda: stage_view(StageOutcome.COMPLETED),
     )
     screen.screen_id = "playing"
 

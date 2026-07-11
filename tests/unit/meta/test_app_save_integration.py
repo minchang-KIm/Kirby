@@ -8,6 +8,7 @@ import pytest
 
 from windsprig.app import GameApp
 from windsprig.config import GameConfig
+from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.meta.save_models import save_data_from_json
 from windsprig.platform.native import create_native_services
 from windsprig.platform.services import PlatformServices, StorageCapabilities
@@ -55,18 +56,20 @@ def test_runtime_progress_is_saved_as_immutable_v2_data(
     app.runtime = SimpleNamespace(
         stage=stage,
         world=SimpleNamespace(
-            resources={"stage_cleared": True, "run_energy_spheres": 99},
+            resources={"run_energy_spheres": 99},
             frame_index=10,
         ),
+        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
     )
 
     app._on_stage_progress()
     app.runtime = SimpleNamespace(
         stage=stage,
         world=SimpleNamespace(
-            resources={"stage_cleared": True, "run_energy_spheres": 99},
+            resources={"run_energy_spheres": 99},
             frame_index=12,
         ),
+        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
     )
     app._on_stage_progress()
 
@@ -117,10 +120,14 @@ def test_completed_runtime_is_recorded_once_but_new_run_increments_replay_count(
     app = GameApp(services=_services(tmp_path, monkeypatch, storage))
     stage = app.catalog.stages["world_1_stage_1"]
     completed_world = SimpleNamespace(
-        resources={"stage_cleared": True, "run_energy_spheres": 1},
+        resources={"run_energy_spheres": 1},
         frame_index=10,
     )
-    completed_runtime = SimpleNamespace(stage=stage, world=completed_world)
+    completed_runtime = SimpleNamespace(
+        stage=stage,
+        world=completed_world,
+        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
+    )
     app.runtime = completed_runtime
 
     app._on_stage_progress()
@@ -128,7 +135,11 @@ def test_completed_runtime_is_recorded_once_but_new_run_increments_replay_count(
 
     assert app.tracker.clear_counts == {"world_1_stage_1": 1}
 
-    app.runtime = SimpleNamespace(stage=stage, world=completed_world)
+    app.runtime = SimpleNamespace(
+        stage=stage,
+        world=completed_world,
+        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
+    )
     app._on_stage_progress()
 
     assert app.tracker.clear_counts == {"world_1_stage_1": 2}

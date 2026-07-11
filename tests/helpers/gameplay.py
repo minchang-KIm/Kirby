@@ -7,6 +7,8 @@ from windsprig.content.loader import CheckpointSpec, EnemySpawn, MoteSpec, Stage
 from windsprig.core.events import GameEvent
 from windsprig.gameplay.abilities import create_default_registry
 from windsprig.gameplay.runtime import StageRuntime
+from windsprig.gameplay.session import GameSession
+from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.input.commands import InputCommand, InputFrame
 from windsprig.input.roster import ActivePlayer, DeviceRef
 
@@ -83,3 +85,27 @@ def make_runtime(
     runtime.world.events.subscribe("*", recorded_events.append)
     runtime.test_events = recorded_events
     return runtime
+
+
+def make_session() -> GameSession:
+    """Build a fresh solo session in its explicit introduction phase."""
+    config = GameConfig()
+    return GameSession.create(
+        config,
+        make_stage(),
+        create_default_registry(config.content_dir),
+        (make_active_player(1, leader=True),),
+        seed=77,
+    )
+
+
+def enter_victory(session: GameSession) -> None:
+    """Drive the session through the same typed outcome seam as a normal step."""
+    session.runtime.world.resources["stage_outcome"] = StageOutcome.COMPLETED
+    session._synchronize_outcome()
+
+
+def enter_defeat(session: GameSession) -> None:
+    """Drive the session into defeat through its typed outcome seam."""
+    session.runtime.world.resources["stage_outcome"] = StageOutcome.FAILED
+    session._synchronize_outcome()

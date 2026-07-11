@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from windsprig.config import GameConfig
 from windsprig.content.loader import StageSpec
@@ -87,6 +88,10 @@ class StageRuntime:
         # Stable player IDs keep slot-to-entity traces reproducible across roster orderings.
         self.sync_active_players(active_players)
         self._spawn_stage_entities()
+        self._install_scheduler()
+        self._last_simulation = self.world.snapshot()
+
+    def _install_scheduler(self) -> None:
         self.world.scheduler.systems = [
             InputCommandSystem(),
             EnemyAISystem(),
@@ -100,7 +105,6 @@ class StageRuntime:
             StageGoalSystem(),
             CameraSystem(),
         ]
-        self._last_simulation = self.world.snapshot()
 
     def step(self, input_frame: InputFrame) -> StageFrame:
         """Advance one fixed step and return its immutable state and events."""
@@ -167,6 +171,41 @@ class StageRuntime:
         """Build a deterministic immutable view from the current ECS state."""
         return self._build_snapshot()
 
+    def reset_stage(self) -> StageSnapshot:
+        """Rebuild this stage from its original seed and current sorted roster."""
+        active_players = self._current_players_for_reset()
+        replacement = StageRuntime(
+            self.config,
+            self.stage,
+            self.ability_registry,
+            active_players,
+            self.seed,
+        )
+        reset_snapshot = replacement.snapshot()
+        event_bus = self.world.events
+        event_bus.drain()
+        replacement.world.events = event_bus
+        replacement.world.set_resource_hash_projection(self._gameplay_resource_hash)
+        self.world = replacement.world
+        self.factory = replacement.factory
+        self.player_entities = replacement.player_entities
+        self._step_events.clear()
+        self._capturing_step_events = False
+        self._result = replacement._result
+        self._elapsed_ms = replacement._elapsed_ms
+        self._snapshot_frame_index = replacement._snapshot_frame_index
+        self._last_simulation = replacement._last_simulation
+        return reset_snapshot
+
+    @property
+    def can_retry_checkpoint(self) -> bool:
+        """Return false until Task 9 introduces production checkpoints."""
+        return False
+
+    def retry_from_checkpoint(self) -> StageSnapshot:
+        """Reject checkpoint retries until the production checkpoint task."""
+        raise ValueError("checkpoint retry is unavailable")
+
     @property
     def result(self) -> StageResult | None:
         """Return the frozen stage result once a later outcome system creates it."""
@@ -180,8 +219,9 @@ class StageRuntime:
         world.resources["ability_registry"] = self.ability_registry
         world.resources["run_energy_spheres"] = 0
         world.resources["collected_mote_ids"] = set()
-        world.resources["stage_cleared"] = False
+        world.resources["stage_outcome"] = StageOutcome.RUNNING
         world.resources["camera_target"] = None
+        world.set_resource_hash_projection(self._gameplay_resource_hash)
         return world
 
     def _spawn_stage_entities(self) -> None:
@@ -197,6 +237,38 @@ class StageRuntime:
         for mote in self.stage.motes:
             self.factory.spawn_energy_sphere(mote.tile_x, mote.tile_y, self.stage.tile_size)
         self.factory.spawn_stage_goal(self.stage)
+
+    def _current_players_for_reset(self) -> tuple[ActivePlayer, ...]:
+        metadata = {
+            player.slot: player
+            for player in self._validate_active_players(self._active_players())
+        }
+        if set(metadata) != set(self.player_entities):
+            raise ValueError("active player metadata does not match runtime entities")
+        players: list[ActivePlayer] = []
+        for slot in sorted(self.player_entities):
+            entity_id = self.player_entities[slot]
+            player_slot = self.world.get_component(entity_id, PlayerSlot)
+            players.append(replace(metadata[slot], is_leader=player_slot.is_leader))
+        return tuple(players)
+
+    def _gameplay_resource_hash(self, world: World) -> dict[str, object]:
+        outcome = world.resources.get("stage_outcome")
+        if not isinstance(outcome, StageOutcome):
+            raise TypeError("stage_outcome must be a StageOutcome")
+        run_motes = world.resources.get("run_energy_spheres")
+        if type(run_motes) is not int:
+            raise TypeError("run_energy_spheres must be an integer")
+        collected = world.resources.get("collected_mote_ids")
+        if not isinstance(collected, (tuple, list, set, frozenset)) or any(
+            not isinstance(mote_id, str) for mote_id in collected
+        ):
+            raise TypeError("collected_mote_ids must be a string collection")
+        return {
+            "stage_outcome": outcome.value,
+            "run_energy_spheres": run_motes,
+            "collected_mote_ids": tuple(sorted(collected)),
+        }
 
     def _capture_step_event(self, event: GameEvent) -> None:
         if self._capturing_step_events:
@@ -252,11 +324,7 @@ class StageRuntime:
             )
         )
         leader_slot = leader_slots[0] if leader_slots else None
-        outcome = (
-            StageOutcome.COMPLETED
-            if self.world.resources.get("stage_cleared", False)
-            else StageOutcome.RUNNING
-        )
+        outcome = self._stage_outcome()
         return StageSnapshot(
             frame_index=self._snapshot_frame_index,
             elapsed_ms=self._elapsed_ms,
@@ -423,3 +491,9 @@ class StageRuntime:
         if type(run_count) is int and run_count > 0:
             ids.update(mote.mote_id for mote in self.stage.motes[:run_count])
         return tuple(sorted(ids))
+
+    def _stage_outcome(self) -> StageOutcome:
+        outcome = self.world.resources.get("stage_outcome")
+        if not isinstance(outcome, StageOutcome):
+            raise TypeError("stage_outcome must be a StageOutcome")
+        return outcome

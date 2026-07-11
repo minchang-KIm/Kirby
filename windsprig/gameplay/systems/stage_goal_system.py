@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import Collider, Health, StageGoal, Team, Transform
+from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.math2d import Rect
 
 
 class StageGoalSystem:
     def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
-        if world.resources.get("stage_cleared", False):
+        outcome = world.resources.get("stage_outcome")
+        if not isinstance(outcome, StageOutcome):
+            raise TypeError("stage_outcome must be a StageOutcome")
+        if outcome is not StageOutcome.RUNNING:
             return
         players = [
             row
@@ -20,7 +24,7 @@ class StageGoalSystem:
             for _, _, ptf, pcol, _ in players:
                 player_rect = Rect(ptf.x, ptf.y, pcol.width, pcol.height)
                 if goal_rect.intersects(player_rect):
-                    world.resources["stage_cleared"] = True
+                    world.resources["stage_outcome"] = StageOutcome.COMPLETED
                     world.events.publish(
                         "stage_cleared",
                         {"node_id": goal.node_id, "world_id": goal.world_id, "stage_id": goal.stage_id},

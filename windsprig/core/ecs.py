@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any, Protocol, TypeVar, cast
 
@@ -10,6 +11,7 @@ from .rng import DeterministicRng
 
 EntityId = int
 ComponentT = TypeVar("ComponentT")
+type ResourceHashProjection = Callable[["World"], object]
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,7 @@ class World:
         self.frame_index = 0
         self.frame_input: object | None = None
         self.resources: dict[str, object] = {}
+        self._resource_hash_projection: ResourceHashProjection | None = None
 
     def create_entity(self) -> EntityId:
         entity_id = self._next_entity_id
@@ -145,12 +148,18 @@ class World:
             event_count=len(events),
         )
 
+    def set_resource_hash_projection(self, projection: ResourceHashProjection) -> None:
+        """Include one JSON-safe gameplay-resource view in deterministic hashes."""
+        self._resource_hash_projection = projection
+
     def world_hash(self) -> str:
         payload = {
             "frame": self.frame_index,
             "entities": sorted(self.alive_entities),
             "components": self._serialized_components(),
         }
+        if self._resource_hash_projection is not None:
+            payload["resources"] = self._resource_hash_projection(self)
         raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
