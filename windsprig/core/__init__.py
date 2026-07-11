@@ -1,7 +1,7 @@
 from .ecs import ComponentStore, FrameSnapshot, System, SystemScheduler, World
 from .events import EventBus, GameEvent
 from .rng import DeterministicRng
-from .time import FixedStepClock
+from .time import FixedStepClock, StepBatch
 
 __all__ = [
     "ComponentStore",
@@ -13,4 +13,5 @@ __all__ = [
     "GameEvent",
     "DeterministicRng",
     "FixedStepClock",
+    "StepBatch",
 ]

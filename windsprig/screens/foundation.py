@@ -1,0 +1,587 @@
+"""Foundation map, stage, and recovery screen backed by shared session state."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import replace
+from datetime import datetime
+from types import MappingProxyType
+from typing import cast
+
+import pygame
+
+from windsprig.config import GameConfig
+from windsprig.content import CampaignCatalog, load_campaign_catalog
+from windsprig.content.loader import WorldNode
+from windsprig.core.rng import derive_stage_seed
+from windsprig.gameplay.abilities import AbilityRegistry, create_default_registry
+from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
+from windsprig.gameplay.runtime import StageRuntime
+from windsprig.input.commands import (
+    CancelCommand,
+    ConfirmCommand,
+    InputCommand,
+    InputFrame,
+    NavigateCommand,
+    PauseCommand,
+)
+from windsprig.input.roster import ActiveRoster
+from windsprig.meta import (
+    CompletionTracker,
+    SaveLoadResult,
+    SaveManager,
+    SaveMigrationCatalog,
+    SaveNotice,
+    SaveService,
+    SaveWriteResult,
+    UnlockRules,
+    WorldMapService,
+    migration_catalog,
+)
+from windsprig.meta.save_models import SaveData
+from windsprig.platform.services import PlatformServices
+from windsprig.screens.base import Screen, ScreenFactory, ScreenId, ScreenTransition
+
+_RELOAD_NOTICE_CODES = {
+    "backup_restore_failed",
+    "quarantine_failed",
+    "read_failed",
+    "unsupported_version",
+}
+
+
+class FoundationScreen(Screen):
+    """Own the foundation session's campaign, runtime, and save-recovery state."""
+
+    def __init__(
+        self,
+        *,
+        config: GameConfig,
+        roster: ActiveRoster,
+        save_service: SaveService,
+        catalog: CampaignCatalog,
+        ability_registry: AbilityRegistry,
+        migration_catalog: SaveMigrationCatalog,
+    ) -> None:
+        self.config = config
+        self.roster = roster
+        self.save_service = save_service
+        self.catalog = catalog
+        self.ability_registry = ability_registry
+        self.migration_catalog = migration_catalog
+        self.unlock_rules = UnlockRules(catalog)
+        self.world_map_service = WorldMapService(catalog, self.unlock_rules)
+        self.screen_id: ScreenId = "world_map"
+        self.enter_payload: Mapping[str, object] = MappingProxyType({})
+        self.runtime: StageRuntime | None = None
+        self.selected_node_index = 0
+        self.save_data = SaveData()
+        self.save_notice: SaveNotice | None = None
+        self.save_write_result: SaveWriteResult | None = None
+        self.save_status = "ready"
+        self._save_resolution_pending = False
+        self.tracker = CompletionTracker()
+        self.unlocked_nodes: set[str] = set()
+        self.unlocked_worlds: set[str] = set()
+        self._font: pygame.font.Font | None = None
+        self._small_font: pygame.font.Font | None = None
+        self._adopt_load_result(self.save_service.load())
+
+    def on_enter(self, payload: Mapping[str, object]) -> None:
+        """Activate the selected screen with an immutable payload snapshot."""
+        self.enter_payload = MappingProxyType(dict(payload))
+
+    def on_exit(self) -> None:
+        """End one activation without discarding shared campaign state."""
+
+    def fixed_update(self, dt_ms: int, input_frame: InputFrame) -> ScreenTransition | None:
+        """Advance map, pause, recovery, or gameplay state by one deterministic step."""
+        if dt_ms != self.config.fixed_dt_ms:
+            raise ValueError("foundation screen requires the configured fixed step")
+        commands = tuple(self._commands(input_frame))
+        if self.screen_id == "world_map":
+            return self._update_world_map(commands)
+        if self.screen_id == "playing":
+            return self._update_playing(input_frame, commands)
+        if self.screen_id == "paused":
+            return self._update_paused(commands)
+        if self.screen_id == "recovery":
+            return self._update_recovery(commands)
+        if any(isinstance(command, ConfirmCommand) for command in commands):
+            return ScreenTransition("world_map")
+        return None
+
+    def render(self, canvas: pygame.Surface, alpha: float) -> None:
+        """Render current foundation state on the shared 1280x720 canvas."""
+        _ = alpha
+        font, small_font = self._fonts()
+        if self.screen_id in {"playing", "paused"} and self.runtime is not None:
+            self._render_stage(canvas, font, small_font)
+            if self.screen_id == "paused":
+                overlay = font.render(
+                    "Paused - Pause: resume / Confirm: restart / Cancel: world map",
+                    True,
+                    (255, 255, 255),
+                )
+                canvas.blit(overlay, (20, 94))
+        else:
+            self._render_world_map(canvas, font, small_font)
+        self._render_save_state(canvas, small_font)
+
+    def confirm_save_reset(self) -> SaveWriteResult:
+        """Run the save service's explicit, fingerprint-verified reset action."""
+        result = self.save_service.confirm_reset(self.save_data)
+        self.save_write_result = result
+        if result.ok:
+            self.save_status = "saved"
+            self._save_resolution_pending = False
+        else:
+            self.save_status = "reset_required"
+            self._save_resolution_pending = True
+        return result
+
+    def reload_save(self) -> SaveLoadResult:
+        """Reload authoritative storage before retrying a recovery-blocked write."""
+        result = self.save_service.load()
+        self._adopt_load_result(result)
+        return result
+
+    @property
+    def requires_save_resolution(self) -> bool:
+        """Return whether reset or authoritative reload must precede automatic saves."""
+        return self._save_resolution_pending
+
+    def _select_screen(self, screen_id: ScreenId) -> None:
+        self.screen_id = screen_id
+
+    @staticmethod
+    def _commands(input_frame: InputFrame) -> Iterator[InputCommand]:
+        for slot in sorted(input_frame.commands_by_slot):
+            yield from input_frame.commands_for(slot)
+
+    def _update_world_map(self, commands: tuple[InputCommand, ...]) -> ScreenTransition | None:
+        nodes = self._visible_nodes()
+        for command in commands:
+            if isinstance(command, NavigateCommand) and nodes:
+                direction = command.x if command.x else command.y
+                if direction:
+                    self.selected_node_index = (self.selected_node_index + direction) % len(nodes)
+            elif isinstance(command, ConfirmCommand) and self._start_selected_stage():
+                return ScreenTransition("playing")
+            elif isinstance(command, CancelCommand):
+                return ScreenTransition("title")
+        return None
+
+    def _update_playing(
+        self,
+        input_frame: InputFrame,
+        commands: tuple[InputCommand, ...],
+    ) -> ScreenTransition | None:
+        if any(isinstance(command, CancelCommand) for command in commands):
+            self.runtime = None
+            return ScreenTransition("world_map")
+        if any(isinstance(command, PauseCommand) for command in commands):
+            return ScreenTransition("paused")
+        runtime = self.runtime
+        if runtime is None:
+            return ScreenTransition("world_map")
+        runtime.step(input_frame)
+        if self._on_stage_progress():
+            return ScreenTransition("world_map")
+        return None
+
+    def _update_paused(self, commands: tuple[InputCommand, ...]) -> ScreenTransition | None:
+        if any(isinstance(command, CancelCommand) for command in commands):
+            self.runtime = None
+            return ScreenTransition("world_map")
+        if any(isinstance(command, ConfirmCommand) for command in commands) and self._restart_stage():
+            return ScreenTransition("playing")
+        if any(isinstance(command, PauseCommand) for command in commands):
+            return ScreenTransition("playing")
+        return None
+
+    def _update_recovery(self, commands: tuple[InputCommand, ...]) -> ScreenTransition | None:
+        if any(isinstance(command, ConfirmCommand) for command in commands):
+            if self.save_status == "reset_required" and self.confirm_save_reset().ok:
+                return ScreenTransition("world_map")
+        if any(isinstance(command, CancelCommand) for command in commands):
+            self.reload_save()
+            if not self._save_resolution_pending:
+                return ScreenTransition("world_map")
+        return None
+
+    def _adopt_load_result(self, result: SaveLoadResult) -> None:
+        self.save_data = result.data
+        self.save_notice = result.notice
+        self.save_write_result = None
+        notice_code = result.notice.code if result.notice is not None else None
+        self._save_resolution_pending = notice_code == "reset_required" or notice_code in _RELOAD_NOTICE_CODES
+        if notice_code == "reset_required":
+            self.save_status = "reset_required"
+        elif notice_code in _RELOAD_NOTICE_CODES:
+            self.save_status = "retry_required"
+        else:
+            self.save_status = "ready"
+        self._rebuild_progress()
+        if notice_code == "migrated_v1":
+            self._apply_save_result(self.save_service.save(self.save_data))
+
+    def _rebuild_progress(self) -> None:
+        profile = self.save_data.profiles[0]
+        cleared_nodes = {
+            node_id
+            for node_id, stage_id in self.migration_catalog.stage_id_by_node.items()
+            if profile.clear_counts.get(stage_id, 0) > 0
+        }
+        self.tracker = CompletionTracker(
+            cleared_nodes=cleared_nodes,
+            collected_mote_ids=set(profile.collected_mote_ids),
+            challenge_rewards=set(profile.challenge_rewards),
+            best_times_ms=dict(profile.best_times_ms),
+            clear_counts=dict(profile.clear_counts),
+        )
+        self.unlocked_nodes = set(profile.unlocked_nodes)
+        self.unlocked_worlds = set(profile.unlocked_worlds)
+
+    def _apply_save_result(self, result: SaveWriteResult) -> None:
+        self.save_write_result = result
+        if result.ok:
+            self.save_status = "saved"
+            self._save_resolution_pending = False
+        elif result.error_code == "reset_confirmation_required":
+            self.save_status = "reset_required"
+            self._save_resolution_pending = True
+        else:
+            self.save_status = "retry_required"
+            if result.error_code in {"recovery_required", "unsupported_version"}:
+                self._save_resolution_pending = True
+
+    def _visible_nodes(self) -> list[WorldNode]:
+        visible = self.world_map_service.unlocked_nodes(self.tracker, self.unlocked_worlds)
+        return [node for world_id in sorted(visible) for node in visible[world_id]]
+
+    def _start_selected_stage(self) -> bool:
+        nodes = self._visible_nodes()
+        if not nodes or not self.roster.players:
+            return False
+        node = nodes[self.selected_node_index % len(nodes)]
+        self.runtime = StageRuntime(
+            config=self.config,
+            stage=self.catalog.stages[node.stage_id],
+            ability_registry=self.ability_registry,
+            active_players=self.roster.players,
+            seed=derive_stage_seed(self.config.replay_seed, node.stage_id),
+        )
+        return True
+
+    def _restart_stage(self) -> bool:
+        runtime = self.runtime
+        if runtime is None or not self.roster.players:
+            return False
+        stage = runtime.stage
+        self.runtime = StageRuntime(
+            config=self.config,
+            stage=stage,
+            ability_registry=self.ability_registry,
+            active_players=self.roster.players,
+            seed=derive_stage_seed(self.config.replay_seed, stage.stage_id),
+        )
+        return True
+
+    def _on_stage_progress(self) -> bool:
+        runtime = self.runtime
+        if runtime is None or not runtime.world.resources.get("stage_cleared", False):
+            return False
+        stage = runtime.stage
+        elapsed_ms = runtime.world.frame_index * self.config.fixed_dt_ms
+        self.tracker.mark_stage_clear(stage.node_id, stage.stage_id, elapsed_ms)
+        run_mote_count = runtime.world.resources.get("run_energy_spheres", 0)
+        if type(run_mote_count) is not int:
+            raise ValueError("run_energy_spheres must be an integer")
+        available_mote_ids = self.migration_catalog.mote_ids_by_stage.get(stage.stage_id, ())
+        clamped_mote_count = max(0, min(run_mote_count, len(available_mote_ids)))
+        # Catalog order converts the prototype count into stable IDs deterministically.
+        for mote_id in available_mote_ids[:clamped_mote_count]:
+            self.tracker.collect_mote(mote_id)
+        self.unlocked_nodes.add(stage.node_id)
+        next_node = self.migration_catalog.next_node_by_node.get(stage.node_id)
+        if next_node is not None:
+            self.unlocked_nodes.add(next_node)
+        self.unlocked_worlds = self.unlock_rules.apply_stage_rewards(stage.node_id, self.unlocked_worlds)
+        self.runtime = None
+        self._flush_save(automatic=True)
+        return True
+
+    def _flush_save(self, *, automatic: bool = False) -> None:
+        profile = replace(
+            self.save_data.profiles[0],
+            unlocked_nodes=frozenset(self.unlocked_nodes),
+            unlocked_worlds=frozenset(self.unlocked_worlds),
+            collected_mote_ids=frozenset(self.tracker.collected_mote_ids),
+            best_times_ms=dict(self.tracker.best_times_ms),
+            clear_counts=dict(self.tracker.clear_counts),
+            challenge_rewards=frozenset(self.tracker.challenge_rewards),
+        )
+        updated = replace(
+            self.save_data,
+            profiles=(profile, self.save_data.profiles[1], self.save_data.profiles[2]),
+        )
+        self.save_data = updated
+        # Automatic progression writes must not probe or replace unresolved recovery sources.
+        if automatic and self._save_resolution_pending:
+            return
+        self._apply_save_result(self.save_service.save(updated))
+
+    def _fonts(self) -> tuple[pygame.font.Font, pygame.font.Font]:
+        if self._font is None or self._small_font is None:
+            if not pygame.font.get_init():
+                pygame.font.init()
+            self._font = pygame.font.SysFont("malgungothic", 20)
+            self._small_font = pygame.font.SysFont("consolas", 16)
+        return self._font, self._small_font
+
+    def _render_world_map(
+        self,
+        canvas: pygame.Surface,
+        font: pygame.font.Font,
+        small_font: pygame.font.Font,
+    ) -> None:
+        canvas.fill((25, 33, 64))
+        heading = "World Map - Confirm: start / Cancel: title"
+        if self.screen_id != "world_map":
+            heading = f"Windsprig - {self.screen_id}"
+        canvas.blit(font.render(heading, True, (240, 242, 255)), (20, 18))
+        nodes = self._visible_nodes()
+        if not nodes:
+            canvas.blit(font.render("No unlocked nodes.", True, (255, 220, 220)), (20, 70))
+            return
+        for index, node in enumerate(nodes):
+            selected = index == self.selected_node_index % len(nodes)
+            cleared = node.node_id in self.tracker.cleared_nodes
+            color = (95, 225, 150) if cleared else (255, 210, 94)
+            if selected:
+                color = (255, 255, 255)
+            x, y = node.position
+            pygame.draw.circle(canvas, color, (x, y), 18 if selected else 14)
+            label = small_font.render(node.stage_id, True, (10, 10, 10))
+            canvas.blit(label, (x - label.get_width() // 2, y - 34))
+        info = small_font.render(
+            f"Worlds: {', '.join(sorted(self.unlocked_worlds))} | Cleared: {len(self.tracker.cleared_nodes)}",
+            True,
+            (230, 230, 245),
+        )
+        canvas.blit(info, (20, canvas.get_height() - 30))
+
+    def _render_stage(
+        self,
+        canvas: pygame.Surface,
+        font: pygame.font.Font,
+        small_font: pygame.font.Font,
+    ) -> None:
+        runtime = self.runtime
+        if runtime is None:
+            return
+        stage = runtime.stage
+        world = runtime.world
+        canvas.fill((92, 160, 244))
+        camera_x, camera_y = self._camera_offset(runtime)
+        for tile_x, tile_y in stage.solids:
+            pygame.draw.rect(
+                canvas,
+                (76, 98, 128),
+                pygame.Rect(
+                    tile_x * stage.tile_size - camera_x,
+                    tile_y * stage.tile_size - camera_y,
+                    stage.tile_size,
+                    stage.tile_size,
+                ),
+            )
+        for tile_x, tile_y in stage.one_way_tiles:
+            pygame.draw.rect(
+                canvas,
+                (116, 140, 171),
+                pygame.Rect(
+                    tile_x * stage.tile_size - camera_x,
+                    tile_y * stage.tile_size - camera_y,
+                    stage.tile_size,
+                    8,
+                ),
+            )
+        for tile_x, tile_y in stage.hazards:
+            pygame.draw.rect(
+                canvas,
+                (230, 85, 85),
+                pygame.Rect(
+                    tile_x * stage.tile_size - camera_x,
+                    tile_y * stage.tile_size - camera_y,
+                    stage.tile_size,
+                    stage.tile_size,
+                ),
+            )
+        for _, collectible, transform, collider in world.query(Collectible, Transform, Collider):
+            if not collectible.collected:
+                pygame.draw.ellipse(
+                    canvas,
+                    (255, 239, 120),
+                    pygame.Rect(
+                        transform.x - camera_x,
+                        transform.y - camera_y,
+                        collider.width,
+                        collider.height,
+                    ),
+                )
+        for _, _, transform, collider in world.query(StageGoal, Transform, Collider):
+            pygame.draw.rect(
+                canvas,
+                (116, 230, 162),
+                pygame.Rect(
+                    transform.x - camera_x,
+                    transform.y - camera_y,
+                    collider.width,
+                    collider.height,
+                ),
+            )
+        for entity_id, team, transform, collider, health in world.query(
+            Team,
+            Transform,
+            Collider,
+            Health,
+        ):
+            color = (255, 167, 191) if team.name == "player" else (118, 192, 255)
+            if health.dead:
+                color = (100, 100, 100)
+            pygame.draw.rect(
+                canvas,
+                color,
+                pygame.Rect(
+                    transform.x - camera_x,
+                    transform.y - camera_y,
+                    collider.width,
+                    collider.height,
+                ),
+            )
+            if world.has_component(entity_id, EnemyAI):
+                pygame.draw.rect(
+                    canvas,
+                    (20, 20, 40),
+                    pygame.Rect(
+                        transform.x - camera_x,
+                        transform.y - 8 - camera_y,
+                        collider.width,
+                        5,
+                    ),
+                )
+                hp_ratio = health.current / max(1, health.maximum)
+                pygame.draw.rect(
+                    canvas,
+                    (220, 84, 84),
+                    pygame.Rect(
+                        transform.x - camera_x,
+                        transform.y - 8 - camera_y,
+                        int(collider.width * hp_ratio),
+                        5,
+                    ),
+                )
+        canvas.blit(font.render(f"{stage.stage_id} | Cancel: map / Pause: pause", True, (250, 250, 255)), (16, 12))
+        hud_object = world.resources.get("hud", {})
+        hud = cast(dict[str, object], hud_object) if isinstance(hud_object, dict) else {}
+        players_object = hud.get("players", [])
+        player_rows = cast(list[object], players_object) if isinstance(players_object, list) else []
+        for index, player_object in enumerate(player_rows):
+            if not isinstance(player_object, dict):
+                continue
+            player = cast(dict[str, object], player_object)
+            label = small_font.render(
+                f"P{player.get('slot')} HP {player.get('hp')}/{player.get('max_hp')} "
+                f"LIFE {player.get('lives')} ABIL {player.get('ability')}",
+                True,
+                (245, 245, 255),
+            )
+            canvas.blit(label, (16, 44 + index * 22))
+        energy = hud.get("energy_spheres", 0)
+        canvas.blit(
+            small_font.render(f"Wind Motes (Run): {energy}", True, (255, 245, 170)),
+            (16, 50 + len(player_rows) * 22),
+        )
+
+    def _render_save_state(self, canvas: pygame.Surface, small_font: pygame.font.Font) -> None:
+        if self.save_notice is None and self.save_status in {"ready", "saved"}:
+            return
+        notice_code = self.save_notice.code if self.save_notice is not None else "none"
+        action = "Confirm reset or reload" if self._save_resolution_pending else "Retry save"
+        message = small_font.render(
+            f"Save: {self.save_status} ({notice_code}) - {action}",
+            True,
+            (255, 230, 155),
+        )
+        canvas.blit(message, (20, canvas.get_height() - 56))
+
+    def _camera_offset(self, runtime: StageRuntime) -> tuple[int, int]:
+        target = runtime.world.resources.get("camera_target", (0.0, 0.0))
+        if (
+            isinstance(target, tuple)
+            and len(target) == 2
+            and isinstance(target[0], (int, float))
+            and isinstance(target[1], (int, float))
+        ):
+            target_x, target_y = float(target[0]), float(target[1])
+        else:
+            target_x, target_y = 0.0, 0.0
+        view_width, view_height = self.config.resolution
+        camera_x = int(max(0, min(target_x - view_width / 2, runtime.stage.pixel_width - view_width)))
+        camera_y = int(max(0, min(target_y - view_height / 2, runtime.stage.pixel_height - view_height)))
+        return camera_x, camera_y
+
+
+class FoundationScreenFactory(ScreenFactory):
+    """Return one shared foundation screen so campaign and recovery state cannot fork."""
+
+    def __init__(
+        self,
+        config: GameConfig,
+        services: PlatformServices,
+        now_utc: Callable[[], datetime],
+        *,
+        roster: ActiveRoster | None = None,
+        save_service: SaveService | None = None,
+    ) -> None:
+        self.roster = roster or ActiveRoster(config.max_local_players)
+        catalog = load_campaign_catalog(config.content_dir)
+        migrations = migration_catalog(catalog)
+        service = save_service or SaveManager(services.storage, migrations, now_utc)
+        self.foundation_screen = FoundationScreen(
+            config=config,
+            roster=self.roster,
+            save_service=service,
+            catalog=catalog,
+            ability_registry=create_default_registry(config.content_dir),
+            migration_catalog=migrations,
+        )
+
+    def create(self, screen_id: ScreenId) -> FoundationScreen:
+        """Select ``screen_id`` after the coordinator exits the prior activation."""
+        self.foundation_screen._select_screen(screen_id)
+        return self.foundation_screen
+
+    @property
+    def initial_screen_id(self) -> ScreenId:
+        """Start in recovery when persistence requires an explicit user action."""
+        return "recovery" if self.foundation_screen.requires_save_resolution else "world_map"
+
+
+def create_foundation_screen_factory(
+    config: GameConfig,
+    services: PlatformServices,
+    now_utc: Callable[[], datetime],
+    *,
+    roster: ActiveRoster | None = None,
+    save_service: SaveService | None = None,
+) -> FoundationScreenFactory:
+    """Build the shared foundation screen and its platform-backed save service."""
+    return FoundationScreenFactory(
+        config,
+        services,
+        now_utc,
+        roster=roster,
+        save_service=save_service,
+    )

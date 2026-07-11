@@ -6,11 +6,13 @@ import sys
 from collections.abc import Sequence
 from types import SimpleNamespace
 
-import windsprig.app as app_module
-from windsprig.app import GameApp
+import windsprig.screens.foundation as foundation_module
 from windsprig.config import GameConfig
 from windsprig.core.rng import derive_stage_seed
+from windsprig.input.commands import ConfirmCommand, InputFrame
 from windsprig.input.roster import ActivePlayer, ActiveRoster, DeviceRef
+from windsprig.screens.base import ScreenTransition
+from windsprig.screens.foundation import FoundationScreen
 
 
 def test_release_runtime_defaults_are_bounded() -> None:
@@ -40,7 +42,7 @@ def test_stage_seed_is_independent_of_python_hash_seed() -> None:
     assert values == ["17908035134853811437", "17908035134853811437"]
 
 
-def test_selected_stage_start_and_restart_share_derived_seed(monkeypatch) -> None:
+def test_selected_stage_start_and_paused_restart_share_derived_seed(monkeypatch) -> None:
     config = GameConfig()
     stage_id = "world_1_stage_1"
     stage = SimpleNamespace(stage_id=stage_id)
@@ -63,46 +65,26 @@ def test_selected_stage_start_and_restart_share_derived_seed(monkeypatch) -> Non
             created_seeds.append(seed)
             created_slots.append(tuple(player.slot for player in active_players))
 
-    restart_event = SimpleNamespace(type=2, key=5)
-    quit_event = SimpleNamespace(type=1)
-    fake_pygame = SimpleNamespace(
-        QUIT=1,
-        KEYDOWN=2,
-        K_ESCAPE=3,
-        K_RETURN=4,
-        K_r=5,
-        init=lambda: None,
-        quit=lambda: None,
-        display=SimpleNamespace(
-            set_mode=lambda _resolution: object(),
-            set_caption=lambda _caption: None,
-            flip=lambda: None,
-        ),
-        time=SimpleNamespace(Clock=lambda: SimpleNamespace(tick=lambda _fps: 0)),
-        event=SimpleNamespace(get=lambda: [restart_event, quit_event]),
-        key=SimpleNamespace(get_pressed=lambda: object()),
-        font=SimpleNamespace(SysFont=lambda *_args: object()),
+    screen = FoundationScreen.__new__(FoundationScreen)
+    screen.config = config
+    screen.catalog = SimpleNamespace(stages={stage_id: stage})
+    screen.ability_registry = object()
+    screen.roster = ActiveRoster()
+    screen.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    screen.selected_node_index = 0
+    screen.screen_id = "world_map"
+    screen.runtime = None
+    monkeypatch.setattr(screen, "_visible_nodes", lambda: [node])
+    monkeypatch.setattr(foundation_module, "StageRuntime", RuntimeProbe)
+
+    assert screen._start_selected_stage() is True
+    screen.screen_id = "paused"
+    transition = screen.fixed_update(
+        config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]}),
     )
-    input_mux = SimpleNamespace(collect_frame=lambda _events, _keys: object())
-
-    app = GameApp.__new__(GameApp)
-    app.config = config
-    app.catalog = SimpleNamespace(stages={stage_id: stage})
-    app.ability_registry = object()
-    app.active_roster = ActiveRoster()
-    app.active_roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
-    app.selected_node_index = 0
-    app.mode = "world_map"
-    monkeypatch.setattr(app, "_visible_nodes", lambda: [node])
-    monkeypatch.setattr(app, "_render_stage", lambda *_args: None)
-    monkeypatch.setattr(app, "_flush_save", lambda: None)
-    monkeypatch.setattr(app_module, "pygame", fake_pygame)
-    monkeypatch.setattr(app_module, "InputDeviceMux", lambda: input_mux)
-    monkeypatch.setattr(app_module, "StageRuntime", RuntimeProbe)
-
-    app._start_selected_stage()
-    assert app.run() == 0
 
     expected_seed = derive_stage_seed(config.replay_seed, stage_id)
+    assert transition == ScreenTransition("playing")
     assert created_seeds == [expected_seed, expected_seed]
     assert created_slots == [(1,), (1,)]
