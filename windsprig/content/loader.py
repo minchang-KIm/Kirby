@@ -239,17 +239,22 @@ def _load_enemy_spawns(raw: dict[str, object], stage_id: str) -> tuple[EnemySpaw
 def _load_motes(raw: dict[str, object]) -> tuple[MoteSpec, ...]:
     stage_id = _text(raw.get("stage_id"), "stage_id")
     if "motes" in raw:
-        return tuple(
-            MoteSpec(
-                mote_id=_text(item.get("mote_id"), f"mote_id for {stage_id}"),
-                tile_x=_integer(item.get("tile_x"), f"mote tile_x for {stage_id}"),
-                tile_y=_integer(item.get("tile_y"), f"mote tile_y for {stage_id}"),
+        motes: list[MoteSpec] = []
+        seen_ids: set[str] = set()
+        for value in _sequence(raw.get("motes"), f"motes for {stage_id}"):
+            item = _mapping(value, f"mote for {stage_id}")
+            mote_id = _canonical_mote_id(item.get("mote_id"), stage_id)
+            if mote_id in seen_ids:
+                raise ValueError(f"duplicate mote_id for {stage_id}: {mote_id}")
+            seen_ids.add(mote_id)
+            motes.append(
+                MoteSpec(
+                    mote_id=mote_id,
+                    tile_x=_integer(item.get("tile_x"), f"mote tile_x for {stage_id}"),
+                    tile_y=_integer(item.get("tile_y"), f"mote tile_y for {stage_id}"),
+                )
             )
-            for item in (
-                _mapping(value, f"mote for {stage_id}")
-                for value in _sequence(raw.get("motes"), f"motes for {stage_id}")
-            )
-        )
+        return tuple(motes)
 
     # Prototype saves already persist this identity form; content migration must not fork it.
     return tuple(
@@ -259,6 +264,18 @@ def _load_motes(raw: dict[str, object]) -> tuple[MoteSpec, ...]:
         )
         for index, tile in enumerate(_optional_sequence(raw.get("energy_spheres")), start=1)
     )
+
+
+def _canonical_mote_id(value: object, stage_id: str) -> str:
+    mote_id = _text(value, f"mote_id for {stage_id}")
+    prefix = f"{stage_id}:mote:"
+    index_text = mote_id.removeprefix(prefix) if mote_id.startswith(prefix) else ""
+    # Save and replay identity is permanent; accepting aliases would fork one collectible's history.
+    if not index_text.isascii() or not index_text.isdigit():
+        raise ValueError(f"canonical mote_id must match {prefix}<positive integer>: {mote_id}")
+    if index_text.startswith("0"):
+        raise ValueError(f"canonical mote_id must match {prefix}<positive integer>: {mote_id}")
+    return mote_id
 
 
 def _load_checkpoints(raw: dict[str, object]) -> tuple[CheckpointSpec, ...]:

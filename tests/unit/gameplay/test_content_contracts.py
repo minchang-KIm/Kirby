@@ -336,6 +336,41 @@ def test_authored_motes_checkpoints_and_interaction_bounds_load_without_legacy_n
 
 
 @pytest.mark.parametrize(
+    "mote_id",
+    [
+        "test_stage.mote.1",
+        "other_stage:mote:1",
+        "test_stage:mote:0",
+        "test_stage:mote:-1",
+        "test_stage:mote:",
+        "test_stage:mote:one",
+        "test_stage:mote:+1",
+        "test_stage:mote:01",
+    ],
+)
+def test_authored_mote_ids_must_use_the_canonical_stage_owned_positive_index(
+    tmp_path: Path,
+    mote_id: str,
+) -> None:
+    payload = _one_stage_campaign(
+        {"motes": [{"mote_id": mote_id, "tile_x": 3, "tile_y": 4}]}
+    )
+    (tmp_path / "campaign.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="canonical mote_id"):
+        load_campaign_catalog(tmp_path)
+
+
+def test_authored_mote_ids_must_be_unique_within_the_stage(tmp_path: Path) -> None:
+    mote = {"mote_id": "test_stage:mote:1", "tile_x": 3, "tile_y": 4}
+    payload = _one_stage_campaign({"motes": [mote, mote]})
+    (tmp_path / "campaign.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate mote_id"):
+        load_campaign_catalog(tmp_path)
+
+
+@pytest.mark.parametrize(
     "enemy_fields",
     [
         {"ability_id": "sword"},
