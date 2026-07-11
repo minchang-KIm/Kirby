@@ -19,6 +19,10 @@ from typing import Final, TypedDict
 
 import pygame
 
+# Direct script execution places ``tools/`` on sys.path, while CI invokes this file by path.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from tools.web_source_manifest import inspect_runtime_source, runtime_source_files
 
 PYGBAG_VERSION: Final = "0.9.3"

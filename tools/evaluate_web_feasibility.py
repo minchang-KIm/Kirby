@@ -12,11 +12,16 @@ import platform
 import re
 import stat
 import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Final, Literal, NoReturn, TypeGuard, cast
+
+# Direct script execution places ``tools/`` on sys.path, while CI invokes this file by path.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.web_source_manifest import SourceProvenanceError, inspect_runtime_source
 
