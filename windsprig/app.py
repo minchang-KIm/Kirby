@@ -164,6 +164,8 @@ class GameApp:
         self.unlocked_worlds = self.unlock_rules.apply_stage_rewards(stage.node_id, self.unlocked_worlds)
         self._flush_save()
         self.mode = "world_map"
+        # Consuming the runtime also makes catch-up iterations hit the existing None guard.
+        self.runtime = None
 
     def _flush_save(self) -> None:
         profile = self.save_schema.profiles[0]

@@ -58,3 +58,28 @@ def test_prototype_bridge_preserves_non_prefix_stable_mote_ids(
     app._flush_save()
 
     assert GameApp().tracker.collected_mote_ids == {"world_1_stage_1:mote:3"}
+
+
+def test_completed_runtime_is_recorded_once_but_new_run_increments_replay_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = GameApp()
+    stage = app.catalog.stages["world_1_stage_1"]
+    completed_world = SimpleNamespace(
+        resources={"stage_cleared": True, "run_energy_spheres": 1},
+        frame_index=10,
+    )
+    completed_runtime = SimpleNamespace(stage=stage, world=completed_world)
+    app.runtime = completed_runtime
+
+    app._on_stage_progress()
+    app._on_stage_progress()
+
+    assert app.tracker.clear_counts == {"world_1_stage_1": 1}
+
+    app.runtime = SimpleNamespace(stage=stage, world=completed_world)
+    app._on_stage_progress()
+
+    assert app.tracker.clear_counts == {"world_1_stage_1": 2}

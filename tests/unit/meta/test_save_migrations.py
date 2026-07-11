@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -143,6 +144,38 @@ def test_campaign_catalog_generation_does_not_depend_on_mapping_insertion_order(
     assert migration_catalog(reordered) == migration_catalog(campaign)
 
 
+def test_campaign_catalog_rejects_node_and_stage_identity_mismatch() -> None:
+    campaign = load_campaign_catalog(Path("windsprig/content"))
+    stage_id = "world_1_stage_1"
+    mismatched_stages = dict(campaign.stages)
+    mismatched_stages[stage_id] = replace(mismatched_stages[stage_id], node_id="wrong_node")
+
+    with pytest.raises(ValueError, match="node_id.*world_1_node_1"):
+        migration_catalog(CampaignCatalog(worlds=campaign.worlds, stages=mismatched_stages))
+
+
+def test_campaign_catalog_rejects_orphan_stage() -> None:
+    campaign = load_campaign_catalog(Path("windsprig/content"))
+    stages = dict(campaign.stages)
+    stages["orphan_stage"] = replace(
+        stages["world_1_stage_1"],
+        stage_id="orphan_stage",
+        node_id="orphan_node",
+    )
+
+    with pytest.raises(ValueError, match="orphan stage.*orphan_stage"):
+        migration_catalog(CampaignCatalog(worlds=campaign.worlds, stages=stages))
+
+
+def test_campaign_catalog_rejects_stage_referenced_by_multiple_nodes() -> None:
+    campaign = load_campaign_catalog(Path("windsprig/content"))
+    worlds = {world_id: list(nodes) for world_id, nodes in campaign.worlds.items()}
+    worlds["world_1"].append(replace(worlds["world_1"][0], node_id="duplicate_stage_node"))
+
+    with pytest.raises(ValueError, match="stage referenced more than once.*world_1_stage_1"):
+        migration_catalog(CampaignCatalog(worlds=worlds, stages=campaign.stages))
+
+
 def test_migration_catalog_owns_immutable_mapping_copies() -> None:
     motes = {"stage": ("stage:mote:1",)}
     next_nodes = {"node": "next"}
@@ -226,6 +259,14 @@ def test_first_prototype_profile_supplies_recognized_global_settings() -> None:
     assert settings.language == "ko"
     assert settings.controls.keyboard_p1_preset == "ijkl"
     assert settings.controls.gamepad_mapping == "southpaw"
+
+
+def test_v1_settings_migration_converts_huge_volume_overflow_to_field_value_error() -> None:
+    payload = _payload()
+    payload["profiles"][0]["settings"] = {"master_volume": 10**10000}  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="master_volume"):
+        migrate_v1(payload, _catalog())
 
 
 @pytest.mark.parametrize(

@@ -112,6 +112,38 @@ class SaveMigrationCatalog:
         node_ids = [node.node_id for node in ordered_nodes]
         if len(node_ids) != len(set(node_ids)):
             raise ValueError("campaign contains duplicate node IDs")
+        references_by_stage: dict[str, list[str]] = {}
+        for world_id in sorted(campaign.worlds):
+            for node in campaign.worlds[world_id]:
+                if node.world_id != world_id:
+                    raise ValueError(
+                        f"node {node.node_id} world_id does not match catalog world {world_id}"
+                    )
+                if node.stage_id not in campaign.stages:
+                    raise ValueError(f"node {node.node_id} references missing stage {node.stage_id}")
+                references_by_stage.setdefault(node.stage_id, []).append(node.node_id)
+
+        multiply_referenced = sorted(
+            stage_id
+            for stage_id, references in references_by_stage.items()
+            if len(references) > 1
+        )
+        if multiply_referenced:
+            raise ValueError(f"stage referenced more than once: {multiply_referenced}")
+        orphan_stages = sorted(set(campaign.stages) - set(references_by_stage))
+        if orphan_stages:
+            raise ValueError(f"orphan stage IDs are not referenced by campaign nodes: {orphan_stages}")
+
+        for node in ordered_nodes:
+            stage = campaign.stages[node.stage_id]
+            if stage.node_id != node.node_id:
+                raise ValueError(
+                    f"stage {stage.stage_id} node_id does not match node {node.node_id}"
+                )
+            if stage.world_id != node.world_id:
+                raise ValueError(
+                    f"stage {stage.stage_id} world_id does not match node {node.node_id}"
+                )
         next_node_by_node = {
             node.node_id: ordered_nodes[index + 1].node_id
             for index, node in enumerate(ordered_nodes[:-1])

@@ -29,11 +29,15 @@ def _strict_int(name: str, value: object, *, non_negative: bool = True) -> int:
 
 
 def _volume(name: str, value: object) -> float:
+    message = f"{name} must be a finite number between zero and one"
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{name} must be a finite number between zero and one")
-    number = float(value)
+        raise ValueError(message)
+    try:
+        number = float(value)
+    except (OverflowError, TypeError, ValueError):
+        raise ValueError(message) from None
     if not math.isfinite(number) or not 0.0 <= number <= 1.0:
-        raise ValueError(f"{name} must be a finite number between zero and one")
+        raise ValueError(message)
     return number
 
 

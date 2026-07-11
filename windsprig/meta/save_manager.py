@@ -4,9 +4,13 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .save_models import _id_frozenset, _immutable_int_map
+
 
 @dataclass
 class SaveProfile:
+    """Mutable prototype profile with lossless fields used only until save v2 replaces it."""
+
     profile_name: str
     unlocked_worlds: set[str] = field(default_factory=lambda: {"world_1"})
     cleared_nodes: set[str] = field(default_factory=set)
@@ -16,6 +20,15 @@ class SaveProfile:
     best_times: dict[str, int] = field(default_factory=dict)
     clear_counts: dict[str, int] | None = None
     settings: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # These extension fields keep the temporary v1 app bridge from erasing v2 identities.
+        if self.collected_mote_ids is not None:
+            self.collected_mote_ids = set(
+                _id_frozenset(self.collected_mote_ids, "collected_mote_ids")
+            )
+        if self.clear_counts is not None:
+            self.clear_counts = dict(_immutable_int_map(self.clear_counts, "clear_counts"))
 
 
 @dataclass
@@ -68,14 +81,14 @@ class SaveSchema:
                     cleared_nodes=set(item.get("cleared_nodes", [])),
                     energy_spheres={str(k): int(v) for k, v in dict(item.get("energy_spheres", {})).items()},
                     collected_mote_ids=(
-                        set(item["collected_mote_ids"])
+                        set(_id_frozenset(item["collected_mote_ids"], "collected_mote_ids"))
                         if "collected_mote_ids" in item
                         else None
                     ),
                     challenge_unlocks=set(item.get("challenge_unlocks", [])),
                     best_times={str(k): int(v) for k, v in dict(item.get("best_times", {})).items()},
                     clear_counts=(
-                        {str(k): int(v) for k, v in dict(item["clear_counts"]).items()}
+                        dict(_immutable_int_map(item["clear_counts"], "clear_counts"))
                         if "clear_counts" in item
                         else None
                     ),

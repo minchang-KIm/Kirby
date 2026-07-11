@@ -7,6 +7,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from windsprig.meta.save_manager import SaveProfile as LegacySaveProfile
+from windsprig.meta.save_manager import SaveSchema
 from windsprig.meta.save_models import (
     AccessibilitySettings,
     AudioSettings,
@@ -102,6 +104,70 @@ def test_save_models_and_nested_mappings_are_immutable_copies() -> None:
 def test_audio_ranges_require_finite_real_numbers(value: object) -> None:
     with pytest.raises(ValueError, match="master_volume"):
         AudioSettings(master_volume=value)  # type: ignore[arg-type]
+
+
+def test_v2_decode_converts_huge_volume_overflow_to_field_value_error() -> None:
+    payload = _payload()
+    payload["settings"]["audio"]["master_volume"] = 10**10000  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="master_volume"):
+        save_data_from_dict(payload)
+
+
+def test_legacy_extension_constructor_rejects_mixed_mote_ids() -> None:
+    with pytest.raises(ValueError, match="collected_mote_ids"):
+        LegacySaveProfile(  # type: ignore[arg-type]
+            "P1",
+            collected_mote_ids={"world_1_stage_1:mote:1", 1},
+        )
+
+
+def test_legacy_extension_decode_rejects_bool_clear_count() -> None:
+    payload: dict[str, object] = {
+        "save_version": 1,
+        "profiles": [
+            {
+                "profile_name": "P1",
+                "collected_mote_ids": ["world_1_stage_1:mote:1"],
+                "clear_counts": {"world_1_stage_1": True},
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="clear_counts"):
+        SaveSchema.from_json_dict(payload)
+
+
+def test_legacy_extension_decode_rejects_mixed_mote_ids() -> None:
+    payload: dict[str, object] = {
+        "save_version": 1,
+        "profiles": [
+            {
+                "profile_name": "P1",
+                "collected_mote_ids": ["world_1_stage_1:mote:1", 1],
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="collected_mote_ids"):
+        SaveSchema.from_json_dict(payload)
+
+
+def test_legacy_extension_roundtrip_preserves_validated_ids_and_counts() -> None:
+    schema = SaveSchema(
+        profiles=[
+            LegacySaveProfile(
+                "P1",
+                collected_mote_ids={"world_1_stage_1:mote:3"},
+                clear_counts={"world_1_stage_1": 2},
+            )
+        ]
+    )
+
+    loaded = SaveSchema.from_json_dict(schema.to_json_dict())
+
+    assert loaded.profiles[0].collected_mote_ids == {"world_1_stage_1:mote:3"}
+    assert loaded.profiles[0].clear_counts == {"world_1_stage_1": 2}
 
 
 def test_settings_require_exact_boolean_and_string_types() -> None:
