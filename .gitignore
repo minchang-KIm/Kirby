@@ -212,6 +212,14 @@ __pycache__/
 .pytest_cache/
 .coverage
 
+# Windsprig generated release and browser-test outputs
+dist/web/
+dist/release/
+web/build/
+.vercel/
+test-results/
+playwright-report/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
