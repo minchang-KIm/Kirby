@@ -15,6 +15,7 @@ from windsprig.platform.services import (
     StorageService,
     TimeService,
 )
+from windsprig.platform.web import create_web_services
 
 __all__ = [
     "AudioBus",
@@ -32,4 +33,5 @@ __all__ = [
     "StorageService",
     "TimeService",
     "create_native_services",
+    "create_web_services",
 ]
