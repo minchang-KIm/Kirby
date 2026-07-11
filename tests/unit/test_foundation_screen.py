@@ -3,11 +3,15 @@ from __future__ import annotations
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pygame
+
 from windsprig.config import GameConfig
 from windsprig.content import load_campaign_catalog
 from windsprig.gameplay.abilities import create_default_registry
 from windsprig.input.commands import AbilityUseCommand, CancelCommand, ConfirmCommand, InputFrame
-from windsprig.input.roster import ActiveRoster
+from windsprig.input.queue import InputQueue
+from windsprig.input.roster import ActiveRoster, DeviceRef
+from windsprig.input.router import InputRouter
 from windsprig.meta import (
     SaveData,
     SaveLoadResult,
@@ -118,6 +122,12 @@ def test_reset_confirmation_remains_a_narrow_explicit_action() -> None:
 
 def test_gamepad_ability_cancel_pair_reaches_playing_runtime_once_without_transition() -> None:
     screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+    screen.roster.join(DeviceRef("gamepad", "gamepad-42", "Controller"))
+    routed = InputRouter().collect(
+        [pygame.event.Event(pygame.JOYBUTTONDOWN, instance_id=42, joy=0, button=1)],
+        (),  # No keyboard player is active, so key state is never sampled.
+        screen.roster,
+    )
     stepped_frames: list[InputFrame] = []
     runtime = SimpleNamespace(
         world=SimpleNamespace(resources={"stage_cleared": False}),
@@ -125,20 +135,49 @@ def test_gamepad_ability_cancel_pair_reaches_playing_runtime_once_without_transi
     )
     screen.runtime = runtime
     screen.screen_id = "playing"
-    frame = InputFrame(
-        commands_by_slot={
-            1: [
-                AbilityUseCommand(player_slot=1, pressed=True),
-                CancelCommand(player_slot=1),
-            ]
-        }
-    )
 
-    transition = screen.fixed_update(screen.config.fixed_dt_ms, frame)
+    transition = screen.fixed_update(screen.config.fixed_dt_ms, routed.frame)
 
     assert transition is None
-    assert stepped_frames == [frame]
+    assert stepped_frames == [routed.frame]
     assert screen.runtime is runtime
+
+
+def test_buffered_keyboard_ability_then_genuine_cancel_still_pauses() -> None:
+    screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+    stepped_frames: list[InputFrame] = []
+    runtime = SimpleNamespace(
+        world=SimpleNamespace(resources={"stage_cleared": False}),
+        step=stepped_frames.append,
+    )
+    screen.runtime = runtime
+    screen.screen_id = "playing"
+    queue = InputQueue()
+    queue.push(
+        InputFrame(commands_by_slot={1: [AbilityUseCommand(player_slot=1, pressed=True)]})
+    )
+    queue.push(InputFrame(commands_by_slot={1: [CancelCommand(player_slot=1)]}))
+
+    transition = screen.fixed_update(screen.config.fixed_dt_ms, queue.consume_step())
+
+    assert transition == ScreenTransition("paused")
+    assert stepped_frames == []
+    assert screen.runtime is runtime
+
+
+def test_gamepad_b_remains_a_menu_cancel_on_world_map() -> None:
+    screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+    screen.roster.join(DeviceRef("gamepad", "gamepad-42", "Controller"))
+    routed = InputRouter().collect(
+        [pygame.event.Event(pygame.JOYBUTTONDOWN, instance_id=42, joy=0, button=1)],
+        (),
+        screen.roster,
+    )
+    screen.screen_id = "world_map"
+
+    transition = screen.fixed_update(screen.config.fixed_dt_ms, routed.frame)
+
+    assert transition == ScreenTransition("title")
 
 
 def test_standalone_playing_cancel_pauses_without_discarding_runtime() -> None:
@@ -257,3 +296,25 @@ def test_recovery_confirm_explicitly_resets_and_failure_remains_recoverable() ->
     assert successful_transition == ScreenTransition("world_map")
     assert screen.save_status == "saved"
     assert len(save_service.confirmed) == 2
+    assert screen.save_notice is None
+
+
+def test_successful_recovery_retry_clears_stale_migration_notice() -> None:
+    save_service = RecordingSaveService(
+        [SaveLoadResult(SaveData(), SaveNotice("migrated_v1", "save.migrated_v1"))],
+        save_results=[
+            SaveWriteResult(ok=False, error_code="storage_write_failed"),
+            SaveWriteResult(ok=True),
+        ],
+    )
+    screen = make_foundation_screen(save_service)
+    screen.screen_id = "recovery"
+
+    transition = screen.fixed_update(
+        screen.config.fixed_dt_ms,
+        InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]}),
+    )
+
+    assert transition == ScreenTransition("world_map")
+    assert screen.save_status == "saved"
+    assert screen.save_notice is None

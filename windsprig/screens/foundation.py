@@ -18,7 +18,6 @@ from windsprig.gameplay.abilities import AbilityRegistry, create_default_registr
 from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.input.commands import (
-    AbilityUseCommand,
     CancelCommand,
     ConfirmCommand,
     InputCommand,
@@ -139,6 +138,7 @@ class FoundationScreen(Screen):
         if result.ok:
             self.save_status = "saved"
             self._save_resolution_action = None
+            self.save_notice = None
         elif result.error_code == "recovery_required":
             self.save_status = "retry_required"
             self._save_resolution_action = "reload"
@@ -184,14 +184,10 @@ class FoundationScreen(Screen):
         input_frame: InputFrame,
         commands: tuple[InputCommand, ...],
     ) -> ScreenTransition | None:
-        ability_slots = {
-            command.player_slot for command in commands if isinstance(command, AbilityUseCommand)
-        }
-        cancel_slots = {
-            command.player_slot for command in commands if isinstance(command, CancelCommand)
-        }
-        # Gamepad B intentionally carries both ability and menu-cancel meanings.
-        if cancel_slots - ability_slots:
+        if any(
+            isinstance(command, CancelCommand) and command.origin == "cancel"
+            for command in commands
+        ):
             return ScreenTransition("paused")
         if any(isinstance(command, PauseCommand) for command in commands):
             return ScreenTransition("paused")
@@ -234,6 +230,8 @@ class FoundationScreen(Screen):
             self._flush_save()
         if self.requires_save_resolution:
             return None
+        if action in {"reset", "retry"}:
+            self.save_notice = None
         return ScreenTransition("world_map")
 
     def _adopt_load_result(self, result: SaveLoadResult) -> None:

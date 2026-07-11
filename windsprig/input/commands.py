@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
+
+CancelOrigin = Literal["cancel", "ability_button"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +69,7 @@ class ConfirmCommand(InputCommand):
 
 @dataclass(frozen=True, slots=True)
 class CancelCommand(InputCommand):
-    pass
+    origin: CancelOrigin = "cancel"
 
 
 @dataclass(frozen=True, slots=True)

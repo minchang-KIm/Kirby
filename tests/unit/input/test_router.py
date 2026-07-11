@@ -128,6 +128,7 @@ def test_escape_cancels_for_the_arrows_keyboard_when_it_is_the_only_keyboard() -
     ).frame.commands_for(player.slot)
 
     assert commands[-1] == CancelCommand(player_slot=player.slot)
+    assert getattr(commands[-1], "origin", None) == "cancel"
 
 
 def test_keyboard_routes_every_gameplay_edge_and_released_held_value() -> None:
@@ -204,7 +205,8 @@ def test_assigned_gamepad_routes_primary_cancel_pause_and_hat_edges() -> None:
     assert any(isinstance(command, JumpCommand) for command in commands)
     assert any(isinstance(command, ConfirmCommand) for command in commands)
     assert any(isinstance(command, AbilityUseCommand) for command in commands)
-    assert any(isinstance(command, CancelCommand) for command in commands)
+    gamepad_cancel = next(command for command in commands if isinstance(command, CancelCommand))
+    assert getattr(gamepad_cancel, "origin", None) == "ability_button"
     assert any(isinstance(command, PauseCommand) for command in commands)
     assert [command for command in commands if isinstance(command, NavigateCommand)] == [
         NavigateCommand(player_slot=player.slot, x=1, y=0),

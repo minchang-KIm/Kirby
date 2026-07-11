@@ -230,7 +230,10 @@ class InputRouter:
             if event.button == GAMEPAD_BINDING.draw_button:
                 return [DrawStartCommand(slot)]
             if event.button == GAMEPAD_BINDING.ability_button:
-                return [AbilityUseCommand(slot, True), CancelCommand(slot)]
+                return [
+                    AbilityUseCommand(slot, True),
+                    CancelCommand(slot, origin="ability_button"),
+                ]
             if event.button == GAMEPAD_BINDING.dodge_button:
                 return [DodgeCommand(slot, True)]
             if event.button == GAMEPAD_BINDING.drop_button:
