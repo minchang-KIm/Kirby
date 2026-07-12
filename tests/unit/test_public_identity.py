@@ -9,7 +9,7 @@ PUBLIC_PATHS = (
     ROOT / "README.md",
     ROOT / "assets" / "LICENSES.md",
     ROOT / "assets" / "generated",
-    ROOT / "build.spec",
+    ROOT / "packaging",
     ROOT / "docs" / "kr",
 )
 FORBIDDEN = ("kirby", "kirby_clone", "return to dream land", "kirby-rtd")

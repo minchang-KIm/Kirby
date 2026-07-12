@@ -379,11 +379,22 @@ class PygameLifecycleService:
         return tuple(translated)
 
 
-def create_native_services(config: GameConfig) -> PlatformServices:
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    root = Path(local_app_data) / "Windsprig" if local_app_data else Path.home() / "AppData" / "Local" / "Windsprig"
-    if not root.is_absolute():
-        root = Path.home() / "AppData" / "Local" / "Windsprig"
+def create_native_services(config: GameConfig, data_dir: Path | None = None) -> PlatformServices:
+    if not isinstance(config, GameConfig):
+        raise TypeError("config must be a GameConfig")
+    if data_dir is not None:
+        if not isinstance(data_dir, Path):
+            raise TypeError("data_dir must be a pathlib.Path or None")
+        root = data_dir.resolve()
+    else:
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        root = (
+            Path(local_app_data) / "Windsprig"
+            if local_app_data
+            else Path.home() / "AppData" / "Local" / "Windsprig"
+        )
+        if not root.is_absolute():
+            root = Path.home() / "AppData" / "Local" / "Windsprig"
     return PlatformServices(
         storage=NativeStorage(root),
         audio=PygameAudioService(

@@ -21,6 +21,10 @@ mandatory flags, and decoded-pixel SHA-256 hashes are recorded in `assets/genera
 
 Original generated art is distributed under the project MIT license in `LICENSE`.
 
+The Windows executable icon at `assets/branding/windsprig.ico` is a deterministic ICO container that embeds the
+canonical original `assets/generated/ui/favicon.png` bytes without re-encoding. It is produced and checked by
+`tools/generate_windows_icon.py` and is distributed under the same project MIT license.
+
 ## Original generated audio
 
 The 57 WAV files under `assets/generated/audio` are original Windsprig project audio: 28 loopable music cues and 29
