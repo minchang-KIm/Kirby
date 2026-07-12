@@ -1118,11 +1118,11 @@ def _publish(root: Path, stage_root: Path) -> None:
         raise
 
 
-def _load_json_document(path: Path) -> object:
+def _canonical_bytes_match(committed: Path, generated: Path) -> bool:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
+        return committed.read_bytes() == generated.read_bytes()
+    except OSError:
+        return False
 
 
 def _check_against_stage(root: Path, stage_root: Path, entries: Sequence[ArtEntry]) -> tuple[str, ...]:
@@ -1167,7 +1167,7 @@ def _check_against_stage(root: Path, stage_root: Path, entries: Sequence[ArtEntr
     )
     for label, committed, generated in comparisons:
         committed = _safe_existing_path(root, PurePosixPath(committed.relative_to(root).as_posix()))
-        if _is_link_or_reparse(committed) or _load_json_document(committed) != _load_json_document(generated):
+        if _is_link_or_reparse(committed) or not _canonical_bytes_match(committed, generated):
             findings.append(f"STALE {label}: canonical JSON")
     return tuple(findings)
 

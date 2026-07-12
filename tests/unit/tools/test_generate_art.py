@@ -101,6 +101,38 @@ def test_generation_is_pixel_stable_and_check_never_writes(tmp_path: Path) -> No
     assert _snapshot(publication) == stale
 
 
+def test_check_rejects_noncanonical_manifest_bytes_without_writing(tmp_path: Path) -> None:
+    publication = tmp_path / "publication"
+    publication.mkdir()
+    generate_art.generate(publication)
+    manifest_path = publication / "windsprig/content/assets.json"
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_path.write_text(json.dumps(document, separators=(",", ":")), encoding="utf-8")
+    before = _snapshot(publication)
+
+    rejected = _run("--root", str(publication), "--check", cwd=ROOT)
+
+    assert rejected.returncode == 1
+    assert rejected.stdout == "STALE manifest: canonical JSON\n"
+    assert _snapshot(publication) == before
+
+
+def test_check_rejects_noncanonical_provenance_bytes_without_writing(tmp_path: Path) -> None:
+    publication = tmp_path / "publication"
+    publication.mkdir()
+    generate_art.generate(publication)
+    provenance_path = publication / "assets/generated/art-provenance.json"
+    document = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance_path.write_text(json.dumps(document, indent=4, sort_keys=False), encoding="utf-8")
+    before = _snapshot(publication)
+
+    rejected = _run("--root", str(publication), "--check", cwd=ROOT)
+
+    assert rejected.returncode == 1
+    assert rejected.stdout == "STALE provenance: canonical JSON\n"
+    assert _snapshot(publication) == before
+
+
 def test_generation_preserves_future_audio_records_and_files(tmp_path: Path) -> None:
     publication = tmp_path / "publication"
     publication.mkdir()
