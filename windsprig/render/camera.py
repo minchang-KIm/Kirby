@@ -216,10 +216,10 @@ class CameraController:
         self._previous_center_x = center_x
         look_ahead = 0.0 if reduced_motion else max(-self.LOOK_AHEAD, min(self.LOOK_AHEAD, velocity_x * 90.0))
 
-        # Slot order provides a deterministic lead target even when callers reorder snapshots.
-        lead = active[0]
         safe_half_width = self.SAFE_WIDTH / 2.0
-        catch_up_slots = tuple(target.slot for target in active[1:] if abs(target.x - lead.x) > safe_half_width)
+        # Every participant is classified against the same weighted group frame;
+        # slot order is identity stability, not implicit camera leadership.
+        catch_up_slots = tuple(target.slot for target in active if abs(target.x - center_x) > safe_half_width)
         desired_x = min(maximum_x, max(bound_x, center_x + look_ahead - self.width / 2.0))
         desired_y = min(maximum_y, max(bound_y, center_y - self.height / 2.0))
         damping = 1.0 - math.exp(-dt_ms / self.DAMP_MS)

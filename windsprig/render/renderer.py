@@ -194,6 +194,27 @@ _PARTICLE_COLOR: Final = MappingProxyType(
         "confetti": (255, 143, 196),
     }
 )
+_EFFECT_COLOR: Final = MappingProxyType(
+    {
+        "pattern.damage": (255, 132, 109),
+        "pattern.dodge": (147, 226, 255),
+        "pattern.capture": (119, 222, 153),
+        "pattern.release": (119, 222, 153),
+        "pattern.launch": (245, 247, 226),
+        "pattern.harmonize": (190, 155, 255),
+        "pattern.echo": (190, 155, 255),
+        "pattern.hit": (255, 236, 165),
+        "pattern.cut": (147, 226, 255),
+        "pattern.mote": (248, 194, 67),
+        "pattern.checkpoint": (119, 222, 153),
+        "pattern.defeat": (220, 220, 206),
+        "pattern.respawn": (112, 222, 232),
+        "pattern.goal": (119, 222, 153),
+        "pattern.victory": (255, 143, 196),
+        "pattern.boss": (255, 132, 109),
+        **{f"pattern.{kind}": color for kind, color in _PARTICLE_COLOR.items()},
+    }
+)
 
 
 def _finite(name: str, value: object) -> float:
@@ -372,7 +393,9 @@ class StageRenderer:
         if effects.shake is None:
             return camera
         pattern = ((-1.0, 0.0), (1.0, -0.75), (0.0, 1.0), (-0.5, 0.5))
-        unit_x, unit_y = pattern[frame_index % len(pattern)]
+        # Remaining lifetime is render-owned time, so shake still animates on
+        # display frames where the deterministic simulation index is unchanged.
+        unit_x, unit_y = pattern[(effects.shake.duration_ms // 16) % len(pattern)]
         return replace(
             camera,
             shake_x=camera.shake_x + unit_x * effects.shake.amplitude_px,
@@ -838,34 +861,78 @@ class StageRenderer:
     def _draw_flash(self, canvas: pygame.Surface, flash: Flash, camera: CameraView) -> None:
         center_x = round(flash.x - camera.x + camera.shake_x)
         center_y = round(flash.y - camera.y + camera.shake_y)
-        pygame.draw.circle(canvas, _INK_LIGHT, (center_x, center_y), flash.radius_px, 3)
-        pygame.draw.line(
-            canvas,
-            _GOLD,
-            (center_x - flash.radius_px, center_y),
-            (center_x + flash.radius_px, center_y),
-            3,
-        )
-        pygame.draw.line(
-            canvas,
-            _GOLD,
-            (center_x, center_y - flash.radius_px),
-            (center_x, center_y + flash.radius_px),
-            3,
-        )
+        color = _EFFECT_COLOR.get(flash.pattern_token)
+        if color is None:
+            raise ValueError(f"unsupported flash pattern token: {flash.pattern_token}")
+        width = max(1, min(5, math.ceil(flash.duration_ms / 24)))
+        pygame.draw.circle(canvas, _INK_LIGHT, (center_x, center_y), flash.radius_px, width)
+        if flash.pattern_token == "pattern.mote":
+            pygame.draw.circle(canvas, color, (center_x, center_y), max(3, flash.radius_px // 2), width)
+            for offset_x, offset_y in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                endpoint = (
+                    center_x + offset_x * flash.radius_px,
+                    center_y + offset_y * flash.radius_px,
+                )
+                pygame.draw.circle(canvas, color, endpoint, width + 1)
+        elif flash.pattern_token == "pattern.harmonize":
+            radius = flash.radius_px
+            pygame.draw.polygon(
+                canvas,
+                color,
+                (
+                    (center_x, center_y - radius),
+                    (center_x + radius, center_y),
+                    (center_x, center_y + radius),
+                    (center_x - radius, center_y),
+                ),
+                width,
+            )
+        else:
+            pygame.draw.line(
+                canvas,
+                color,
+                (center_x - flash.radius_px, center_y),
+                (center_x + flash.radius_px, center_y),
+                width,
+            )
+            pygame.draw.line(
+                canvas,
+                color,
+                (center_x, center_y - flash.radius_px),
+                (center_x, center_y + flash.radius_px),
+                width,
+            )
 
     def _draw_particle(self, canvas: pygame.Surface, particle: Particle, camera: CameraView) -> None:
-        color = _PARTICLE_COLOR.get(particle.kind)
-        if color is None:
+        if particle.kind not in _PARTICLE_COLOR:
             raise ValueError(f"unsupported particle kind: {particle.kind}")
+        color = _EFFECT_COLOR.get(particle.color_token)
+        if color is None:
+            raise ValueError(f"unsupported particle color token: {particle.color_token}")
         x = round(particle.x - camera.x + camera.shake_x)
         y = round(particle.y - camera.y + camera.shake_y)
+        radius = max(2, min(7, math.ceil(particle.life_ms / 45)))
         if particle.kind in {"streak", "wind_ribbon", "afterimage"}:
-            pygame.draw.line(canvas, color, (x, y), (x - round(particle.vx * 0.05), y - round(particle.vy * 0.05)), 4)
+            pygame.draw.line(
+                canvas,
+                color,
+                (x, y),
+                (x - round(particle.vx * 0.05), y - round(particle.vy * 0.05)),
+                max(2, radius - 1),
+            )
         elif particle.kind in {"leaf", "paper", "confetti", "shard"}:
-            pygame.draw.polygon(canvas, color, ((x, y - 5), (x + 5, y), (x, y + 5), (x - 5, y)))
+            pygame.draw.polygon(
+                canvas,
+                color,
+                ((x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)),
+            )
+        elif particle.kind == "spark":
+            pygame.draw.line(canvas, color, (x - radius, y), (x + radius, y), 2)
+            pygame.draw.line(canvas, color, (x, y - radius), (x, y + radius), 2)
+        elif particle.kind == "mote":
+            pygame.draw.circle(canvas, color, (x, y), radius, 2)
         else:
-            pygame.draw.circle(canvas, color, (x, y), 4)
+            pygame.draw.circle(canvas, color, (x, y), radius)
 
     def _draw_effects(self, canvas: pygame.Surface, effects: EffectFrame, camera: CameraView) -> None:
         if effects.flash is not None:
@@ -931,11 +998,12 @@ class StageRenderer:
             canvas,
             small_font,
             player.ability_label,
-            (rect.left + 48, rect.top + 43),
+            (rect.left + 78, rect.top + 43),
             foreground=_INK_LIGHT,
             background=_PANEL,
             size_px=14,
         )
+        canvas.blit(self._icon(player.ability_icon, 24), (rect.left + 48, rect.top + 40))
         draw_text(
             canvas,
             small_font,
@@ -1000,14 +1068,17 @@ class StageRenderer:
 
         if hud.boss is not None:
             boss_rect = pygame.Rect(330, 150, 620, 72)
+            boss_label = f"{hud.boss.name} · {hud.boss.phase_label}"
+            if hud.boss.telegraph_label is not None:
+                boss_label = f"{boss_label} · {hud.boss.telegraph_label}"
             draw_panel(
                 canvas,
                 boss_rect,
                 fill=_PANEL,
                 outline=_GOLD,
-                pattern_token=_pattern_for(hud.boss.vulnerability_pattern),
+                pattern_token=hud.boss.telegraph_pattern or _pattern_for(hud.boss.vulnerability_pattern),
                 icon=self._icon(hud.boss.telegraph_icon or "boss", 36),
-                label=f"{hud.boss.name} · {hud.boss.phase_label}",
+                label=boss_label,
                 font=self.assets.font(20, 700),
                 foreground=_INK_LIGHT,
                 font_size_px=20,
@@ -1082,9 +1153,10 @@ class StageRenderer:
                 font_size_px=15,
             )
         player_by_slot = {player.slot: player for player in hud.players}
-        for index, slot in enumerate(hud.catch_up_slots):
-            player = player_by_slot[slot]
-            badge = pygame.Rect(8, 300 + index * 58, 112, 50)
+        for cue in hud.catch_up_cues:
+            player = player_by_slot[cue.slot]
+            badge_x = 8 if cue.edge == "left" else LOGICAL_SIZE[0] - 120
+            badge = pygame.Rect(badge_x, cue.edge_y, 112, 50)
             draw_panel(
                 canvas,
                 badge,
@@ -1092,7 +1164,7 @@ class StageRenderer:
                 outline=_SLOT_COLORS[player.color_token],
                 pattern_token=_pattern_for(player.pattern_token),
                 icon=self._icon(_PLAYER_ICON_BY_TOKEN[player.icon_token], 26),
-                label=f"{player.label} ←",
+                label=f"{player.label} {cue.arrow}",
                 font=self.assets.font(17, 700),
                 foreground=_INK_LIGHT,
                 font_size_px=17,

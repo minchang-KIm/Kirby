@@ -44,6 +44,7 @@
   "enemy.slagroller.name": "광재굴림이",
   "enemy.stormlens.name": "폭풍눈",
   "game.title": "바람싹: 질풍의 메아리",
+  "hud.boss_incoming": "준비 중",
   "hud.captured": "보유 메아리: {ability}",
   "hud.gather": "집결 {seconds}",
   "hud.hover": "활공",

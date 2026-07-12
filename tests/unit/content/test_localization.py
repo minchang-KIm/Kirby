@@ -238,13 +238,13 @@ def test_locale_generator_writes_then_checks_clean(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     assert generate_locales.main([], root=tmp_path) == 0
-    assert capsys.readouterr().out == "locales: 208 keys in en/ko\n"
+    assert capsys.readouterr().out == "locales: 209 keys in en/ko\n"
     for relative_path, canonical in generate_locales.canonical_outputs().items():
         assert (tmp_path / relative_path).read_bytes() == canonical.encode("utf-8")
     assert not tuple(tmp_path.rglob("*.tmp"))
 
     assert generate_locales.main(["--check"], root=tmp_path) == 0
-    assert capsys.readouterr().out == "locales: 208 keys in en/ko\n"
+    assert capsys.readouterr().out == "locales: 209 keys in en/ko\n"
 
 
 def test_locale_generator_serializes_completely_before_writing(

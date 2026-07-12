@@ -27,7 +27,7 @@ def test_camera_clamps_to_bounds_and_reports_only_distant_coop_slots() -> None:
 
     view = camera.update(targets, bounds_px=(0, 0, 2400, 720), dt_ms=16, reduced_motion=False)
 
-    assert view.catch_up_slots == (2,)
+    assert view.catch_up_slots == (1, 2)
     assert 0 <= view.x <= 1120
     assert view.y == 0
 
@@ -53,8 +53,22 @@ def test_camera_uses_only_enabled_positive_weight_targets_in_stable_slot_order()
     )
 
     assert forward == reversed_order
-    assert forward.catch_up_slots == (2,)
+    assert forward.catch_up_slots == (1,)
     assert math.isfinite(forward.x) and math.isfinite(forward.y)
+
+
+def test_camera_compares_every_slot_with_the_weighted_safe_frame() -> None:
+    """A high-weight later slot must not make slot one the implicit camera leader."""
+
+    view = CameraController((1280, 720)).update(
+        (_target(1, 300.0, weight=1.0), _target(2, 900.0, weight=3.0)),
+        bounds_px=(0, 0, 2400, 900),
+        dt_ms=16,
+        reduced_motion=False,
+    )
+
+    # Weighted center is 750, so the safe frame is [370, 1130].
+    assert view.catch_up_slots == (1,)
 
 
 def test_camera_empty_target_set_stays_finite_and_clamped_to_offset_bounds() -> None:

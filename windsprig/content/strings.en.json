@@ -44,6 +44,7 @@
   "enemy.slagroller.name": "Slag Roller",
   "enemy.stormlens.name": "Storm Lens",
   "game.title": "Windsprig: Echoes of the Gale",
+  "hud.boss_incoming": "Incoming attack",
   "hud.captured": "Held echo: {ability}",
   "hud.gather": "Gather {seconds}",
   "hud.hover": "Hover",

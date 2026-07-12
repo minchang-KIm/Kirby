@@ -172,11 +172,143 @@ def test_korean_hud_localizes_gather_boss_audio_save_and_player_facts() -> None:
     assert hud.boss is not None
     assert (hud.boss.name, hud.boss.phase_label) == ("뿌리턱", "단계 2/3")
     assert hud.boss.vulnerability_pattern == "pattern.boss.vulnerable"
-    assert hud.boss.telegraph_icon == "boss"
+    assert (hud.boss.telegraph_icon, hud.boss.telegraph_label, hud.boss.telegraph_pattern) == (
+        "attack",
+        "준비 중",
+        "stripes",
+    )
     assert hud.muted_indicator is True
     assert hud.muted_label == "오디오를 사용할 수 없어 음소거됨"
     assert hud.save_status_key == "save.failed"
     assert hud.save_status_label == "저장 실패 — 다시 시도"
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [("en", "Held echo: Moonjelly"), ("ko", "보유 메아리: 달해파리")],
+)
+def test_abilityless_capture_uses_the_localized_enemy_name(language: str, expected: str) -> None:
+    stage = load_catalog_bundle(CONTENT).campaign.stages["world_3_stage_1"]
+    player = replace(
+        _player(1),
+        captured_ability_id=None,
+        captured_visual_id="moonjelly",
+    )
+
+    hud = build_hud_view(
+        _snapshot(stage, (player,)),
+        stage,
+        (_active_player(1),),
+        CameraView(0, 0, 0, 0, 0, ()),
+        AudioStatus(True, False),
+        "saved",
+        Localizer.load(CONTENT, language),  # type: ignore[arg-type]
+    )
+
+    assert hud.players[0].captured_label == expected
+
+
+def test_boss_telegraph_adds_redundant_localized_icon_text_and_pattern_state() -> None:
+    bundle = load_catalog_bundle(CONTENT)
+    stage = bundle.campaign.stages["world_1_stage_5"]
+    spec = bundle.bosses["rootjaw"]
+    base = BossView(
+        800,
+        "rootjaw",
+        spec.phases[0].phase_id,
+        700,
+        420,
+        128,
+        128,
+        -1,
+        "Idle",
+        100,
+        spec.max_hp,
+        None,
+        0,
+        spec.phases[0].vulnerability,
+    )
+    common = (
+        stage,
+        (_active_player(1),),
+        CameraView(0, 0, 0, 0, 0, ()),
+        AudioStatus(True, False),
+        "saved",
+        Localizer.load(CONTENT, "en"),
+    )
+
+    idle = build_hud_view(_snapshot(stage, (_player(1),), boss=base), *common).boss
+    warning = build_hud_view(
+        _snapshot(
+            stage,
+            (_player(1),),
+            boss=replace(base, telegraph_id=spec.phases[0].attacks[0].attack_id, telegraph_remaining_ms=400),
+        ),
+        *common,
+    ).boss
+
+    assert idle is not None and warning is not None
+    assert idle.vulnerability_pattern == warning.vulnerability_pattern
+    assert idle.phase_label == warning.phase_label
+    assert (idle.telegraph_icon, idle.telegraph_label, idle.telegraph_pattern) == (None, None, None)
+    assert (warning.telegraph_icon, warning.telegraph_label, warning.telegraph_pattern) == (
+        "attack",
+        "Incoming attack",
+        "stripes",
+    )
+
+
+def test_catch_up_cues_point_inward_and_clamp_vertical_edge_positions() -> None:
+    stage = load_catalog_bundle(CONTENT).campaign.stages["world_1_stage_1"]
+    players = (_player(1), _player(2))
+    snapshot = replace(
+        _snapshot(stage, players),
+        camera_targets=(
+            CameraTargetView(players[0].entity_id, 1, 0.0, -2_000.0, 1.0, True),
+            CameraTargetView(players[1].entity_id, 2, 1_200.0, 3_000.0, 1.0, True),
+        ),
+    )
+    hud = build_hud_view(
+        snapshot,
+        stage,
+        (_active_player(1), _active_player(2)),
+        CameraView(0, 0, 0, 0, 0, (1, 2)),
+        AudioStatus(True, False),
+        "saved",
+        Localizer.load(CONTENT, "en"),
+    )
+
+    assert tuple((cue.slot, cue.edge, cue.arrow, cue.edge_y) for cue in hud.catch_up_cues) == (
+        (1, "left", "->", 150),
+        (2, "right", "<-", 600),
+    )
+    assert all(32 <= ord(character) <= 126 for cue in hud.catch_up_cues for character in cue.arrow)
+
+
+def test_catch_up_cues_separate_three_players_at_the_same_canvas_edge() -> None:
+    stage = load_catalog_bundle(CONTENT).campaign.stages["world_1_stage_1"]
+    players = tuple(_player(slot) for slot in range(1, 5))
+    snapshot = replace(
+        _snapshot(stage, players),
+        camera_targets=(
+            CameraTargetView(players[0].entity_id, 1, 0.0, 3_000.0, 1.0, True),
+            CameraTargetView(players[1].entity_id, 2, 20.0, 3_000.0, 1.0, True),
+            CameraTargetView(players[2].entity_id, 3, 40.0, 3_000.0, 1.0, True),
+            CameraTargetView(players[3].entity_id, 4, 1_200.0, 3_000.0, 10.0, True),
+        ),
+    )
+
+    hud = build_hud_view(
+        snapshot,
+        stage,
+        tuple(_active_player(slot) for slot in range(1, 5)),
+        CameraView(0, 0, 0, 0, 0, (1, 2, 3)),
+        AudioStatus(True, False),
+        "saved",
+        Localizer.load(CONTENT, "en"),
+    )
+
+    assert tuple(cue.edge_y for cue in hud.catch_up_cues) == (600, 546, 492)
 
 
 def test_hud_is_deeply_immutable_and_does_not_mutate_snapshot_or_inputs() -> None:

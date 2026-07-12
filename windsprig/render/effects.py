@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import random
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Final, cast
 
@@ -154,6 +154,12 @@ class EffectsDirector:
         if type(seed) is not int:
             raise TypeError("effects seed must be an integer")
         self._rng = random.Random(seed)
+        self._particles: tuple[Particle, ...] = ()
+        self._shake: Shake | None = None
+        self._flash: Flash | None = None
+
+    def _frame(self) -> EffectFrame:
+        return EffectFrame(self._particles, self._shake, self._flash)
 
     def _prepare(self, events: Sequence[GameEvent]) -> tuple[_PreparedEffect, ...]:
         if isinstance(events, (str, bytes, bytearray)) or not isinstance(events, Sequence):
@@ -185,9 +191,11 @@ class EffectsDirector:
         if not isinstance(settings, AccessibilitySettings):
             raise TypeError("settings must be AccessibilitySettings")
         prepared = self._prepare(events)
-        particles: list[Particle] = []
-        shake: Shake | None = None
-        flash: Flash | None = None
+        particles = list(self._particles)
+        shake = self._shake if settings.screen_shake and not settings.reduced_motion else None
+        flash = self._flash
+        if settings.reduced_motion:
+            particles = [particle for particle in particles if particle.kind != "afterimage"]
         for item in prepared:
             spec = item.spec
             count = min(spec.count, 4) if settings.reduced_motion else spec.count
@@ -210,7 +218,43 @@ class EffectsDirector:
             flash = Flash(item.x, item.y, 28, spec.pattern, 90)
             if settings.screen_shake and not settings.reduced_motion and spec.amplitude > 0:
                 shake = Shake(spec.amplitude, spec.duration_ms)
-        return EffectFrame(tuple(particles), shake, flash)
+        self._particles = tuple(particles)
+        self._shake = shake
+        self._flash = flash
+        return self._frame()
+
+    def advance(self, render_dt_ms: int) -> EffectFrame:
+        """Advance and expire render-owned effects without touching simulation time."""
+
+        if type(render_dt_ms) is not int:
+            raise TypeError("effect render delta must be an integer")
+        if render_dt_ms < 0:
+            raise ValueError("effect render delta must be non-negative")
+        if render_dt_ms == 0:
+            return self._frame()
+
+        seconds = render_dt_ms / 1_000.0
+        advanced: list[Particle] = []
+        for particle in self._particles:
+            remaining = particle.life_ms - render_dt_ms
+            if remaining <= 0:
+                continue
+            advanced.append(
+                replace(
+                    particle,
+                    x=particle.x + particle.vx * seconds,
+                    y=particle.y + particle.vy * seconds,
+                    life_ms=remaining,
+                )
+            )
+        self._particles = tuple(advanced)
+        if self._shake is not None:
+            remaining = self._shake.duration_ms - render_dt_ms
+            self._shake = replace(self._shake, duration_ms=remaining) if remaining > 0 else None
+        if self._flash is not None:
+            remaining = self._flash.duration_ms - render_dt_ms
+            self._flash = replace(self._flash, duration_ms=remaining) if remaining > 0 else None
+        return self._frame()
 
 
 def empty_effect_frame() -> EffectFrame:

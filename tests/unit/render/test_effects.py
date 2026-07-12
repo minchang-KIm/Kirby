@@ -65,6 +65,49 @@ def test_motion_effects_exist_only_when_both_accessibility_switches_allow_them()
     assert reduced.flash is not None
 
 
+def test_effects_advance_velocity_and_expire_every_temporal_channel() -> None:
+    director = EffectsDirector(seed=31)
+    initial = director.handle(
+        (GameEvent("AttackHit", {"x": 100.0, "y": 200.0, "facing": 1}),),
+        _settings(),
+    )
+    particle = initial.particles[0]
+    assert initial.shake is not None and initial.flash is not None
+
+    advanced = director.advance(40)
+
+    assert advanced.particles[0].x == pytest.approx(particle.x + particle.vx * 0.04)
+    assert advanced.particles[0].y == pytest.approx(particle.y + particle.vy * 0.04)
+    assert advanced.particles[0].life_ms == particle.life_ms - 40
+    assert advanced.particles[0].color_token == particle.color_token
+    assert advanced.shake is not None
+    assert advanced.shake.duration_ms == initial.shake.duration_ms - 40
+    assert advanced.flash is not None
+    assert advanced.flash.duration_ms == initial.flash.duration_ms - 40
+    assert advanced.flash.pattern_token == initial.flash.pattern_token
+
+    expired = director.advance(1_000)
+
+    assert expired.particles == ()
+    assert expired.shake is None
+    assert expired.flash is None
+
+
+def test_reduced_motion_mote_and_harmonize_effects_remain_semantically_distinct() -> None:
+    settings = _settings(shake=False, reduced_motion=True)
+    mote = EffectsDirector(seed=8).handle((GameEvent("MoteCollected", {"x": 80.0, "y": 90.0}),), settings)
+    equipped = EffectsDirector(seed=8).handle((GameEvent("AbilityEquipped", {"x": 80.0, "y": 90.0}),), settings)
+
+    assert mote.shake is None and equipped.shake is None
+    assert all(particle.kind != "afterimage" for particle in (*mote.particles, *equipped.particles))
+    assert (mote.particles[0].kind, mote.particles[0].color_token) != (
+        equipped.particles[0].kind,
+        equipped.particles[0].color_token,
+    )
+    assert mote.flash is not None and equipped.flash is not None
+    assert mote.flash.pattern_token != equipped.flash.pattern_token
+
+
 @pytest.mark.parametrize("value", [True, "12", math.inf, -math.inf, math.nan])
 def test_effects_reject_malformed_event_coordinates_before_numeric_conversion(value: object) -> None:
     event = GameEvent("AttackHit", {"x": value, "y": 20.0, "facing": 1})

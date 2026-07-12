@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Final, cast
 
 from windsprig.content.models import StageSpec
-from windsprig.gameplay.snapshot import BossView, PlayerView, StageSnapshot
+from windsprig.gameplay.snapshot import BossView, CameraTargetView, PlayerView, StageSnapshot
 from windsprig.input.roster import ActivePlayer
 from windsprig.localization import Localizer
 from windsprig.platform.services import AudioStatus
@@ -145,6 +145,8 @@ class HudBossVM:
     hp_ratio: float
     vulnerability_pattern: str
     telegraph_icon: str | None
+    telegraph_label: str | None = None
+    telegraph_pattern: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", _label("boss name", self.name))
@@ -157,6 +159,36 @@ class HudBossVM:
         )
         if self.telegraph_icon is not None:
             object.__setattr__(self, "telegraph_icon", _non_empty("boss telegraph icon", self.telegraph_icon))
+        for name in ("telegraph_label", "telegraph_pattern"):
+            value = getattr(self, name)
+            if value is not None:
+                object.__setattr__(self, name, _non_empty(f"boss {name}", value))
+        states = (self.telegraph_icon, self.telegraph_label, self.telegraph_pattern)
+        if any(value is None for value in states) and any(value is not None for value in states):
+            raise ValueError("boss telegraph icon, label, and pattern must appear together")
+
+
+@dataclass(frozen=True, slots=True)
+class HudCatchUpVM:
+    """One edge-clamped direction cue for an outlying active player."""
+
+    slot: int
+    edge: str
+    arrow: str
+    edge_y: int
+
+    def __post_init__(self) -> None:
+        slot = _strict_int("catch-up cue slot", self.slot, minimum=1)
+        if slot > 4:
+            raise ValueError("catch-up cue slot must be in [1, 4]")
+        if self.edge not in {"left", "right"}:
+            raise ValueError("catch-up cue edge must be left or right")
+        expected_arrow = "->" if self.edge == "left" else "<-"
+        if self.arrow != expected_arrow:
+            raise ValueError("catch-up cue arrow must point from the edge toward the group")
+        edge_y = _strict_int("catch-up cue edge y", self.edge_y, minimum=150)
+        if edge_y > 600:
+            raise ValueError("catch-up cue edge y must be in [150, 600]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,6 +205,7 @@ class HudViewModel:
     motes_label: str
     muted_label: str
     save_status_label: str
+    catch_up_cues: tuple[HudCatchUpVM, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.players) is not tuple or any(not isinstance(player, HudPlayerVM) for player in self.players):
@@ -194,6 +227,13 @@ class HudViewModel:
             raise ValueError("HUD catch-up slots must be unique canonical order")
         if any(slot not in slots for slot in self.catch_up_slots):
             raise ValueError("HUD catch-up slots must identify visible players")
+        if type(self.catch_up_cues) is not tuple or any(
+            not isinstance(cue, HudCatchUpVM) for cue in self.catch_up_cues
+        ):
+            raise TypeError("HUD catch-up cues must be a tuple of HudCatchUpVM values")
+        cue_slots = tuple(cue.slot for cue in self.catch_up_cues)
+        if cue_slots != self.catch_up_slots:
+            raise ValueError("HUD catch-up cues must match canonical catch-up slots")
         if self.boss is not None and not isinstance(self.boss, HudBossVM):
             raise TypeError("HUD boss must be HudBossVM or None")
         object.__setattr__(self, "muted_indicator", _strict_bool("muted indicator", self.muted_indicator))
@@ -258,7 +298,7 @@ def _player_vm(player: PlayerView, active: ActivePlayer, tr: Localizer) -> HudPl
     captured_icon: str | None = None
     if player.captured_visual_id is not None:
         captured_ability_label = (
-            tr.text("hud.none")
+            tr.text(f"enemy.{player.captured_visual_id}.name")
             if player.captured_ability_id is None
             else tr.text(f"ability.{player.captured_ability_id}.name")
         )
@@ -314,8 +354,55 @@ def _boss_vm(boss: BossView, stage: StageSpec, tr: Localizer) -> HudBossVM:
         phase_label=tr.text("status.boss_phase", phase=phase_number),
         hp_ratio=hp / maximum_hp,
         vulnerability_pattern=f"pattern.boss.{boss.vulnerability_state}",
-        telegraph_icon="boss" if boss.telegraph_id is not None else None,
+        telegraph_icon="attack" if boss.telegraph_id is not None else None,
+        telegraph_label=tr.text("hud.boss_incoming") if boss.telegraph_id is not None else None,
+        telegraph_pattern="stripes" if boss.telegraph_id is not None else None,
     )
+
+
+def _catch_up_cues(snapshot: StageSnapshot, camera: CameraView) -> tuple[HudCatchUpVM, ...]:
+    """Project camera outliers to stable, readable logical-canvas edges."""
+
+    if type(snapshot.camera_targets) is not tuple or any(
+        not isinstance(target, CameraTargetView) for target in snapshot.camera_targets
+    ):
+        raise TypeError("snapshot camera targets must be a tuple of CameraTargetView values")
+    active = tuple(target for target in snapshot.camera_targets if target.enabled and target.weight > 0)
+    by_slot = {target.slot: target for target in active}
+    if len(by_slot) != len(active):
+        raise ValueError("active camera target slots must be unique")
+    total_weight = sum(target.weight for target in active)
+    if not active or not math.isfinite(total_weight) or total_weight <= 0:
+        if camera.catch_up_slots:
+            raise ValueError("camera catch-up slots require active weighted targets")
+        return ()
+    center_x = sum(target.x * target.weight for target in active) / total_weight
+    occupied: dict[str, list[int]] = {"left": [], "right": []}
+    cues: list[HudCatchUpVM] = []
+    for slot in camera.catch_up_slots:
+        target = by_slot.get(slot)
+        if target is None:
+            raise ValueError("camera catch-up slots must identify active weighted targets")
+        if target.x == center_x:
+            raise ValueError("camera catch-up target must have a direction toward the group")
+        edge = "left" if target.x < center_x else "right"
+        desired_y = max(150, min(600, round(target.y - camera.y - 25)))
+        edge_y: int | None = None
+        # Search a finite logical-canvas grid instead of bouncing between two
+        # occupied edge positions when three players share one direction.
+        for distance in range(10):
+            candidates = (desired_y,) if distance == 0 else (desired_y - distance * 54, desired_y + distance * 54)
+            for candidate in candidates:
+                if 150 <= candidate <= 600 and all(abs(candidate - used) >= 54 for used in occupied[edge]):
+                    edge_y = candidate
+                    break
+            if edge_y is not None:
+                break
+        if edge_y is None:
+            raise ValueError("catch-up cues cannot fit on the logical-canvas edge")
+        occupied[edge].append(edge_y)
+        cues.append(HudCatchUpVM(slot, edge, "->" if edge == "left" else "<-", edge_y))
+    return tuple(cues)
 
 
 def _gather_label(snapshot: StageSnapshot, active_slots: tuple[int, ...], tr: Localizer) -> str | None:
@@ -422,7 +509,8 @@ def build_hud_view(
         motes_label=tr.text("hud.motes", found=sum(mote_icons)),
         muted_label=tr.text("audio.muted_failure") if muted else "",
         save_status_label=tr.text(save_status_key),
+        catch_up_cues=_catch_up_cues(snapshot, camera),
     )
 
 
-__all__ = ["BOSS_PHASE_NUMBER", "HudBossVM", "HudPlayerVM", "HudViewModel", "build_hud_view"]
+__all__ = ["BOSS_PHASE_NUMBER", "HudBossVM", "HudCatchUpVM", "HudPlayerVM", "HudViewModel", "build_hud_view"]

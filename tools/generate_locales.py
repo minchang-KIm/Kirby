@@ -326,6 +326,7 @@ ROWS: dict[str, CopyPair] = {
     "hud.motes": ("Motes {found}/3", "티끌 {found}/3"),
     "hud.hover": ("Hover", "활공"),
     "hud.captured": ("Held echo: {ability}", "보유 메아리: {ability}"),
+    "hud.boss_incoming": ("Incoming attack", "준비 중"),
     "hud.none": ("None", "없음"),
     "hud.gather": ("Gather {seconds}", "집결 {seconds}"),
     "status.invulnerable": ("Invulnerable", "무적"),

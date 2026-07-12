@@ -4,7 +4,7 @@ from .animation import AnimationBank, AnimationClip, AnimationCursor, build_defa
 from .assets import AssetCatalog, MissingAssetError
 from .camera import CameraController, CameraView, Letterbox, compute_letterbox
 from .effects import EffectFrame, EffectsDirector, Flash, Particle, Shake, empty_effect_frame
-from .hud import HudBossVM, HudPlayerVM, HudViewModel, build_hud_view
+from .hud import HudBossVM, HudCatchUpVM, HudPlayerVM, HudViewModel, build_hud_view
 from .renderer import StageRenderer
 from .ui import contrast_ratio, draw_panel, draw_text, minimum_text_contrast, relative_luminance
 
@@ -19,6 +19,7 @@ __all__ = [
     "EffectsDirector",
     "Flash",
     "HudBossVM",
+    "HudCatchUpVM",
     "HudPlayerVM",
     "HudViewModel",
     "Letterbox",

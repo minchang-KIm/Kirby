@@ -27,47 +27,23 @@ def _color(name: str, value: object) -> tuple[int, int, int, int]:
     return channels[0], channels[1], channels[2], channels[3]
 
 
-def _composite(foreground: tuple[int, int, int, int], background: tuple[int, int, int]) -> tuple[float, float, float]:
-    alpha = foreground[3] / 255.0
-    return tuple(foreground[index] * alpha + background[index] * (1.0 - alpha) for index in range(3))  # type: ignore[return-value]
-
-
-def _opaque_rgb(color: tuple[int, int, int, int]) -> tuple[float, float, float]:
-    return _composite(color, (0, 0, 0))
-
-
 def _linear_channel(channel: float) -> float:
     value = channel / 255.0
     return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
 
 
 def relative_luminance(color: Color) -> float:
-    """Return WCAG relative luminance after compositing alpha over black."""
+    """Return WCAG luminance for RGB as drawn on the opaque logical canvas."""
 
-    red, green, blue = _opaque_rgb(_color("color", color))
+    red, green, blue, _ = _color("color", color)
     return 0.2126 * _linear_channel(red) + 0.7152 * _linear_channel(green) + 0.0722 * _linear_channel(blue)
 
 
 def contrast_ratio(foreground: Color, background: Color) -> float:
-    """Return WCAG contrast after compositing both colors as actually painted."""
+    """Return contrast for the effective opaque RGB values pygame paints."""
 
-    background_rgba = _color("background", background)
-    effective_background = _opaque_rgb(background_rgba)
-    foreground_rgba = _color("foreground", foreground)
-    effective_foreground = _composite(
-        foreground_rgba,
-        tuple(round(channel) for channel in effective_background),  # type: ignore[arg-type]
-    )
-    foreground_luminance = (
-        0.2126 * _linear_channel(effective_foreground[0])
-        + 0.7152 * _linear_channel(effective_foreground[1])
-        + 0.0722 * _linear_channel(effective_foreground[2])
-    )
-    background_luminance = (
-        0.2126 * _linear_channel(effective_background[0])
-        + 0.7152 * _linear_channel(effective_background[1])
-        + 0.0722 * _linear_channel(effective_background[2])
-    )
+    foreground_luminance = relative_luminance(_color("foreground", foreground))
+    background_luminance = relative_luminance(_color("background", background))
     lighter = max(foreground_luminance, background_luminance)
     darker = min(foreground_luminance, background_luminance)
     return (lighter + 0.05) / (darker + 0.05)
@@ -172,10 +148,12 @@ def draw_panel(
     icon_surface = _surface(icon)
     fill_rgba = _color("panel fill", fill)
     outline_rgba = _color("panel outline", outline)
-    pygame.draw.rect(surface, fill_rgba, rect, border_radius=8)
+    # Panels are deliberately opaque on the logical canvas; normalizing here
+    # keeps the pixels and the WCAG calculation identical on helper surfaces.
+    pygame.draw.rect(surface, fill_rgba[:3], rect, border_radius=8)
     overlay = _pattern_overlay(rect.size, pattern_token, outline_rgba)
     surface.blit(overlay, rect.topleft)
-    pygame.draw.rect(surface, outline_rgba, rect, width=2, border_radius=8)
+    pygame.draw.rect(surface, outline_rgba[:3], rect, width=2, border_radius=8)
     icon_limit = max(1, min(32, rect.height - 12))
     scaled_icon = pygame.transform.smoothscale(icon_surface, (icon_limit, icon_limit))
     icon_position = (rect.left + 8, rect.centery - icon_limit // 2)

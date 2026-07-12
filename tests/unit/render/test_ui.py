@@ -22,12 +22,27 @@ def test_wcag_luminance_and_contrast_use_exact_linearized_srgb() -> None:
     assert minimum_text_contrast(24) == 3.0
 
 
-def test_contrast_composites_translucent_foreground_over_actual_background() -> None:
-    transparent = contrast_ratio((255, 255, 255, 0), (0, 0, 0))
-    half_alpha = contrast_ratio((255, 255, 255, 128), (0, 0, 0))
+def test_contrast_matches_rgba_colors_as_drawn_on_the_opaque_logical_canvas() -> None:
+    # pygame's primitive draw writes RGB channels directly on the release canvas;
+    # an alpha byte must not turn an effectively white panel into a black one.
+    assert contrast_ratio((255, 255, 255), (255, 255, 255, 1)) == 1.0
+    assert contrast_ratio((255, 255, 255, 0), (0, 0, 0)) == 21.0
 
-    assert transparent == 1.0
-    assert 5.2 < half_alpha < 5.4
+
+def test_draw_text_rejects_false_contrast_from_nearly_transparent_white_fill() -> None:
+    pygame.font.init()
+    canvas = pygame.Surface((180, 60))
+
+    with pytest.raises(ValueError, match="contrast"):
+        draw_text(
+            canvas,
+            pygame.font.Font(None, 24),
+            "Unreadable",
+            (4, 4),
+            foreground=(255, 255, 255),
+            background=(255, 255, 255, 1),
+            size_px=20,
+        )
 
 
 def test_draw_text_enforces_exact_body_and_large_text_thresholds() -> None:
@@ -107,6 +122,27 @@ def test_panel_top_anchor_reserves_lower_rows_for_complex_hud_content() -> None:
     )
 
     assert any(tuple(canvas.get_at((x, y))[:3]) == (245, 247, 226) for y in range(10, 34) for x in range(52, 180))
+
+
+def test_panel_paints_rgba_fill_as_the_effective_opaque_canvas_color() -> None:
+    pygame.font.init()
+    canvas = pygame.Surface((240, 100), pygame.SRCALPHA)
+    icon = pygame.Surface((24, 24), pygame.SRCALPHA)
+
+    draw_panel(
+        canvas,
+        pygame.Rect(4, 4, 220, 80),
+        fill=(255, 255, 255, 1),
+        outline=(0, 0, 0),
+        pattern_token="dots",
+        icon=icon,
+        label="Opaque",
+        font=pygame.font.Font(None, 24),
+        foreground=(0, 0, 0),
+        font_size_px=20,
+    )
+
+    assert tuple(canvas.get_at((200, 70))) == (255, 255, 255, 255)
 
 
 def test_ui_primitives_reject_invalid_colors_sizes_and_pattern_tokens() -> None:

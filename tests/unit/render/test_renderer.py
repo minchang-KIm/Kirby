@@ -675,6 +675,72 @@ def test_renderer_draws_every_effect_family_and_complete_accessible_hud_state(
         _render(_renderer(assets), stage, snapshot, hud=hud, effects=unknown)
 
 
+def test_renderer_consumes_ability_icons_effect_color_life_and_flash_pattern(
+    assets: AssetCatalog,
+    bundle: CatalogBundle,
+) -> None:
+    stage = bundle.campaign.stages["world_1_stage_1"]
+    snapshot = _snapshot(stage)
+    renderer = _renderer(assets)
+    hud = _hud(snapshot, stage)
+    base_player = replace(hud.players[0], ability_label="Echo")
+
+    bloom = pygame.Surface((310, 130), pygame.SRCALPHA)
+    cinder = pygame.Surface((310, 130), pygame.SRCALPHA)
+    renderer._draw_player_hud(bloom, replace(base_player, ability_icon="bloomblade"), bloom.get_rect())
+    renderer._draw_player_hud(cinder, replace(base_player, ability_icon="cinder"), cinder.get_rect())
+    assert _hash(bloom.subsurface((44, 36, 34, 34))) != _hash(cinder.subsurface((44, 36, 34, 34)))
+
+    camera = CameraView(0, 0, 0, 0, 0, ())
+    short = pygame.Surface((220, 180), pygame.SRCALPHA)
+    long = pygame.Surface((220, 180), pygame.SRCALPHA)
+    alternate = pygame.Surface((220, 180), pygame.SRCALPHA)
+    renderer._draw_effects(
+        short,
+        EffectFrame(
+            (Particle("mote", 80, 90, 0, 0, 30, "pattern.mote"),), None, Flash(140, 90, 28, "pattern.mote", 30)
+        ),
+        camera,
+    )
+    renderer._draw_effects(
+        long,
+        EffectFrame(
+            (Particle("mote", 80, 90, 0, 0, 240, "pattern.mote"),), None, Flash(140, 90, 28, "pattern.mote", 90)
+        ),
+        camera,
+    )
+    renderer._draw_effects(
+        alternate,
+        EffectFrame(
+            (Particle("mote", 80, 90, 0, 0, 240, "pattern.harmonize"),),
+            None,
+            Flash(140, 90, 28, "pattern.harmonize", 90),
+        ),
+        camera,
+    )
+
+    assert _hash(short) != _hash(long)
+    assert _hash(long) != _hash(alternate)
+
+
+def test_reduced_motion_mote_and_harmonize_render_pixel_distinct(
+    assets: AssetCatalog,
+) -> None:
+    settings = AccessibilitySettings(screen_shake=False, reduced_motion=True)
+    event_payload = {"x": 100.0, "y": 100.0, "facing": 1}
+    mote = EffectsDirector(seed=12).handle((GameEvent("MoteCollected", event_payload),), settings)
+    equipped = EffectsDirector(seed=12).handle((GameEvent("AbilityEquipped", event_payload),), settings)
+    renderer = _renderer(assets)
+    camera = CameraView(0, 0, 0, 0, 0, ())
+    mote_canvas = pygame.Surface((220, 220), pygame.SRCALPHA)
+    equipped_canvas = pygame.Surface((220, 220), pygame.SRCALPHA)
+
+    renderer._draw_effects(mote_canvas, mote, camera)
+    renderer._draw_effects(equipped_canvas, equipped, camera)
+
+    assert _hash(mote_canvas) != _hash(equipped_canvas)
+
+
 def test_renderer_covers_interaction_states_captured_enemy_and_offscreen_entities(
     assets: AssetCatalog,
     bundle: CatalogBundle,
