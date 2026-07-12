@@ -23,24 +23,26 @@ def _tree_hashes(root: Path) -> dict[str, str]:
     }
 
 
-def test_required_codepoints_cover_release_copy_ascii_and_all_modern_hangul() -> None:
+def test_required_codepoints_cover_release_copy_and_printable_ascii() -> None:
     required = generate_font_subset.required_codepoints(ROOT)
     assert set(range(0x20, 0x7F)) <= required
-    assert set(range(0xAC00, 0xD7A4)) <= required
+    catalog_codepoints: set[int] = set()
     for locale in ("en", "ko"):
         catalog = json.loads((ROOT / f"windsprig/content/strings.{locale}.json").read_text(encoding="utf-8"))
-        assert {ord(character) for value in catalog.values() for character in value} <= required
+        catalog_codepoints.update(ord(character) for value in catalog.values() for character in value)
+    assert required == set(range(0x20, 0x7F)) | catalog_codepoints
+    assert {ord(character) for character in "바람싹 메아리"} <= required
 
 
 def test_committed_runtime_font_is_static_complete_and_materially_smaller() -> None:
     assert generate_font_subset.check(ROOT) == ()
-    assert (ROOT / RUNTIME_FONT).stat().st_size < (ROOT / SOURCE_FONT).stat().st_size // 4
+    assert (ROOT / RUNTIME_FONT).stat().st_size < 250_000
 
     font = TTFont(ROOT / RUNTIME_FONT, lazy=False)
     try:
         cmap = font.getBestCmap()
         assert cmap is not None
-        assert generate_font_subset.required_codepoints(ROOT) <= set(cmap)
+        assert generate_font_subset.required_codepoints(ROOT) == set(cmap)
         assert "fvar" not in font
         assert "gvar" not in font
     finally:
