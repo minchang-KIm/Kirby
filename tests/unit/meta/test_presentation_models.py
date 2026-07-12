@@ -293,3 +293,161 @@ def test_results_require_the_post_application_best_time() -> None:
 
     with pytest.raises(ValueError, match="profile is missing best time"):
         build_results_view(result, delta, inconsistent, bundle, _localizer())
+
+
+@pytest.mark.parametrize(
+    ("delta_changes", "profile_changes", "message"),
+    [
+        (
+            {"newly_unlocked_node_ids": ("world_6_node_1",)},
+            {"unlocked_nodes": frozenset({"world_1_node_1", "world_6_node_1"})},
+            "newly_unlocked_node_ids must be the canonical following node",
+        ),
+        (
+            {"newly_unlocked_world_ids": ("world_6",)},
+            {"unlocked_worlds": frozenset({"world_1", "world_6"})},
+            "newly_unlocked_world_ids must be the canonical following world",
+        ),
+        (
+            {"new_reward_ids": ("challenge.stillstar",)},
+            {"challenge_rewards": frozenset({"challenge.stillstar"})},
+            "reward is not threshold-eligible: challenge.stillstar",
+        ),
+    ],
+)
+def test_results_reject_persisted_but_semantically_unrelated_known_delta_ids(
+    delta_changes: dict[str, object],
+    profile_changes: dict[str, object],
+    message: str,
+) -> None:
+    bundle = _bundle()
+    result = _result()
+    profile, delta = apply_stage_result(
+        SaveProfile(profile_id="profile_1", display_name="Sprig"),
+        result,
+        bundle,
+    )
+    forged_delta = replace(delta, **delta_changes)  # type: ignore[arg-type]
+    forged_profile = replace(profile, **profile_changes)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match=message):
+        build_results_view(
+            result,
+            forged_delta,
+            forged_profile,
+            bundle,
+            _localizer(),
+        )
+
+
+def test_replay_cannot_forge_the_following_node_to_enable_next_stage() -> None:
+    bundle = _bundle()
+    first, _ = apply_stage_result(
+        SaveProfile(profile_id="profile_1", display_name="Sprig"),
+        _result(clear_time_ms=80_000),
+        bundle,
+    )
+    replay_result = _result(clear_time_ms=90_000)
+    replay, delta = apply_stage_result(first, replay_result, bundle)
+    forged = replace(delta, newly_unlocked_node_ids=("world_1_node_2",))
+
+    with pytest.raises(
+        ValueError,
+        match="replay results cannot report new progression unlocks",
+    ):
+        build_results_view(replay_result, forged, replay, bundle, _localizer())
+
+
+@pytest.mark.parametrize(
+    ("profile_changes", "message"),
+    [
+        ({"clear_counts": {}}, "post profile is missing the applied stage clear"),
+        (
+            {"collected_mote_ids": frozenset()},
+            "post profile is missing result mote: world_1_stage_1:mote:1",
+        ),
+        (
+            {"discovered_abilities": frozenset()},
+            "post profile is missing result ability: galehook",
+        ),
+        ({"last_played_stage": None}, "post profile last_played_stage does not match result"),
+        (
+            {"best_times_ms": {"world_1_stage_1": 95_000}},
+            "post profile best time does not match result comparison",
+        ),
+        (
+            {"clear_counts": {"world_1_stage_1": 2}},
+            "completion delta first_clear does not match post clear count",
+        ),
+    ],
+)
+def test_results_require_all_applied_result_facts_in_the_post_profile(
+    profile_changes: dict[str, object],
+    message: str,
+) -> None:
+    bundle = _bundle()
+    result = _result(mote_ids=("world_1_stage_1:mote:1",))
+    profile, delta = apply_stage_result(
+        SaveProfile(profile_id="profile_1", display_name="Sprig"),
+        result,
+        bundle,
+    )
+    forged_profile = replace(profile, **profile_changes)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match=message):
+        build_results_view(
+            result,
+            delta,
+            forged_profile,
+            bundle,
+            _localizer(),
+        )
+
+
+def test_results_require_every_reported_new_fact_in_the_post_profile() -> None:
+    bundle = _bundle()
+    result = _result(mote_ids=("world_1_stage_1:mote:1",))
+    profile, delta = apply_stage_result(
+        SaveProfile(profile_id="profile_1", display_name="Sprig"),
+        result,
+        bundle,
+    )
+    missing_node = replace(
+        profile,
+        unlocked_nodes=frozenset({"world_1_node_1"}),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="newly unlocked node is missing from post profile: world_1_node_2",
+    ):
+        build_results_view(result, delta, missing_node, bundle, _localizer())
+
+    known_motes = tuple(
+        mote.mote_id
+        for stage in bundle.campaign.stages.values()
+        for mote in stage.motes
+        if mote.mote_id != "world_1_stage_1:mote:1"
+    )[:5]
+    reward_before = replace(
+        SaveProfile(profile_id="profile_1", display_name="Sprig"),
+        collected_mote_ids=frozenset(known_motes),
+    )
+    reward_profile, reward_delta = apply_stage_result(
+        reward_before,
+        result,
+        bundle,
+    )
+    missing_reward = replace(reward_profile, challenge_rewards=frozenset())
+
+    with pytest.raises(
+        ValueError,
+        match="new reward is missing from post profile: gallery.sunleaf",
+    ):
+        build_results_view(
+            result,
+            reward_delta,
+            missing_reward,
+            bundle,
+            _localizer(),
+        )

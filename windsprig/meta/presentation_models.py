@@ -162,6 +162,7 @@ def _strict_delta_ids(name: str, values: object) -> tuple[str, ...]:
 def _validate_delta(
     result: StageResult,
     delta: CompletionDelta,
+    profile: SaveProfile,
     catalog: CatalogBundle,
 ) -> None:
     if not isinstance(delta, CompletionDelta):
@@ -207,6 +208,92 @@ def _validate_delta(
     expected_new_best = delta.previous_best_ms is None or result.clear_time_ms < delta.previous_best_ms
     if delta.is_new_best is not expected_new_best:
         raise ValueError("is_new_best does not match the result comparison")
+
+    _validate_post_profile(result, delta, profile, catalog)
+    _validate_progression_delta(result, delta, profile, catalog)
+
+
+def _validate_post_profile(
+    result: StageResult,
+    delta: CompletionDelta,
+    profile: SaveProfile,
+    catalog: CatalogBundle,
+) -> None:
+    clear_count = profile.clear_counts.get(result.stage_id, 0)
+    if clear_count <= 0:
+        raise ValueError("post profile is missing the applied stage clear")
+    if delta.first_clear is not (clear_count == 1):
+        raise ValueError("completion delta first_clear does not match post clear count")
+    if delta.first_clear is not (delta.previous_best_ms is None):
+        raise ValueError("completion delta first_clear does not match previous best")
+
+    best_time = profile.best_times_ms.get(result.stage_id)
+    if best_time is None:
+        raise ValueError(f"profile is missing best time for result stage: {result.stage_id}")
+    expected_best = (
+        result.clear_time_ms if delta.previous_best_ms is None else min(delta.previous_best_ms, result.clear_time_ms)
+    )
+    if best_time != expected_best:
+        raise ValueError("post profile best time does not match result comparison")
+
+    for mote_id in result.collected_mote_ids:
+        if mote_id not in profile.collected_mote_ids:
+            raise ValueError(f"post profile is missing result mote: {mote_id}")
+    for ability_id in result.discovered_ability_ids:
+        if ability_id not in profile.discovered_abilities:
+            raise ValueError(f"post profile is missing result ability: {ability_id}")
+    if profile.last_played_stage != result.stage_id:
+        raise ValueError("post profile last_played_stage does not match result")
+    if result.node_id not in profile.unlocked_nodes:
+        raise ValueError(f"post profile is missing result node: {result.node_id}")
+    if result.world_id not in profile.unlocked_worlds:
+        raise ValueError(f"post profile is missing result world: {result.world_id}")
+
+    for node_id in delta.newly_unlocked_node_ids:
+        if node_id not in profile.unlocked_nodes:
+            raise ValueError(f"newly unlocked node is missing from post profile: {node_id}")
+    for world_id in delta.newly_unlocked_world_ids:
+        if world_id not in profile.unlocked_worlds:
+            raise ValueError(f"newly unlocked world is missing from post profile: {world_id}")
+    for reward_id in delta.new_reward_ids:
+        if reward_id not in profile.challenge_rewards:
+            raise ValueError(f"new reward is missing from post profile: {reward_id}")
+
+
+def _validate_progression_delta(
+    result: StageResult,
+    delta: CompletionDelta,
+    profile: SaveProfile,
+    catalog: CatalogBundle,
+) -> None:
+    nodes = ordered_nodes(catalog)
+    current_index = next(index for index, node in enumerate(nodes) if node.node_id == result.node_id)
+    following = nodes[current_index + 1] if current_index + 1 < len(nodes) else None
+    expected_node_ids = (following.node_id,) if following is not None else ()
+    if delta.newly_unlocked_node_ids not in ((), expected_node_ids):
+        raise ValueError("newly_unlocked_node_ids must be the canonical following node")
+
+    expected_world_ids = (
+        (following.world_id,) if following is not None and following.world_id != result.world_id else ()
+    )
+    if delta.newly_unlocked_world_ids not in ((), expected_world_ids):
+        raise ValueError("newly_unlocked_world_ids must be the canonical following world")
+    if not delta.first_clear and (delta.newly_unlocked_node_ids or delta.newly_unlocked_world_ids):
+        raise ValueError("replay results cannot report new progression unlocks")
+    if delta.newly_unlocked_world_ids and (following is None or delta.newly_unlocked_node_ids != (following.node_id,)):
+        raise ValueError("a new world requires its canonical following node")
+
+    catalog_mote_ids = frozenset(mote.mote_id for stage in catalog.campaign.stages.values() for mote in stage.motes)
+    collected_count = len(profile.collected_mote_ids & catalog_mote_ids)
+    reward_by_id = {reward.reward_id: reward for reward in catalog.rewards.mote_thresholds}
+    for reward_id in delta.new_reward_ids:
+        if reward_by_id[reward_id].threshold > collected_count:
+            raise ValueError(f"reward is not threshold-eligible: {reward_id}")
+    canonical_reward_ids = tuple(
+        reward.reward_id for reward in catalog.rewards.mote_thresholds if reward.reward_id in delta.new_reward_ids
+    )
+    if delta.new_reward_ids != canonical_reward_ids:
+        raise ValueError("new_reward_ids must follow canonical reward order")
 
 
 def _comparison_label(
@@ -294,15 +381,15 @@ def build_results_view(
     """Build localized results from an already-applied immutable result."""
 
     validate_stage_result(profile, result, catalog, require_unlocked=False)
-    _validate_delta(result, delta, catalog)
+    _validate_delta(result, delta, profile, catalog)
     stage = catalog.campaign.stages[result.stage_id]
-    best_time = profile.best_times_ms.get(result.stage_id)
-    if best_time is None:
-        raise ValueError(f"profile is missing best time for result stage: {result.stage_id}")
+    best_time = profile.best_times_ms[result.stage_id]
     nodes = ordered_nodes(catalog)
     node_index = next(index for index, node in enumerate(nodes) if node.node_id == result.node_id)
     following_node = nodes[node_index + 1] if node_index + 1 < len(nodes) else None
-    can_next_stage = following_node is not None and following_node.node_id in delta.newly_unlocked_node_ids
+    can_next_stage = (
+        delta.first_clear and following_node is not None and following_node.node_id in delta.newly_unlocked_node_ids
+    )
     breakdown = completion_breakdown(profile, catalog)
     return ResultsViewModel(
         stage_name=tr.text(stage.name_key),
