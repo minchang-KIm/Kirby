@@ -141,6 +141,57 @@ def test_solo_goal_creates_exact_result_once_and_freezes_world() -> None:
     assert runtime.world.rng.state_hash() == frozen_rng
 
 
+@pytest.mark.parametrize(
+    "boundary",
+    ("runtime_result", "snapshot", "terminal_step", "world_hash"),
+)
+def test_forged_clear_time_is_rejected_at_every_frozen_result_boundary(
+    boundary: str,
+) -> None:
+    runtime = make_runtime(stage=_checkpoint_stage())
+    player = runtime.world.get_component(runtime.player_entities[1], Transform)
+    _, _, goal = runtime.world.query(StageGoal, Transform)[0]
+    player.x, player.y = goal.x, goal.y
+    completed = runtime.step(InputFrame.empty())
+    authentic = completed.result
+    assert authentic is not None
+    assert authentic.clear_time_ms == 16
+    assert runtime.result is authentic
+    assert runtime.world.resources["stage_result"] is authentic
+
+    runtime.world.resources["stage_result"] = replace(
+        authentic,
+        clear_time_ms=160_016,
+    )
+
+    with pytest.raises(ValueError, match="clear_time_ms"):
+        if boundary == "runtime_result":
+            _ = runtime.result
+        elif boundary == "snapshot":
+            runtime.snapshot()
+        elif boundary == "terminal_step":
+            runtime.step(InputFrame.empty())
+        else:
+            runtime.world.world_hash()
+
+
+def test_completed_result_resource_cannot_replace_the_frozen_authority() -> None:
+    runtime = make_runtime(stage=_checkpoint_stage())
+    player = runtime.world.get_component(runtime.player_entities[1], Transform)
+    _, _, goal = runtime.world.query(StageGoal, Transform)[0]
+    player.x, player.y = goal.x, goal.y
+    authentic = runtime.step(InputFrame.empty()).result
+    assert authentic is not None
+    equal_replacement = replace(authentic)
+    assert equal_replacement == authentic
+    assert equal_replacement is not authentic
+
+    runtime.world.resources["stage_result"] = equal_replacement
+
+    with pytest.raises(ValueError, match="frozen StageResult authority"):
+        runtime.snapshot()
+
+
 def test_final_non_boss_scheduler_matches_canonical_order() -> None:
     runtime = make_runtime(stage=_checkpoint_stage())
 
@@ -400,6 +451,61 @@ def test_result_facts_are_rejected_before_completion_is_published(
     assert all(event.topic != "StageCompleted" for event in runtime.world.events.peek())
 
 
+@pytest.mark.parametrize("boundary", ("snapshot", "step", "world_hash"))
+@pytest.mark.parametrize(
+    ("collected", "run_motes", "message"),
+    (
+        (
+            {"future_stage:mote:99"},
+            1,
+            "collected mote IDs are not authored for test_stage",
+        ),
+        (
+            ["test_stage:mote:1", "test_stage:mote:1"],
+            2,
+            "collected_mote_ids must not contain duplicate IDs",
+        ),
+        (
+            {"test_stage:mote:1"},
+            0,
+            "run_energy_spheres must exactly count collected stable mote IDs",
+        ),
+    ),
+)
+def test_mote_resources_are_catalog_bound_before_every_runtime_boundary(
+    boundary: str,
+    collected: object,
+    run_motes: int,
+    message: str,
+) -> None:
+    stage = make_stage(
+        motes=(MoteSpec("test_stage:mote:1", 15, 5),),
+        checkpoints=(CheckpointSpec("test_stage:checkpoint:1", 2, 7),),
+    )
+    runtime = make_runtime(stage=stage)
+    runtime.world.resources["collected_mote_ids"] = collected
+    runtime.world.resources["run_energy_spheres"] = run_motes
+    before = (
+        runtime.world.frame_index,
+        runtime.world.rng.state_hash(),
+        runtime.world.get_component(runtime.player_entities[1], Transform).x,
+    )
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        if boundary == "snapshot":
+            runtime.snapshot()
+        elif boundary == "step":
+            runtime.step(InputFrame.empty())
+        else:
+            runtime.world.world_hash()
+
+    assert (
+        runtime.world.frame_index,
+        runtime.world.rng.state_hash(),
+        runtime.world.get_component(runtime.player_entities[1], Transform).x,
+    ) == before
+
+
 @pytest.mark.parametrize("corruption", ("missing_resource", "duplicate_id", "two_active"))
 def test_checkpoint_corruption_is_rejected_before_input_or_frame_mutation(
     corruption: str,
@@ -446,6 +552,10 @@ def test_death_counter_validation_rejects_bool_and_partial_state(
         (
             CheckpointSpec("test_stage:checkpoint:1", 2, 7),
             CheckpointSpec("test_stage:checkpoint:1", 10, 7),
+        ),
+        (
+            CheckpointSpec("test_stage:checkpoint:1", 2, 7),
+            CheckpointSpec("test_stage:checkpoint:2", 2, 7),
         ),
         (CheckpointSpec("test_stage:checkpoint:1", 2, 5),),
     ),

@@ -12,7 +12,9 @@ from tests.helpers.gameplay import (
     make_active_player,
     make_runtime,
     make_session,
+    make_stage,
 )
+from windsprig.content.loader import MoteSpec
 from windsprig.core.events import GameEvent
 from windsprig.gameplay.components import (
     AbilityState,
@@ -558,7 +560,13 @@ def test_reset_uses_hashed_leader_authority_when_roster_metadata_is_stale() -> N
 
 
 def test_gameplay_resources_are_hashed_but_presentation_resources_are_not() -> None:
-    runtime = make_runtime()
+    stage = make_stage(
+        motes=(
+            MoteSpec("test_stage:mote:1", 14, 5),
+            MoteSpec("test_stage:mote:2", 15, 5),
+        ),
+    )
+    runtime = make_runtime(stage=stage)
     baseline = runtime.world.snapshot().world_state_hash
 
     runtime.world.resources["camera_target"] = (999.0, -999.0)
@@ -570,10 +578,13 @@ def test_gameplay_resources_are_hashed_but_presentation_resources_are_not() -> N
     assert runtime.world.snapshot().world_state_hash == baseline
 
     runtime.world.resources["run_energy_spheres"] = 1
+    runtime.world.resources["collected_mote_ids"] = {"test_stage:mote:1"}
     assert runtime.world.snapshot().world_state_hash != baseline
     runtime.world.resources["run_energy_spheres"] = 0
+    runtime.world.resources["collected_mote_ids"] = set()
     assert runtime.world.snapshot().world_state_hash == baseline
 
+    runtime.world.resources["run_energy_spheres"] = 2
     runtime.world.resources["collected_mote_ids"] = {
         "test_stage:mote:2",
         "test_stage:mote:1",
@@ -605,8 +616,6 @@ def test_stage_retry_and_replay_reset_before_returning_to_play(source: SessionPh
         enter_victory(session)
         session.dispatch(SessionAction.SHOW_RESULTS)
         action = SessionAction.REPLAY_STAGE
-    if source is SessionPhase.PAUSED:
-        session.runtime.world.resources["run_energy_spheres"] = 2
     previous_frame = session.last_frame
 
     snapshot = session.dispatch(action)

@@ -8,7 +8,7 @@ import pytest
 
 from tests.helpers.gameplay import make_active_player, make_runtime, make_stage
 from windsprig.config import GameConfig
-from windsprig.content.loader import CheckpointSpec, EnemySpawn
+from windsprig.content.loader import CheckpointSpec, EnemySpawn, MoteSpec
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     AbilityState,
@@ -270,16 +270,32 @@ def test_invalid_collected_mote_collection_is_rejected_by_view_and_hash(
     )
 
 
-def test_arbitrary_collected_mote_ids_share_one_canonical_view_and_hash() -> None:
-    runtime = make_runtime()
-    runtime.world.resources["collected_mote_ids"] = ["external:mote", "external:mote"]
+def test_authored_collected_mote_ids_share_one_canonical_view_and_hash() -> None:
+    stage = make_stage(
+        motes=(
+            MoteSpec("test_stage:mote:1", 14, 5),
+            MoteSpec("test_stage:mote:2", 15, 5),
+        )
+    )
+    runtime = make_runtime(stage=stage)
+    runtime.world.resources["run_energy_spheres"] = 2
+    runtime.world.resources["collected_mote_ids"] = [
+        "test_stage:mote:2",
+        "test_stage:mote:1",
+    ]
 
     snapshot = runtime.snapshot()
-    duplicate_hash = runtime.world.world_hash()
-    runtime.world.resources["collected_mote_ids"] = {"external:mote"}
+    canonical_hash = runtime.world.world_hash()
+    runtime.world.resources["collected_mote_ids"] = {
+        "test_stage:mote:1",
+        "test_stage:mote:2",
+    }
 
-    assert snapshot.collected_mote_ids == ("external:mote",)
-    assert runtime.world.world_hash() == duplicate_hash
+    assert snapshot.collected_mote_ids == (
+        "test_stage:mote:1",
+        "test_stage:mote:2",
+    )
+    assert runtime.world.world_hash() == canonical_hash
 
 
 def test_runtime_rejects_stage_without_player_spawn() -> None:
@@ -512,6 +528,10 @@ def test_collision_moves_actor_and_combat_moves_legacy_projectile_exactly_once()
 def test_snapshot_builds_sorted_immutable_views_for_current_runtime_entities() -> None:
     stage = make_stage(
         enemy_spawns=(EnemySpawn(200.0, 160.0, "grunt", "cinder", 180.0, 240.0),),
+        motes=(
+            MoteSpec("test_stage:mote:1", 14, 5),
+            MoteSpec("test_stage:mote:2", 15, 5),
+        ),
         checkpoints=(CheckpointSpec("test_stage.start", 2, 7),),
     )
     runtime = make_runtime(
@@ -527,6 +547,7 @@ def test_snapshot_builds_sorted_immutable_views_for_current_runtime_entities() -
         "test_stage:mote:2",
         "test_stage:mote:1",
     }
+    runtime.world.resources["run_energy_spheres"] = 2
 
     snapshot = runtime.snapshot()
 

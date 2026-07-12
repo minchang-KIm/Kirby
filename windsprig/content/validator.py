@@ -172,6 +172,7 @@ def _identity_issues(bundle: CatalogBundle) -> list[ValidationIssue]:
     spawn_ids: dict[str, str] = {}
     for stage_id, stage in bundle.campaign.stages.items():
         base = f"campaign.stages.{stage_id}"
+        checkpoint_tiles: dict[tuple[int, int], str] = {}
         for index, mote in enumerate(stage.motes):
             _record_duplicate(
                 mote_ids,
@@ -181,13 +182,26 @@ def _identity_issues(bundle: CatalogBundle) -> list[ValidationIssue]:
                 issues,
             )
         for index, checkpoint in enumerate(stage.checkpoints):
+            checkpoint_path = f"{base}.checkpoints[{index}]"
             _record_duplicate(
                 checkpoint_ids,
                 checkpoint.checkpoint_id,
-                f"{base}.checkpoints[{index}]",
+                checkpoint_path,
                 "duplicate_checkpoint_id",
                 issues,
             )
+            tile = (checkpoint.tile_x, checkpoint.tile_y)
+            previous = checkpoint_tiles.get(tile)
+            if previous is None:
+                checkpoint_tiles[tile] = checkpoint_path
+            else:
+                issues.append(
+                    _issue(
+                        "duplicate_checkpoint_geometry",
+                        checkpoint_path,
+                        f"duplicates checkpoint tile {tile!r} first declared at {previous}",
+                    )
+                )
         for index, interaction in enumerate(stage.interactions):
             _record_duplicate(
                 interaction_ids,

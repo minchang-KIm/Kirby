@@ -133,6 +133,14 @@ def validate_checkpoint_state(world: World, stage: StageSpec) -> tuple[Checkpoin
         raise ValueError("checkpoint IDs must be non-empty strings")
     if len(expected_ids) != len(set(expected_ids)):
         raise ValueError("stage checkpoint IDs must be unique")
+    expected_tiles: set[tuple[int, int]] = set()
+    for spec in stage.checkpoints:
+        if type(spec.tile_x) is not int or type(spec.tile_y) is not int:
+            raise TypeError("checkpoint tile coordinates must be integers")
+        tile = (spec.tile_x, spec.tile_y)
+        if tile in expected_tiles:
+            raise ValueError("stage checkpoint tile geometry must be unique")
+        expected_tiles.add(tile)
 
     rows = cast(list[CheckpointRow], world.query(Checkpoint, Transform, Collider))
     if len(rows) != len(stage.checkpoints):

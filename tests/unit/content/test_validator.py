@@ -152,6 +152,34 @@ def test_navigation_reports_missing_edge_nodes_and_disconnected_targets(
     ]
 
 
+def test_validator_rejects_duplicate_checkpoint_geometry(tmp_path: Path) -> None:
+    bundle = load_catalog_bundle(write_minimal_bundle(tmp_path))
+    stage = bundle.campaign.stages["demo_01"]
+    first = stage.checkpoints[0]
+    duplicate_geometry = replace(
+        first,
+        checkpoint_id=f"{first.checkpoint_id}.duplicate-geometry",
+    )
+    stage = replace(
+        stage,
+        checkpoints=(first, duplicate_geometry),
+    )
+    bundle = replace(
+        bundle,
+        campaign=replace(bundle.campaign, stages={stage.stage_id: stage}),
+    )
+    assets, locales = _context()
+
+    report = validate_bundle(bundle, assets, locales)
+
+    assert _selected(("duplicate_checkpoint_geometry",), report) == [
+        (
+            "duplicate_checkpoint_geometry",
+            "campaign.stages.demo_01.checkpoints[1]",
+        )
+    ]
+
+
 def test_validator_checks_ground_row_against_stage_bounds(tmp_path: Path) -> None:
     bundle = load_catalog_bundle(write_minimal_bundle(tmp_path))
     stage = bundle.campaign.stages["demo_01"]

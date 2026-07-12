@@ -92,6 +92,7 @@ from windsprig.gameplay.validation import (
     validate_damage_queue,
     validate_deaths_by_slot,
     validate_pending_enemy_launches,
+    validate_result_ids,
 )
 from windsprig.input.commands import InputFrame
 from windsprig.input.roster import ActivePlayer
@@ -188,6 +189,7 @@ class StageRuntime:
         self._result: StageResult | None = None
         self._elapsed_ms = 0
         self._snapshot_frame_index = 0
+        self._step_elapsed_ms: int | None = None
         self.world.events.subscribe("*", self._capture_step_event)
 
         # Stable player IDs keep slot-to-entity traces reproducible across roster orderings.
@@ -215,19 +217,27 @@ class StageRuntime:
         self._step_events.clear()
         # Events already waiting in the bus belong to this step's queued frame.
         self._step_events.extend(self.world.events.peek())
-        self._capturing_step_events = True
+        # WHY: World.snapshot() hashes terminal resources before World increments
+        # its frame index. Reserving the next fixed-step timestamp gives both the
+        # in-step hash and the post-step runtime one timing authority.
+        next_elapsed_ms = self._elapsed_ms + self.config.fixed_dt_ms
+        self._step_elapsed_ms = next_elapsed_ms
         try:
-            simulation = self.world.step(self.config.fixed_dt_ms, input_frame)
+            self._capturing_step_events = True
+            try:
+                simulation = self.world.step(self.config.fixed_dt_ms, input_frame)
+            finally:
+                self._capturing_step_events = False
+            self._last_simulation = simulation
+            self._snapshot_frame_index = simulation.frame_index
+            self._elapsed_ms = next_elapsed_ms
+            resources = self._validate_gameplay_resources(self.world)
+            if resources.stage_outcome is StageOutcome.COMPLETED:
+                if resources.stage_result is None:
+                    raise RuntimeError("completed stages must own one frozen StageResult")
+                self._result = resources.stage_result
         finally:
-            self._capturing_step_events = False
-        self._last_simulation = simulation
-        self._snapshot_frame_index = simulation.frame_index
-        self._elapsed_ms += self.config.fixed_dt_ms
-        resources = self._validate_gameplay_resources(self.world)
-        if resources.stage_outcome is StageOutcome.COMPLETED:
-            if resources.stage_result is None:
-                raise RuntimeError("completed stages must own one frozen StageResult")
-            self._result = resources.stage_result
+            self._step_elapsed_ms = None
         return StageFrame(simulation, self.snapshot(), tuple(self._step_events), self._result)
 
     def sync_active_players(
@@ -316,6 +326,7 @@ class StageRuntime:
         self._result = replacement._result
         self._elapsed_ms = replacement._elapsed_ms
         self._snapshot_frame_index = replacement._snapshot_frame_index
+        self._step_elapsed_ms = replacement._step_elapsed_ms
         self._last_simulation = replacement._last_simulation
         return reset_snapshot
 
@@ -494,7 +505,10 @@ class StageRuntime:
     @property
     def result(self) -> StageResult | None:
         """Return the exact frozen completion facts owned by this runtime."""
-        return self._result
+        resources = self._validate_gameplay_resources(self.world)
+        if resources.stage_result is not self._result:
+            raise ValueError("world stage_result must be the frozen StageResult authority")
+        return resources.stage_result
 
     def _new_world(self) -> World:
         world = World(seed=self.seed)
@@ -646,12 +660,14 @@ class StageRuntime:
             raise TypeError("run_energy_spheres must be an integer")
         if run_motes < 0:
             raise ValueError("run_energy_spheres must be non-negative")
-        raw_collected = world.resources.get("collected_mote_ids")
-        if not isinstance(raw_collected, (tuple, list, set, frozenset)) or any(
-            type(mote_id) is not str for mote_id in raw_collected
-        ):
-            raise TypeError("collected_mote_ids must be a collection of strings")
-        collected = tuple(sorted(set(raw_collected)))
+        collected = validate_result_ids(
+            world.resources.get("collected_mote_ids"),
+            "collected_mote_ids",
+            {mote.mote_id for mote in self.stage.motes},
+            self.stage.stage_id,
+        )
+        if run_motes != len(collected):
+            raise ValueError("run_energy_spheres must exactly count collected stable mote IDs")
         raw_discovered = world.resources.get("discovered_ability_ids")
         if not isinstance(raw_discovered, (tuple, list, set, frozenset)) or any(
             type(ability_id) is not str for ability_id in raw_discovered
@@ -678,13 +694,21 @@ class StageRuntime:
         if outcome is not StageOutcome.COMPLETED and validated_result is not None:
             raise ValueError("stage_result is allowed only for a completed outcome")
         if validated_result is not None:
+            expected_clear_time_ms = self._authoritative_elapsed_ms(world)
+            if validated_result.clear_time_ms != expected_clear_time_ms:
+                raise ValueError("stage_result.clear_time_ms must match runtime-owned fixed-step elapsed time")
             expected_result = build_stage_result(
                 world,
                 self.stage,
-                validated_result.clear_time_ms,
+                expected_clear_time_ms,
             )
             if validated_result != expected_result:
                 raise ValueError("stage_result must exactly match gameplay-owned completion facts")
+            if self._result is None:
+                if self._step_elapsed_ms is None:
+                    raise ValueError("stage_result can be frozen only by an active fixed step")
+            elif validated_result is not self._result:
+                raise ValueError("world stage_result must be the frozen StageResult authority")
         return _ValidatedGameplayResources(
             active_players=active_players,
             active_authority=tuple(active_authority),
@@ -700,6 +724,15 @@ class StageRuntime:
             deaths_by_slot=deaths,
             stage_result=validated_result,
         )
+
+    def _authoritative_elapsed_ms(self, world: World) -> int:
+        """Bind result time to the runtime's fixed-step clock, never result input."""
+
+        world_elapsed_ms = world.frame_index * self.config.fixed_dt_ms
+        expected_elapsed_ms = self._step_elapsed_ms if self._step_elapsed_ms is not None else self._elapsed_ms
+        if world_elapsed_ms not in {self._elapsed_ms, expected_elapsed_ms}:
+            raise ValueError("runtime elapsed time must match the fixed-step frame index")
+        return expected_elapsed_ms
 
     def _capture_step_event(self, event: GameEvent) -> None:
         if self._capturing_step_events:
