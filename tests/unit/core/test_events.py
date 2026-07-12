@@ -17,12 +17,31 @@ class MutablePayload:
         self.value = "original"
 
 
+class MutableString(str):
+    mutable: list[str]
+
+    def __new__(cls, value: str) -> MutableString:
+        instance = super().__new__(cls, value)
+        instance.mutable = list[str]()
+        return instance
+
+
 class EventKind(Enum):
     OBSERVED = "observed"
 
 
 class MutableEventKind(Enum):
     OBSERVED = list[str]()
+
+
+def pending_bus() -> tuple[EventBus, list[GameEvent], list[GameEvent]]:
+    bus = EventBus()
+    observed: list[GameEvent] = []
+    bus.subscribe("*", observed.append)
+    bus.publish("Pending", {"order": 1})
+    pending = bus.peek()
+    observed.clear()
+    return bus, observed, pending
 
 
 def test_notify_delivers_same_event_once_without_changing_pending_queue() -> None:
@@ -174,4 +193,77 @@ def test_publish_rejects_non_string_nested_mapping_keys_before_delivery() -> Non
         bus.publish("Unsafe", {"nested": {1: "value"}})
 
     assert bus.peek() == []
+    assert observed == []
+
+
+def test_publish_rejects_mutable_string_payload_keys_without_partial_mutation() -> None:
+    bus, observed, pending = pending_bus()
+    mutable_key = MutableString("stage_id")
+
+    with pytest.raises(TypeError, match="mapping keys must be strings"):
+        bus.publish("Unsafe", {"nested": {mutable_key: "stage"}})
+
+    assert bus.peek() == pending
+    assert observed == []
+
+
+def test_event_constructor_rejects_mutable_string_topics() -> None:
+    with pytest.raises(TypeError, match="event topic must be a string"):
+        GameEvent(MutableString("Unsafe"))
+
+
+def test_publish_rejects_mutable_string_topics_without_partial_mutation() -> None:
+    bus, observed, pending = pending_bus()
+
+    with pytest.raises(TypeError, match="event topic must be a string"):
+        bus.publish(MutableString("Unsafe"), {"value": 1})
+
+    assert bus.peek() == pending
+    assert observed == []
+
+
+def test_subscribe_rejects_mutable_string_topics_without_registration() -> None:
+    bus = EventBus()
+    observed: list[GameEvent] = []
+
+    with pytest.raises(TypeError, match="event topic must be a string"):
+        bus.subscribe(MutableString("Unsafe"), observed.append)
+
+    exact = GameEvent("Unsafe")
+    bus.notify(exact)
+    assert observed == []
+    assert bus.peek() == []
+
+
+def test_notify_rejects_game_event_subclasses_without_delivery_or_queue_changes() -> None:
+    class ExtendedGameEvent(GameEvent):
+        mutable = list[str]()
+
+    bus, observed, pending = pending_bus()
+    unsafe = ExtendedGameEvent("Unsafe")
+
+    with pytest.raises(TypeError, match="event must be a GameEvent"):
+        bus.notify(unsafe)
+
+    assert bus.peek() == pending
+    assert observed == []
+
+
+def test_publish_rejects_mutable_slotted_enum_state_without_partial_mutation() -> None:
+    class MutableSlotMixin:
+        __slots__ = ("mutable",)
+
+        def __init__(self, value: str) -> None:
+            _ = value
+            self.mutable = list[str]()
+
+    class SlottedEventKind(MutableSlotMixin, Enum):
+        OBSERVED = "observed"
+
+    bus, observed, pending = pending_bus()
+
+    with pytest.raises(TypeError, match="enum values must be immutable"):
+        bus.publish("Unsafe", {"kind": SlottedEventKind.OBSERVED})
+
+    assert bus.peek() == pending
     assert observed == []
