@@ -214,7 +214,10 @@ def _patch_build_dependencies(
         commands.append(command)
         built = root / "build" / "web-stage" / "build" / "web"
         built.mkdir(parents=True)
-        (built / "index.html").write_text("<canvas></canvas>", encoding="utf-8")
+        (built / "index.html").write_text(
+            "<canvas></canvas><script>load('windsprig.apk')</script>",
+            encoding="utf-8",
+        )
         (built / "runtime.js").write_text("start();\n", encoding="utf-8")
         (built / "windsprig.apk").write_bytes(b"game")
 

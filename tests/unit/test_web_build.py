@@ -189,6 +189,67 @@ def test_probe_marker_is_verified_in_both_packaged_source_manifests(
         build_web.verify_probe_artifacts(output, probe=probe)
 
 
+def test_normalized_apk_stores_pcm_audio_and_deflates_other_members_deterministically(
+    tmp_path: Path,
+) -> None:
+    archive_path = tmp_path / "game.apk"
+    payloads = {
+        "assets/main.py": b"print('windsprig')\n" * 40,
+        "assets/audio/confirm.wav": b"RIFF" + b"\x00" * 4_096,
+    }
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for name, payload in reversed(tuple(payloads.items())):
+            archive.writestr(name, payload)
+
+    build_web._normalize_zip(archive_path)
+    first = archive_path.read_bytes()
+    build_web._normalize_zip(archive_path)
+
+    assert archive_path.read_bytes() == first
+    with zipfile.ZipFile(archive_path) as archive:
+        assert archive.namelist() == sorted(payloads)
+        assert {name: archive.read(name) for name in archive.namelist()} == payloads
+        assert archive.getinfo("assets/main.py").compress_type == zipfile.ZIP_DEFLATED
+        assert archive.getinfo("assets/audio/confirm.wav").compress_type == zipfile.ZIP_STORED
+
+
+def test_prune_unused_pygbag_archives_keeps_only_the_loader_referenced_apk(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "web"
+    output.mkdir()
+    (output / "index.html").write_text(
+        '<script>platform.fopen("game.apk", "rb")</script>',
+        encoding="utf-8",
+    )
+    apk = output / "game.apk"
+    tarball = output / "game.tar.gz"
+    apk.write_bytes(b"apk")
+    tarball.write_bytes(b"unused duplicate")
+
+    build_web.prune_unused_pygbag_archives(output)
+
+    assert apk.read_bytes() == b"apk"
+    assert not tarball.exists()
+
+
+def test_prune_unused_pygbag_archives_refuses_a_referenced_tarball(tmp_path: Path) -> None:
+    output = tmp_path / "web"
+    output.mkdir()
+    (output / "index.html").write_text(
+        '<script>platform.fopen("game.apk", "rb"); fetch("game.tar.gz")</script>',
+        encoding="utf-8",
+    )
+    (output / "game.apk").write_bytes(b"apk")
+    tarball = output / "game.tar.gz"
+    tarball.write_bytes(b"still referenced")
+
+    with pytest.raises(SystemExit, match="still references duplicate Pygbag archive"):
+        build_web.prune_unused_pygbag_archives(output)
+
+    assert tarball.read_bytes() == b"still referenced"
+
+
 def test_cleanup_removes_only_an_exact_allowlisted_relative_target(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     target = root / "build" / "web-stage"

@@ -15,7 +15,7 @@ import tarfile
 import zipfile
 from collections.abc import Callable
 from importlib.metadata import version
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Final, TypedDict
 
 import pygame
@@ -288,7 +288,13 @@ def _normalize_zip(path: Path) -> None:
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as target:
         for name, data in sorted(entries):
             info = zipfile.ZipInfo(name, date_time=(2000, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
+            # CPython/WASM inflates large PCM members on the browser main
+            # thread before the app can start. WAV payloads are already the
+            # canonical release representation, so storing them trades a
+            # modest archive-size increase for bounded extraction latency.
+            info.compress_type = (
+                zipfile.ZIP_STORED if PurePosixPath(name).suffix.casefold() == ".wav" else zipfile.ZIP_DEFLATED
+            )
             info.create_system = 3
             info.external_attr = 0o100644 << 16
             target.writestr(info, data)
@@ -344,6 +350,27 @@ def verify_probe_artifacts(output: Path, *, probe: bool) -> None:
             ) from error
         if actual != expected:
             raise SystemExit(f"probe capability mismatch in {archive_path.name}")
+
+
+def prune_unused_pygbag_archives(output: Path) -> None:
+    """Remove Pygbag's duplicate tarball only when the loader uses one APK.
+
+    Probe verification runs first against both generated containers. This
+    boundary then proves the final HTML names the APK and no longer names a
+    tarball before removing transfer bytes that can never be consumed.
+    """
+
+    index = output / "index.html"
+    html = index.read_text(encoding="utf-8")
+    apk_archives = sorted(output.glob("*.apk"))
+    tar_archives = sorted(output.glob("*.tar.gz"))
+    if len(apk_archives) != 1 or apk_archives[0].name not in html:
+        raise SystemExit("web loader must reference exactly one Pygbag APK")
+    referenced_tarballs = tuple(path.name for path in tar_archives if path.name in html)
+    if referenced_tarballs:
+        raise SystemExit("web loader still references duplicate Pygbag archive: " + ", ".join(referenced_tarballs))
+    for path in tar_archives:
+        path.unlink()
 
 
 def measure_output(output: Path) -> _OutputMeasurements:
@@ -582,6 +609,7 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
     verify_same_origin_runtime_index(built / "index.html")
     _normalize_archives(built)
     verify_probe_artifacts(built, probe=probe)
+    prune_unused_pygbag_archives(built)
     measurements = measure_output(built)
     identity = read_build_identity(root, "web")
     if identity.commit_sha != runtime_manifest.source_commit:
