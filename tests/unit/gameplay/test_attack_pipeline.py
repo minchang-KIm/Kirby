@@ -305,6 +305,59 @@ def test_galehook_stops_when_it_reaches_owner() -> None:
     assert world.get_component(boomerang, Velocity) == Velocity()
 
 
+def test_full_scheduler_preserves_stationary_attacks_and_authored_gale_motion() -> None:
+    runtime = make_runtime()
+    owner = runtime.player_entities[1]
+    owner_transform = runtime.world.get_component(owner, Transform)
+    owner_collider = runtime.world.get_component(owner, Collider)
+    owner_transform.y = 228.0
+    owner_collider.on_ground = True
+    runtime.world.resources["attack_requests"] = [
+        _request(
+            owner,
+            ability_id="none",
+            attack_kind="burn_zone",
+            x=300.0,
+            y=100.0,
+            vx=0.0,
+            vy=0.0,
+            ttl_ms=960,
+            pierce=10_000,
+        ),
+        _request(
+            owner,
+            ability_id="none",
+            attack_kind="boomerang",
+            x=200.0,
+            y=228.0,
+            vx=440.0,
+            vy=0.0,
+            ttl_ms=800,
+            pierce=2,
+            pull_strength=260.0,
+        ),
+    ]
+
+    runtime.step(InputFrame.empty())
+    by_kind = {attack.attack_kind: entity_id for entity_id, attack in runtime.world.query(Attack)}
+    burn_id = by_kind["burn_zone"]
+    gale_id = by_kind["boomerang"]
+
+    for _ in range(22):
+        runtime.step(InputFrame.empty())
+        assert runtime.world.get_component(burn_id, Transform).y == 100.0
+        assert runtime.world.get_component(burn_id, Velocity) == Velocity()
+        assert runtime.world.get_component(gale_id, Velocity) == Velocity(440.0, 0.0)
+
+    before_return = runtime.world.get_component(gale_id, Transform).x
+    runtime.step(InputFrame.empty())
+
+    assert runtime.world.get_component(burn_id, Transform).y == 100.0
+    assert runtime.world.get_component(burn_id, Velocity) == Velocity()
+    assert runtime.world.get_component(gale_id, Velocity) == Velocity(-440.0, 0.0)
+    assert runtime.world.get_component(gale_id, Transform).x < before_return
+
+
 def test_overlap_hits_each_target_once_and_pierces_in_entity_order() -> None:
     world = _combat_world()
     owner = _add(world, Transform(0.0, 0.0), Team("player"))
@@ -676,6 +729,40 @@ def test_attack_snapshot_is_frozen_sorted_and_reset_matches_fresh_runtime() -> N
     assert mutated_hash != fresh.world.world_hash()
     assert reset == fresh.snapshot()
     assert runtime.world.world_hash() == fresh.world.world_hash()
+
+
+def test_canonical_attack_view_precedes_mixed_legacy_projectile_view() -> None:
+    runtime = make_runtime()
+    owner = runtime.player_entities[1]
+    mixed = _add(
+        runtime.world,
+        _attack(owner, kind="canonical", ttl_ms=123),
+        Projectile(owner=owner, tag="legacy_duplicate", damage=9, ttl_ms=999),
+        Team("player"),
+        Transform(20.0, 30.0),
+        Collider(10, 12, solid=False),
+        Velocity(-10.0, 0.0),
+    )
+    legacy = _add(
+        runtime.world,
+        Projectile(owner=owner, tag="legacy_only", damage=1, ttl_ms=77),
+        Team("player"),
+        Transform(40.0, 50.0),
+        Collider(8, 9, solid=False),
+        Velocity(),
+    )
+
+    views = runtime.snapshot().attacks
+
+    assert [view.entity_id for view in views].count(mixed) == 1
+    mixed_view = next(view for view in views if view.entity_id == mixed)
+    assert (mixed_view.attack_kind, mixed_view.visual_id, mixed_view.ttl_ms) == (
+        "canonical",
+        "canonical_visual",
+        123,
+    )
+    legacy_view = next(view for view in views if view.entity_id == legacy)
+    assert (legacy_view.attack_kind, legacy_view.ttl_ms) == ("legacy_only", 77)
 
 
 def test_damage_and_pending_launch_resources_are_strictly_validated_and_hashed() -> None:

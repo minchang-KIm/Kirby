@@ -8,6 +8,7 @@ from windsprig.config import GameConfig
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     ActorState,
+    Attack,
     Collider,
     ControlIntent,
     DefenseState,
@@ -96,7 +97,7 @@ class MovementSystem:
             gravity_scales[entity_id] = gravity_scale
 
         for entity_id, velocity, _collider in world.query(Velocity, Collider):
-            if world.has_component(entity_id, Projectile):
+            if world.has_component(entity_id, Attack) or world.has_component(entity_id, Projectile):
                 continue
             gravity_scale = gravity_scales.get(entity_id, 1.0)
             velocity.vy = min(

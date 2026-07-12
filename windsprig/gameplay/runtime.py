@@ -635,6 +635,7 @@ class StageRuntime:
                 Collider,
                 Velocity,
             )
+            if not self.world.has_component(entity_id, Attack)
         ]
         views.extend(
             AttackView(
