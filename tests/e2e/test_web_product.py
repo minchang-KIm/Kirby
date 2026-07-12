@@ -15,9 +15,9 @@ _ROOT = Path(__file__).resolve().parents[2]
 _COLD_BOOT_BUDGET_MS = 12_000
 _CACHED_BOOT_BUDGET_MS = 5_000
 _STAGE_CLEAR_BUDGET_MS = 30_000
-_JUMPING_TRAVERSAL_MS = 8_000
-_GROUNDED_GOAL_SWEEP_MS = 3_000
-_GROUNDED_BACKTRACK_MS = 2_000
+_FIRST_GAP_APPROACH_MS = 3_440
+_HOVER_CROSSING_MS = 720
+_BETWEEN_GAPS_MS = 3_680
 _COMPRESSED_TRANSFER_LIMIT = 30 * 1024 * 1024
 _STATUS_KEYS = ["activePlayers", "clearedStages", "saveStatus", "saveVersion", "state"]
 
@@ -111,39 +111,27 @@ def _drive_first_stage_to_clear(page: Page) -> dict[str, object]:
             return last_status
         return None
 
-    def poll_grounded_phase(duration_ms: int) -> dict[str, object] | None:
-        phase_deadline = min(deadline, time.perf_counter() + duration_ms / 1_000)
-        while time.perf_counter() < phase_deadline:
+    try:
+        page.keyboard.down("KeyD")
+        # WHY: these wall-clock windows exercise the two authored four-tile gaps
+        # through public move/jump/hover input. They do not inspect or mutate the
+        # simulation and retain more than 200 ms of deterministic timing margin.
+        page.wait_for_timeout(_FIRST_GAP_APPROACH_MS)
+        page.keyboard.down("KeyW")
+        page.wait_for_timeout(_HOVER_CROSSING_MS)
+        page.keyboard.up("KeyW")
+        page.wait_for_timeout(_BETWEEN_GAPS_MS)
+        page.keyboard.down("KeyW")
+        page.wait_for_timeout(_HOVER_CROSSING_MS)
+        page.keyboard.up("KeyW")
+
+        while time.perf_counter() < deadline:
             if completed := observe_clear():
                 return completed
             page.wait_for_timeout(100)
-        return None
-
-    try:
-        while time.perf_counter() < deadline:
-            page.keyboard.down("KeyD")
-            traversal_deadline = min(
-                deadline,
-                time.perf_counter() + _JUMPING_TRAVERSAL_MS / 1_000,
-            )
-            while time.perf_counter() < traversal_deadline:
-                if completed := observe_clear():
-                    return completed
-                # Pulsed product input clears the four hazards without controlling state.
-                page.keyboard.press("KeyW")
-                page.wait_for_timeout(350)
-
-            # Landing before the goal prevents a continuous hop from passing above it.
-            if completed := poll_grounded_phase(_GROUNDED_GOAL_SWEEP_MS):
-                return completed
-            page.keyboard.up("KeyD")
-            page.keyboard.down("KeyA")
-            if completed := poll_grounded_phase(_GROUNDED_BACKTRACK_MS):
-                return completed
-            page.keyboard.up("KeyA")
     finally:
+        page.keyboard.up("KeyW")
         page.keyboard.up("KeyD")
-        page.keyboard.up("KeyA")
     raise AssertionError(
         f"first stage did not produce a saved clear within {_STAGE_CLEAR_BUDGET_MS} ms; last status={last_status!r}"
     )
