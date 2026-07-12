@@ -3,7 +3,15 @@ from __future__ import annotations
 from typing import cast
 
 from windsprig.core.ecs import World
-from windsprig.gameplay.components import ActorState, Collider, Transform, Velocity
+from windsprig.gameplay.components import (
+    NON_ENTITY_DAMAGE_SOURCE_ID,
+    ActorState,
+    Collider,
+    DamageRecord,
+    Projectile,
+    Transform,
+    Velocity,
+)
 from windsprig.math2d import Rect, Vec2
 from windsprig.physics import PhysicsBody, TileCollisionWorld, move_body
 
@@ -13,6 +21,9 @@ class CollisionSystem:
         collision_world = cast(TileCollisionWorld, world.resources["collision_world"])
         dt_s = dt_ms / 1000.0
         for entity_id, transform, velocity, collider in world.query(Transform, Velocity, Collider):
+            # WHY: Combat owns legacy projectile motion until Task 8 introduces AttackMotionSystem.
+            if world.has_component(entity_id, Projectile):
+                continue
             body = PhysicsBody(
                 rect=Rect(transform.x, transform.y, collider.width, collider.height),
                 velocity=Vec2(velocity.vx, velocity.vy),
@@ -26,13 +37,20 @@ class CollisionSystem:
             collider.on_ground = result.hit_ground
 
             state = world.try_component(entity_id, ActorState)
-            if state is not None and collider.on_ground and state.name in {"Fall", "Jump", "Float"}:
+            if state is not None and collider.on_ground and state.name in {"Fall", "Jump", "Hover"}:
                 state.name = "Run" if abs(velocity.vx) > 40 else "Idle"
 
             if result.hit_hazard:
                 cast(
-                    list[dict[str, int | float]],
+                    list[DamageRecord],
                     world.resources.setdefault("damage_queue", []),
                 ).append(
-                    {"target": entity_id, "amount": 1, "knockback_x": 0.0, "knockback_y": -200.0}
+                    DamageRecord(
+                        source_id=NON_ENTITY_DAMAGE_SOURCE_ID,
+                        target_id=entity_id,
+                        amount=1,
+                        knockback_x=0.0,
+                        knockback_y=-200.0,
+                        guard_break=True,
+                    )
                 )

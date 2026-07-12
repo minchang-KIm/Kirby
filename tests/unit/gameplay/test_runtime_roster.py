@@ -13,10 +13,14 @@ from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     CameraFocus,
     Collider,
+    ControlIntent,
+    DefenseState,
     Health,
+    MovementState,
     PlayerSlot,
     Projectile,
     StageGoal,
+    Team,
     Transform,
     Velocity,
 )
@@ -109,9 +113,7 @@ def test_leader_authority_updates_snapshot_and_hash_without_reallocation() -> No
     entity_ids = dict(runtime.player_entities)
     initial_hash = runtime.world.world_hash()
 
-    events = runtime.sync_active_players(
-        (replace(p1, is_leader=False), replace(p2, is_leader=True))
-    )
+    events = runtime.sync_active_players((replace(p1, is_leader=False), replace(p2, is_leader=True)))
 
     assert events == ()
     assert runtime.player_entities == entity_ids
@@ -329,9 +331,7 @@ def test_step_captures_each_system_event_in_its_matching_frame_only() -> None:
     completed = runtime.step(InputFrame.empty())
     following = runtime.step(InputFrame.empty())
 
-    assert [event.topic for event in completed.events] == [
-        PROVISIONAL_STAGE_CLEARED_TOPIC
-    ]
+    assert [event.topic for event in completed.events] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
     assert completed.simulation.event_count == len(completed.events) == 1
     assert completed.view.outcome is StageOutcome.COMPLETED
     assert following.events == ()
@@ -364,8 +364,9 @@ def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
 
     assert tuple(type(system).__name__ for system in runtime.world.scheduler.systems) == (
         "InputCommandSystem",
-        "EnemyAISystem",
+        "DefenseSystem",
         "MovementSystem",
+        "EnemyAISystem",
         "CollisionSystem",
         "AbilitySystem",
         "CombatSystem",
@@ -377,11 +378,72 @@ def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
     )
 
 
+def test_player_factory_adds_hashed_movement_and_defense_defaults_for_initial_and_joined_players() -> None:
+    first = make_active_player(1, leader=True)
+    joined = make_active_player(3)
+    runtime = make_runtime(players=(first,))
+    runtime.sync_active_players((first, joined))
+
+    for slot in (1, 3):
+        entity_id = runtime.player_entities[slot]
+        assert runtime.world.get_component(entity_id, MovementState) == MovementState(
+            hover_remaining_ms=runtime.config.hover_duration_ms
+        )
+        assert runtime.world.get_component(entity_id, DefenseState) == DefenseState()
+
+    baseline = runtime.world.world_hash()
+    runtime.world.get_component(runtime.player_entities[1], MovementState).coyote_remaining_ms = 9
+    assert runtime.world.world_hash() != baseline
+
+
+def test_player_view_uses_component_guard_dodge_iframe_and_hover_state() -> None:
+    runtime = make_runtime()
+    player = runtime.player_entities[1]
+    intent = runtime.world.get_component(player, ControlIntent)
+    movement = runtime.world.get_component(player, MovementState)
+    defense = runtime.world.get_component(player, DefenseState)
+    health = runtime.world.get_component(player, Health)
+    intent.guard_held = False
+    movement.hover_remaining_ms = 123
+    defense.guarding = True
+    defense.dodge_remaining_ms = 48
+    health.invulnerable_ms = 0
+
+    view = runtime.snapshot().players[0]
+
+    assert (view.guard_active, view.dodge_active, view.invulnerable) == (True, True, True)
+    assert (view.hover_remaining_ms, view.hover_max_ms) == (123, 850)
+
+    defense.dodge_remaining_ms = 32
+    view = runtime.snapshot().players[0]
+    assert (view.dodge_active, view.invulnerable) == (True, False)
+
+
+def test_collision_moves_actor_and_combat_moves_legacy_projectile_exactly_once() -> None:
+    runtime = make_runtime()
+    actor = runtime.world.create_entity()
+    runtime.world.add_component(actor, Transform(300.0, 100.0))
+    runtime.world.add_component(actor, Velocity(100.0, 0.0))
+    runtime.world.add_component(actor, Collider(10, 10))
+    attack = runtime.world.create_entity()
+    runtime.world.add_component(attack, Projectile(owner=actor, tag="probe", damage=1, ttl_ms=100))
+    runtime.world.add_component(attack, Transform(400.0, 100.0))
+    runtime.world.add_component(attack, Velocity(100.0, 0.0))
+    runtime.world.add_component(attack, Collider(8, 8, solid=False))
+    runtime.world.add_component(attack, Team("neutral"))
+
+    runtime.step(InputFrame.empty())
+
+    actor_transform = runtime.world.get_component(actor, Transform)
+    attack_transform = runtime.world.get_component(attack, Transform)
+    assert (actor_transform.x, actor_transform.y) == pytest.approx((301.6, 100.64))
+    assert (attack_transform.x, attack_transform.y) == pytest.approx((401.6, 100.0))
+    assert runtime.world.get_component(attack, Velocity) == Velocity(100.0, 0.0)
+
+
 def test_snapshot_builds_sorted_immutable_views_for_current_runtime_entities() -> None:
     stage = make_stage(
-        enemy_spawns=(
-            EnemySpawn(200.0, 160.0, "grunt", "cinder", 180.0, 240.0),
-        ),
+        enemy_spawns=(EnemySpawn(200.0, 160.0, "grunt", "cinder", 180.0, 240.0),),
         checkpoints=(CheckpointSpec("test_stage.start", 2, 5),),
     )
     runtime = make_runtime(

@@ -61,13 +61,33 @@ class ActorState:
 class ControlIntent:
     move_axis: int = 0
     jump_pressed: bool = False
-    float_held: bool = False
+    hover_held: bool = False
     draw_pressed: bool = False
     draw_released: bool = False
     ability_pressed: bool = False
     guard_held: bool = False
     dodge_pressed: bool = False
     drop_pressed: bool = False
+
+
+@dataclass
+class MovementState:
+    """Own the deterministic player movement windows."""
+
+    coyote_remaining_ms: int = 0
+    jump_buffer_remaining_ms: int = 0
+    hover_remaining_ms: int = 850
+    hover_ready: bool = True
+
+
+@dataclass
+class DefenseState:
+    """Own active guard and dodge timing."""
+
+    guarding: bool = False
+    dodge_remaining_ms: int = 0
+    dodge_cooldown_ms: int = 0
+    dodge_direction: int = 1
 
 
 @dataclass
@@ -135,6 +155,21 @@ class CameraFocus:
     enabled: bool = True
 
 
+@dataclass(frozen=True, slots=True)
+class DamageRecord:
+    """Carry one complete deterministic hit across the queue boundary."""
+
+    source_id: int
+    target_id: int
+    amount: int
+    knockback_x: float
+    knockback_y: float
+    guard_break: bool
+
+
+NON_ENTITY_DAMAGE_SOURCE_ID = 0
+
+
 @dataclass
 class DamageQueue:
-    pending: list[tuple[int, int, int]] = field(default_factory=list)
+    pending: list[DamageRecord] = field(default_factory=list)

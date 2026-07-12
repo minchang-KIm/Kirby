@@ -5,7 +5,16 @@ from __future__ import annotations
 from typing import cast
 
 from windsprig.core.ecs import World
-from windsprig.gameplay.components import Collider, EnemyAI, Health, Projectile, Team, Transform, Velocity
+from windsprig.gameplay.components import (
+    Collider,
+    DamageRecord,
+    EnemyAI,
+    Health,
+    Projectile,
+    Team,
+    Transform,
+    Velocity,
+)
 from windsprig.math2d import Rect
 
 
@@ -15,7 +24,7 @@ class CombatSystem:
     def update(self, world: World, dt_ms: int) -> None:
         dt_s = dt_ms / 1000.0
         damage_queue = cast(
-            list[dict[str, int | float]],
+            list[DamageRecord],
             world.resources.setdefault("damage_queue", []),
         )
         to_destroy: set[int] = set()
@@ -42,12 +51,14 @@ class CombatSystem:
                 if not projectile_rect.intersects(target_rect):
                     continue
                 damage_queue.append(
-                    {
-                        "target": target_id,
-                        "amount": projectile.damage,
-                        "knockback_x": velocity.vx * 0.5,
-                        "knockback_y": min(-120.0, velocity.vy * 0.5),
-                    }
+                    DamageRecord(
+                        source_id=projectile.owner,
+                        target_id=target_id,
+                        amount=projectile.damage,
+                        knockback_x=velocity.vx * 0.5,
+                        knockback_y=min(-120.0, velocity.vy * 0.5),
+                        guard_break=False,
+                    )
                 )
                 to_destroy.add(projectile_id)
                 break
@@ -55,26 +66,26 @@ class CombatSystem:
         # Enemy body contact damage.
         players = [row for row in targets if row[1].name == "player"]
         enemies = [
-            row + (world.try_component(row[0], EnemyAI),)
-            for row in targets
-            if row[1].name == "enemy" and row[3].solid
+            row + (world.try_component(row[0], EnemyAI),) for row in targets if row[1].name == "enemy" and row[3].solid
         ]
         for player_id, _, ptf, pcol, php in players:
             if php.dead:
                 continue
             prect = Rect(ptf.x, ptf.y, pcol.width, pcol.height)
-            for _enemy_id, _, etf, ecol, ehp, ai in enemies:
+            for enemy_id, _, etf, ecol, ehp, ai in enemies:
                 if ehp.dead or ai is None:
                     continue
                 erect = Rect(etf.x, etf.y, ecol.width, ecol.height)
                 if prect.intersects(erect):
                     damage_queue.append(
-                        {
-                            "target": player_id,
-                            "amount": 2 if ai.kind == "boss" else 1,
-                            "knockback_x": 180.0 if etf.x <= ptf.x else -180.0,
-                            "knockback_y": -120.0,
-                        }
+                        DamageRecord(
+                            source_id=enemy_id,
+                            target_id=player_id,
+                            amount=2 if ai.kind == "boss" else 1,
+                            knockback_x=180.0 if etf.x <= ptf.x else -180.0,
+                            knockback_y=-120.0,
+                            guard_break=False,
+                        )
                     )
 
         for entity_id in to_destroy:

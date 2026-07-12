@@ -14,7 +14,13 @@ from tests.helpers.gameplay import (
     make_session,
 )
 from windsprig.core.events import GameEvent
-from windsprig.gameplay.components import PlayerSlot, StageGoal, Transform
+from windsprig.gameplay.components import (
+    DefenseState,
+    MovementState,
+    PlayerSlot,
+    StageGoal,
+    Transform,
+)
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.gameplay.session import (
     _TRANSITIONS,
@@ -194,8 +200,7 @@ def test_stage_outcome_resource_is_typed_and_has_no_legacy_authority() -> None:
 @pytest.mark.parametrize(
     ("source", "action", "target", "navigation"),
     tuple(
-        (source, action, target, navigation)
-        for (source, action), (target, navigation) in EXPECTED_TRANSITIONS.items()
+        (source, action, target, navigation) for (source, action), (target, navigation) in EXPECTED_TRANSITIONS.items()
     ),
 )
 def test_each_transition_pair_is_explicit(
@@ -320,6 +325,14 @@ def test_reset_construction_failure_preserves_runtime_and_pending_events(
 )
 def test_non_playing_step_never_advances_the_runtime(phase: SessionPhase) -> None:
     session = _session_for_phase(phase)
+    player = session.runtime.player_entities[1]
+    movement = session.runtime.world.get_component(player, MovementState)
+    defense = session.runtime.world.get_component(player, DefenseState)
+    movement.coyote_remaining_ms = 73
+    movement.jump_buffer_remaining_ms = 61
+    defense.guarding = True
+    defense.dodge_remaining_ms = 96
+    defense.dodge_cooldown_ms = 312
     before = _fingerprint(session)
 
     returned = session.step(InputFrame.empty())
@@ -359,9 +372,7 @@ def test_completed_step_enters_victory_and_retains_semantic_events() -> None:
     assert snapshot.phase is SessionPhase.VICTORY
     assert snapshot.stage.outcome is StageOutcome.COMPLETED
     assert session.last_frame is not None
-    assert [event.topic for event in session.last_frame.events] == [
-        PROVISIONAL_STAGE_CLEARED_TOPIC
-    ]
+    assert [event.topic for event in session.last_frame.events] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
     retained_event = session.last_frame.events[0]
     with pytest.raises(TypeError):
         retained_event.payload["stage_id"] = "mutated"  # type: ignore[index]
@@ -424,6 +435,10 @@ def test_navigation_is_frozen_when_the_session_closes(
 def test_unavailable_checkpoint_retry_is_atomic_and_explicit() -> None:
     session = _session_for_phase(SessionPhase.DEFEAT)
     assert session.runtime.can_retry_checkpoint is False
+    player = session.runtime.player_entities[1]
+    defense = session.runtime.world.get_component(player, DefenseState)
+    defense.guarding = True
+    defense.dodge_cooldown_ms = 320
     before = _fingerprint(session)
 
     with pytest.raises(ValueError, match="checkpoint"):
@@ -444,6 +459,9 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     runtime.sync_active_players((p3, p2))
     runtime.step(InputFrame.empty())
     runtime.step(InputFrame.empty())
+    mutated_player = runtime.player_entities[2]
+    runtime.world.get_component(mutated_player, MovementState).hover_remaining_ms = 17
+    runtime.world.get_component(mutated_player, DefenseState).dodge_cooldown_ms = 311
     runtime.world.events.publish("obsolete_pending", {"value": 1})
     observed.clear()
     event_bus = runtime.world.events
@@ -462,6 +480,8 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     assert runtime.world.world_hash() == fresh.world.world_hash()
     assert runtime.world.snapshot() == fresh.world.snapshot()
     assert reset == fresh.snapshot()
+    assert runtime.world.get_component(runtime.player_entities[2], MovementState) == MovementState()
+    assert runtime.world.get_component(runtime.player_entities[2], DefenseState) == DefenseState()
 
     player_transform = runtime.world.get_component(runtime.player_entities[2], Transform)
     _, _, goal_transform = runtime.world.query(StageGoal, Transform)[0]
@@ -469,9 +489,7 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     player_transform.y = goal_transform.y
     frame = runtime.step(InputFrame.empty())
     assert [event.topic for event in observed] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
-    assert [event.topic for event in frame.events] == [
-        PROVISIONAL_STAGE_CLEARED_TOPIC
-    ]
+    assert [event.topic for event in frame.events] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
     assert frame.simulation.event_count == 1
 
 

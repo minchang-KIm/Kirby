@@ -26,7 +26,7 @@ class InputCommandSystem:
         for _, _, intent in world.query(PlayerSlot, ControlIntent):
             intent.move_axis = 0
             intent.jump_pressed = False
-            intent.float_held = False
+            intent.hover_held = False
             intent.draw_pressed = False
             intent.draw_released = False
             intent.ability_pressed = False
@@ -44,7 +44,7 @@ class InputCommandSystem:
                 elif isinstance(command, JumpCommand):
                     intent.jump_pressed = command.pressed
                 elif isinstance(command, HoverCommand):
-                    intent.float_held = command.held
+                    intent.hover_held = command.held
                 elif isinstance(command, DrawStartCommand):
                     intent.draw_pressed = True
                 elif isinstance(command, DrawReleaseCommand):

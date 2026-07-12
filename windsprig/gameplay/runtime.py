@@ -15,12 +15,13 @@ from windsprig.gameplay.components import (
     ActorState,
     CameraFocus,
     Collider,
-    ControlIntent,
+    DefenseState,
     DrawState,
     EnemyAI,
     EnemyDropAbility,
     Facing,
     Health,
+    MovementState,
     PlayerSlot,
     Projectile,
     StageGoal,
@@ -48,6 +49,7 @@ from windsprig.gameplay.systems import (
     CombatSystem,
     CoopRespawnSystem,
     DamageSystem,
+    DefenseSystem,
     EnemyAISystem,
     InputCommandSystem,
     MovementSystem,
@@ -105,8 +107,9 @@ class StageRuntime:
     def _install_scheduler(self) -> None:
         self.world.scheduler.systems = [
             InputCommandSystem(),
-            EnemyAISystem(),
+            DefenseSystem(),
             MovementSystem(),
+            EnemyAISystem(),
             CollisionSystem(),
             AbilitySystem(),
             CombatSystem(),
@@ -232,6 +235,7 @@ class StageRuntime:
         world.resources["collected_mote_ids"] = set()
         world.resources["stage_outcome"] = StageOutcome.RUNNING
         world.resources["camera_target"] = None
+        world.resources["damage_queue"] = []
         world.set_resource_hash_projection(self._gameplay_resource_hash)
         return world
 
@@ -414,18 +418,29 @@ class StageRuntime:
 
     def _player_views(self, active_slots: set[int]) -> tuple[PlayerView, ...]:
         views: list[PlayerView] = []
-        for entity_id, slot, transform, collider, facing, actor, health, ability, intent, draw in (
-            self.world.query(
-                PlayerSlot,
-                Transform,
-                Collider,
-                Facing,
-                ActorState,
-                Health,
-                AbilityState,
-                ControlIntent,
-                DrawState,
-            )
+        for (
+            entity_id,
+            slot,
+            transform,
+            collider,
+            facing,
+            actor,
+            health,
+            ability,
+            movement,
+            defense,
+            draw,
+        ) in self.world.query(
+            PlayerSlot,
+            Transform,
+            Collider,
+            Facing,
+            ActorState,
+            Health,
+            AbilityState,
+            MovementState,
+            DefenseState,
+            DrawState,
         ):
             if slot.slot not in active_slots or self.player_entities.get(slot.slot) != entity_id:
                 continue
@@ -445,10 +460,14 @@ class StageRuntime:
                     ability_id=ability.current,
                     ability_meter=0,
                     ability_charge_ms=0,
-                    guard_active=intent.guard_held,
-                    dodge_active=False,
-                    invulnerable=health.invulnerable_ms > 0,
-                    hover_remaining_ms=self.config.hover_duration_ms,
+                    guard_active=defense.guarding,
+                    dodge_active=defense.dodge_remaining_ms > 0,
+                    invulnerable=(
+                        health.invulnerable_ms > 0
+                        or defense.dodge_remaining_ms
+                        > self.config.dodge_duration_ms - self.config.dodge_invulnerable_ms
+                    ),
+                    hover_remaining_ms=movement.hover_remaining_ms,
                     hover_max_ms=self.config.hover_duration_ms,
                     captured_ability_id=draw.captured_echo,
                     captured_visual_id=None,

@@ -9,16 +9,20 @@ from windsprig.content.loader import StageSpec
 from windsprig.core.ecs import World
 from windsprig.gameplay.abilities import create_default_registry
 from windsprig.gameplay.components import (
+    NON_ENTITY_DAMAGE_SOURCE_ID,
     AbilityState,
     ActorState,
     Collectible,
     Collider,
     ControlIntent,
+    DamageRecord,
+    DefenseState,
     DrawState,
     EnemyAI,
     EnemyDropAbility,
     Facing,
     Health,
+    MovementState,
     PlayerSlot,
     Projectile,
     Respawn,
@@ -28,6 +32,7 @@ from windsprig.gameplay.components import (
 )
 from windsprig.gameplay.systems import (
     AbilitySystem,
+    CollisionSystem,
     CombatSystem,
     CoopRespawnSystem,
     DamageSystem,
@@ -49,6 +54,7 @@ from windsprig.input.commands import (
     JumpCommand,
     MoveCommand,
 )
+from windsprig.physics import TileCollisionWorld
 
 
 def add_entity(world: World, *components: object) -> int:
@@ -195,8 +201,48 @@ def test_combat_system_expires_projectiles_and_queues_projectile_and_contact_dam
     assert dead_player in world.alive_entities
     queue = world.resources["damage_queue"]
     assert isinstance(queue, list)
-    assert any(item["target"] == enemy and item["amount"] == 3 for item in queue)
-    assert any(item["target"] == player and item["amount"] == 2 for item in queue)
+    assert any(item.target_id == enemy and item.amount == 3 and item.source_id == player for item in queue)
+    assert any(item.target_id == player and item.amount == 2 and item.source_id == enemy for item in queue)
+
+
+def test_hazard_uses_an_explicit_non_entity_unblockable_damage_source() -> None:
+    world = World()
+    world.resources["config"] = GameConfig()
+    world.resources["collision_world"] = TileCollisionWorld(
+        tile_size=32,
+        width_tiles=2,
+        height_tiles=2,
+        solid_tiles=set(),
+        hazard_tiles={(0, 0)},
+    )
+    player = add_entity(
+        world,
+        PlayerSlot(1),
+        Transform(2, 2),
+        Velocity(),
+        Collider(20, 20, on_ground=True),
+        Health(10, 10),
+        Facing(1),
+        ActorState("Guard"),
+        DefenseState(guarding=True),
+    )
+
+    CollisionSystem().update(world, 16)
+
+    assert world.resources["damage_queue"] == [
+        DamageRecord(
+            source_id=NON_ENTITY_DAMAGE_SOURCE_ID,
+            target_id=player,
+            amount=1,
+            knockback_x=0.0,
+            knockback_y=-200.0,
+            guard_break=True,
+        )
+    ]
+    world.get_component(player, Collider).on_ground = True
+    DamageSystem().update(world, 0)
+    assert world.get_component(player, Health).current == 9
+    assert world.events.peek()[0].payload["guarded"] is False
 
 
 def test_coop_respawn_uses_an_alive_anchor_and_respects_timer_and_lives() -> None:
@@ -251,7 +297,14 @@ def test_coop_respawn_uses_an_alive_anchor_and_respects_timer_and_lives() -> Non
     assert world.get_component(waiting, Health).dead is True
     assert world.get_component(exhausted, Health).dead is True
     assert world.resources["damage_queue"] == [
-        {"target": fallen, "amount": 10, "knockback_x": 0.0, "knockback_y": -220.0}
+        DamageRecord(
+            source_id=NON_ENTITY_DAMAGE_SOURCE_ID,
+            target_id=fallen,
+            amount=10,
+            knockback_x=0.0,
+            knockback_y=-220.0,
+            guard_break=True,
+        )
     ]
     assert world.events.peek()[0].payload == {"slot": 2, "entity_id": ready}
 
@@ -292,12 +345,12 @@ def test_damage_system_ignores_invalid_hits_and_applies_hurt_death_and_respawn_s
     )
     killed_enemy = add_entity(world, Health(1, 1))
     world.resources["damage_queue"] = [
-        {"target": 999, "amount": 1},
-        {"target": dead, "amount": 1},
-        {"target": invulnerable, "amount": 1},
-        {"target": hurt, "amount": 2, "knockback_x": 5.0, "knockback_y": 10.0},
-        {"target": killed_player, "amount": 1},
-        {"target": killed_enemy, "amount": 1},
+        DamageRecord(0, 999, 1, 0.0, 0.0, False),
+        DamageRecord(0, dead, 1, 0.0, 0.0, False),
+        DamageRecord(0, invulnerable, 1, 0.0, 0.0, False),
+        DamageRecord(0, hurt, 2, 5.0, 10.0, False),
+        DamageRecord(0, killed_player, 1, 0.0, 0.0, False),
+        DamageRecord(0, killed_enemy, 1, 0.0, 0.0, False),
     ]
 
     DamageSystem().update(world, 10)
@@ -306,13 +359,16 @@ def test_damage_system_ignores_invalid_hits_and_applies_hurt_death_and_respawn_s
     assert world.get_component(invulnerable, Health).current == 5
     assert world.get_component(invulnerable, Health).invulnerable_ms == 40
     assert world.get_component(hurt, Health).current == 3
-    assert world.get_component(hurt, Velocity) == Velocity(15.0, -80.0)
+    assert world.get_component(hurt, Velocity) == Velocity(15.0, 10.0)
     assert world.get_component(hurt, ActorState).name == "Hurt"
     assert world.get_component(killed_player, Health).dead is True
     assert world.get_component(killed_player, Respawn).timer_ms == 1800
     assert world.get_component(killed_player, ActorState).name == "Dead"
     assert world.get_component(killed_enemy, Health).dead is True
-    assert [event.payload["entity_id"] for event in world.events.peek()] == [killed_player, killed_enemy]
+    assert [event.payload["entity_id"] for event in world.events.peek() if event.topic == "actor_dead"] == [
+        killed_player,
+        killed_enemy,
+    ]
 
 
 def test_draw_system_filters_targets_then_harmonizes_with_the_first_valid_echo() -> None:
@@ -476,7 +532,7 @@ def test_input_command_system_resets_stale_intent_and_maps_every_command_type() 
     assert first_intent == ControlIntent(
         move_axis=1,
         jump_pressed=True,
-        float_held=True,
+        hover_held=True,
         draw_pressed=True,
         draw_released=True,
         ability_pressed=True,
@@ -503,26 +559,28 @@ def test_movement_system_handles_guard_acceleration_deceleration_jump_float_and_
             collider,
             intent,
             ActorState("Idle"),
+            MovementState(),
+            DefenseState(guarding=intent.guard_held),
         )
 
     jumping = player(ControlIntent(move_axis=1, jump_pressed=True, guard_held=True), Velocity(), Collider(20, 20, True))
     moving_left = player(ControlIntent(move_axis=-1), Velocity(), Collider(20, 20))
     slowing_right = player(ControlIntent(), Velocity(100, 0), Collider(20, 20))
     slowing_left = player(ControlIntent(), Velocity(-100, 0), Collider(20, 20))
-    floating = player(ControlIntent(float_held=True), Velocity(0, 0), Collider(20, 20))
+    floating = player(ControlIntent(hover_held=True), Velocity(0, 0), Collider(20, 20))
     over_speed = player(ControlIntent(move_axis=1), Velocity(500, 2_000), Collider(20, 20))
 
     MovementSystem().update(world, 16)
 
-    assert world.get_component(jumping, Velocity).vx == pytest.approx(38.4)
+    assert world.get_component(jumping, Velocity).vx == pytest.approx(27.2)
     assert world.get_component(jumping, Velocity).vy == pytest.approx(-720.0)
     assert world.get_component(jumping, Collider).on_ground is False
     assert world.get_component(jumping, ActorState).name == "Jump"
     assert world.get_component(moving_left, Velocity).vx == pytest.approx(-27.2)
     assert world.get_component(slowing_right, Velocity).vx == pytest.approx(52.0)
     assert world.get_component(slowing_left, Velocity).vx == pytest.approx(-52.0)
-    assert world.get_component(floating, Velocity).vy == pytest.approx(31.36)
-    assert world.get_component(floating, ActorState).name == "Float"
+    assert world.get_component(floating, Velocity).vy == pytest.approx(11.2)
+    assert world.get_component(floating, ActorState).name == "Hover"
     assert world.get_component(over_speed, Velocity).vx == pytest.approx(472.8)
     assert world.get_component(over_speed, Velocity).vy == 1600.0
 

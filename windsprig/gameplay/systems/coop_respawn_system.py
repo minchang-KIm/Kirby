@@ -4,7 +4,17 @@ from typing import cast
 
 from windsprig.content.loader import StageSpec
 from windsprig.core.ecs import World
-from windsprig.gameplay.components import ActorState, Collider, Health, PlayerSlot, Respawn, Transform, Velocity
+from windsprig.gameplay.components import (
+    NON_ENTITY_DAMAGE_SOURCE_ID,
+    ActorState,
+    Collider,
+    DamageRecord,
+    Health,
+    PlayerSlot,
+    Respawn,
+    Transform,
+    Velocity,
+)
 
 
 class CoopRespawnSystem:
@@ -18,10 +28,17 @@ class CoopRespawnSystem:
                 alive_positions.append((transform.x, transform.y))
             elif transform.y > stage_height + 120:
                 cast(
-                    list[dict[str, int | float]],
+                    list[DamageRecord],
                     world.resources.setdefault("damage_queue", []),
                 ).append(
-                    {"target": entity_id, "amount": health.maximum, "knockback_x": 0.0, "knockback_y": -220.0}
+                    DamageRecord(
+                        source_id=NON_ENTITY_DAMAGE_SOURCE_ID,
+                        target_id=entity_id,
+                        amount=health.maximum,
+                        knockback_x=0.0,
+                        knockback_y=-220.0,
+                        guard_break=True,
+                    )
                 )
 
         anchor = alive_positions[0] if alive_positions else None

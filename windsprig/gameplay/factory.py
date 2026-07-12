@@ -14,11 +14,13 @@ from windsprig.gameplay.components import (
     Collectible,
     Collider,
     ControlIntent,
+    DefenseState,
     DrawState,
     EnemyAI,
     EnemyDropAbility,
     Facing,
     Health,
+    MovementState,
     PlayerSlot,
     Respawn,
     StageGoal,
@@ -53,6 +55,11 @@ class EntityFactory:
         )
         self.world.add_component(entity_id, ActorState())
         self.world.add_component(entity_id, ControlIntent())
+        self.world.add_component(
+            entity_id,
+            MovementState(hover_remaining_ms=config.hover_duration_ms),
+        )
+        self.world.add_component(entity_id, DefenseState())
         self.world.add_component(entity_id, Facing(direction=1))
         self.world.add_component(entity_id, DrawState())
         self.world.add_component(entity_id, AbilityState())

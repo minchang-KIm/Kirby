@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "Idle": {"Run", "Jump", "Float", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
-    "Run": {"Idle", "Jump", "Float", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
-    "Jump": {"Float", "Fall", "Attack", "Draw", "Hurt", "Dead"},
-    "Float": {"Fall", "Attack", "Draw", "Hurt", "Dead"},
-    "Fall": {"Idle", "Run", "Draw", "Attack", "Hurt", "Dead"},
+    "Idle": {"Run", "Jump", "Hover", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
+    "Run": {"Idle", "Jump", "Hover", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
+    "Jump": {"Hover", "Fall", "Attack", "Draw", "Dodge", "Hurt", "Dead"},
+    "Hover": {"Fall", "Attack", "Draw", "Dodge", "Hurt", "Dead"},
+    "Fall": {"Idle", "Run", "Draw", "Attack", "Dodge", "Hurt", "Dead"},
     "Draw": {"Harmonize", "Idle", "Run", "Hurt", "Dead"},
     "Harmonize": {"Idle", "Run", "Attack", "Hurt", "Dead"},
     "Attack": {"Idle", "Run", "Fall", "Hurt", "Dead"},
-    "Guard": {"Idle", "Run", "Hurt", "Dead"},
+    "Guard": {"Idle", "Run", "Fall", "Dodge", "Hurt", "Dead"},
     "Dodge": {"Idle", "Run", "Fall", "Hurt", "Dead"},
-    "Hurt": {"Idle", "Run", "Dead"},
+    "Hurt": {"Idle", "Run", "Fall", "Dead"},
     "Dead": {"Idle"},
 }
 
