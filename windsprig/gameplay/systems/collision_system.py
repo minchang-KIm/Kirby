@@ -6,6 +6,7 @@ from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     NON_ENTITY_DAMAGE_SOURCE_ID,
     ActorState,
+    CapturedBy,
     Collider,
     DamageRecord,
     Projectile,
@@ -23,6 +24,10 @@ class CollisionSystem:
         for entity_id, transform, velocity, collider in world.query(Transform, Velocity, Collider):
             # WHY: Combat owns legacy projectile motion until Task 8 introduces AttackMotionSystem.
             if world.has_component(entity_id, Projectile):
+                continue
+            if world.has_component(entity_id, CapturedBy):
+                velocity.vx = 0.0
+                velocity.vy = 0.0
                 continue
             body = PhysicsBody(
                 rect=Rect(transform.x, transform.y, collider.width, collider.height),

@@ -14,9 +14,11 @@ from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
     CameraFocus,
+    CapturedBy,
+    CaptureState,
     Collider,
     DefenseState,
-    DrawState,
+    EchoPickup,
     EnemyAI,
     EnemyDropAbility,
     Facing,
@@ -34,6 +36,7 @@ from windsprig.gameplay.snapshot import (
     AttackView,
     CameraTargetView,
     CheckpointView,
+    EchoPickupView,
     EnemyView,
     GoalGatherView,
     PlayerView,
@@ -45,6 +48,7 @@ from windsprig.gameplay.snapshot import (
 from windsprig.gameplay.systems import (
     AbilitySystem,
     CameraSystem,
+    CaptureSystem,
     CollisionSystem,
     CombatSystem,
     CoopRespawnSystem,
@@ -69,6 +73,7 @@ class _ValidatedGameplayResources:
     stage_outcome: StageOutcome
     run_energy_spheres: int
     collected_mote_ids: tuple[str, ...]
+    discovered_ability_ids: tuple[str, ...]
 
 
 class StageRuntime:
@@ -111,6 +116,7 @@ class StageRuntime:
             MovementSystem(),
             EnemyAISystem(),
             CollisionSystem(),
+            CaptureSystem(),
             AbilitySystem(),
             CombatSystem(),
             DamageSystem(),
@@ -233,9 +239,11 @@ class StageRuntime:
         world.resources["ability_registry"] = self.ability_registry
         world.resources["run_energy_spheres"] = 0
         world.resources["collected_mote_ids"] = set()
+        world.resources["discovered_ability_ids"] = set()
         world.resources["stage_outcome"] = StageOutcome.RUNNING
         world.resources["camera_target"] = None
         world.resources["damage_queue"] = []
+        world.resources["attack_requests"] = []
         world.set_resource_hash_projection(self._gameplay_resource_hash)
         return world
 
@@ -273,6 +281,7 @@ class StageRuntime:
             "stage_outcome": resources.stage_outcome.value,
             "run_energy_spheres": resources.run_energy_spheres,
             "collected_mote_ids": resources.collected_mote_ids,
+            "discovered_ability_ids": resources.discovered_ability_ids,
         }
 
     def _validate_gameplay_resources(
@@ -327,12 +336,18 @@ class StageRuntime:
             not isinstance(mote_id, str) for mote_id in collected
         ):
             raise TypeError("collected_mote_ids must be a collection of strings")
+        discovered = world.resources.get("discovered_ability_ids")
+        if not isinstance(discovered, (tuple, list, set, frozenset)) or any(
+            not isinstance(ability_id, str) for ability_id in discovered
+        ):
+            raise TypeError("discovered_ability_ids must be a collection of strings")
         return _ValidatedGameplayResources(
             active_players=active_players,
             active_authority=tuple(active_authority),
             stage_outcome=outcome,
             run_energy_spheres=run_motes,
             collected_mote_ids=tuple(sorted(set(collected))),
+            discovered_ability_ids=tuple(sorted(set(discovered))),
         )
 
     def _capture_step_event(self, event: GameEvent) -> None:
@@ -362,6 +377,7 @@ class StageRuntime:
         players = self._player_views(active_slots)
         enemies = self._enemy_views()
         attacks = self._attack_views()
+        echo_pickups = self._echo_pickup_views()
         camera_targets = self._camera_target_views(active_slots)
         checkpoints = tuple(
             sorted(
@@ -400,7 +416,7 @@ class StageRuntime:
             players=players,
             enemies=enemies,
             attacks=attacks,
-            echo_pickups=(),
+            echo_pickups=echo_pickups,
             interactions=(),
             checkpoints=checkpoints,
             goal_gather=GoalGatherView(
@@ -429,7 +445,7 @@ class StageRuntime:
             ability,
             movement,
             defense,
-            draw,
+            capture,
         ) in self.world.query(
             PlayerSlot,
             Transform,
@@ -440,7 +456,7 @@ class StageRuntime:
             AbilityState,
             MovementState,
             DefenseState,
-            DrawState,
+            CaptureState,
         ):
             if slot.slot not in active_slots or self.player_entities.get(slot.slot) != entity_id:
                 continue
@@ -457,9 +473,9 @@ class StageRuntime:
                     hp=health.current,
                     maximum_hp=health.maximum,
                     lives_remaining=slot.lives,
-                    ability_id=ability.current,
-                    ability_meter=0,
-                    ability_charge_ms=0,
+                    ability_id=ability.current_id,
+                    ability_meter=ability.meter,
+                    ability_charge_ms=ability.charge_ms,
                     guard_active=defense.guarding,
                     dodge_active=defense.dodge_remaining_ms > 0,
                     invulnerable=(
@@ -469,8 +485,8 @@ class StageRuntime:
                     ),
                     hover_remaining_ms=movement.hover_remaining_ms,
                     hover_max_ms=self.config.hover_duration_ms,
-                    captured_ability_id=draw.captured_echo,
-                    captured_visual_id=None,
+                    captured_ability_id=capture.captured_ability_id,
+                    captured_visual_id=capture.captured_visual_id,
                 )
             )
         return tuple(sorted(views, key=lambda view: (view.slot, view.entity_id)))
@@ -499,7 +515,12 @@ class StageRuntime:
                     hp=health.current,
                     maximum_hp=health.maximum,
                     ability_id=None if drop.ability == "none" else drop.ability,
-                    captured_by=None,
+                    captured_by=(
+                        captured.player_entity_id
+                        if (captured := self.world.try_component(entity_id, CapturedBy))
+                        is not None
+                        else None
+                    ),
                 )
             )
         return tuple(sorted(views, key=lambda view: view.entity_id))
@@ -524,6 +545,18 @@ class StageRuntime:
                 Collider,
                 Velocity,
             )
+        ]
+        return tuple(sorted(views, key=lambda view: view.entity_id))
+
+    def _echo_pickup_views(self) -> tuple[EchoPickupView, ...]:
+        views = [
+            EchoPickupView(
+                entity_id=entity_id,
+                ability_id=echo.ability_id,
+                x=transform.x,
+                y=transform.y,
+            )
+            for entity_id, echo, transform in self.world.query(EchoPickup, Transform)
         ]
         return tuple(sorted(views, key=lambda view: view.entity_id))
 

@@ -8,7 +8,7 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "Jump": {"Hover", "Fall", "Attack", "Draw", "Dodge", "Hurt", "Dead"},
     "Hover": {"Fall", "Attack", "Draw", "Dodge", "Hurt", "Dead"},
     "Fall": {"Idle", "Run", "Draw", "Attack", "Dodge", "Hurt", "Dead"},
-    "Draw": {"Harmonize", "Idle", "Run", "Hurt", "Dead"},
+    "Draw": {"Harmonize", "Idle", "Run", "Fall", "Hurt", "Dead"},
     "Harmonize": {"Idle", "Run", "Attack", "Hurt", "Dead"},
     "Attack": {"Idle", "Run", "Fall", "Hurt", "Dead"},
     "Guard": {"Idle", "Run", "Fall", "Dodge", "Hurt", "Dead"},

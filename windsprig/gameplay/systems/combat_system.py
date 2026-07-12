@@ -6,6 +6,7 @@ from typing import cast
 
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
+    CapturedBy,
     Collider,
     DamageRecord,
     EnemyAI,
@@ -66,7 +67,13 @@ class CombatSystem:
         # Enemy body contact damage.
         players = [row for row in targets if row[1].name == "player"]
         enemies = [
-            row + (world.try_component(row[0], EnemyAI),) for row in targets if row[1].name == "enemy" and row[3].solid
+            row + (world.try_component(row[0], EnemyAI),)
+            for row in targets
+            if (
+                row[1].name == "enemy"
+                and row[3].solid
+                and not world.has_component(row[0], CapturedBy)
+            )
         ]
         for player_id, _, ptf, pcol, php in players:
             if php.dead:

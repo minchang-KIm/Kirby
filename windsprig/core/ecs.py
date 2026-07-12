@@ -110,6 +110,10 @@ class World:
     def add_component(self, entity_id: EntityId, component: object) -> None:
         self.components.add(entity_id, component)
 
+    def remove_component(self, entity_id: EntityId, component_type: type[object]) -> None:
+        """Remove one component without changing entity lifetime."""
+        self.components.remove(entity_id, component_type)
+
     def get_component(self, entity_id: EntityId, component_type: type[ComponentT]) -> ComponentT:
         return self.components.get(entity_id, component_type)
 

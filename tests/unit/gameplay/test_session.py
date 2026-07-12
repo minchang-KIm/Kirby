@@ -15,7 +15,10 @@ from tests.helpers.gameplay import (
 )
 from windsprig.core.events import GameEvent
 from windsprig.gameplay.components import (
+    AbilityState,
+    CaptureState,
     DefenseState,
+    EchoPickup,
     MovementState,
     PlayerSlot,
     StageGoal,
@@ -328,11 +331,18 @@ def test_non_playing_step_never_advances_the_runtime(phase: SessionPhase) -> Non
     player = session.runtime.player_entities[1]
     movement = session.runtime.world.get_component(player, MovementState)
     defense = session.runtime.world.get_component(player, DefenseState)
+    capture = session.runtime.world.get_component(player, CaptureState)
+    ability = session.runtime.world.get_component(player, AbilityState)
     movement.coyote_remaining_ms = 73
     movement.jump_buffer_remaining_ms = 61
     defense.guarding = True
     defense.dodge_remaining_ms = 96
     defense.dodge_cooldown_ms = 312
+    capture.phase = "drawing"
+    capture.draw_elapsed_ms = 47
+    ability.charge_ms = 83
+    ability.meter = 29
+    session.runtime.factory.spawn_echo_pickup("cinder", 400.0, 300.0)
     before = _fingerprint(session)
 
     returned = session.step(InputFrame.empty())
@@ -462,6 +472,11 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     mutated_player = runtime.player_entities[2]
     runtime.world.get_component(mutated_player, MovementState).hover_remaining_ms = 17
     runtime.world.get_component(mutated_player, DefenseState).dodge_cooldown_ms = 311
+    runtime.world.get_component(mutated_player, CaptureState).draw_elapsed_ms = 37
+    runtime.world.get_component(mutated_player, AbilityState).current_id = "cinder"
+    runtime.factory.spawn_echo_pickup("galehook", 90.0, 80.0)
+    runtime.world.resources["discovered_ability_ids"] = {"cinder", "galehook"}
+    runtime.world.resources["attack_requests"] = [object()]
     runtime.world.events.publish("obsolete_pending", {"value": 1})
     observed.clear()
     event_bus = runtime.world.events
@@ -482,6 +497,11 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     assert reset == fresh.snapshot()
     assert runtime.world.get_component(runtime.player_entities[2], MovementState) == MovementState()
     assert runtime.world.get_component(runtime.player_entities[2], DefenseState) == DefenseState()
+    assert runtime.world.get_component(runtime.player_entities[2], CaptureState) == CaptureState()
+    assert runtime.world.get_component(runtime.player_entities[2], AbilityState) == AbilityState()
+    assert runtime.world.query(EchoPickup) == []
+    assert runtime.world.resources["discovered_ability_ids"] == set()
+    assert runtime.world.resources["attack_requests"] == []
 
     player_transform = runtime.world.get_component(runtime.player_entities[2], Transform)
     _, _, goal_transform = runtime.world.query(StageGoal, Transform)[0]
@@ -545,6 +565,12 @@ def test_gameplay_resources_are_hashed_but_presentation_resources_are_not() -> N
         "test_stage:mote:2",
     }
     assert runtime.world.snapshot().world_state_hash == collected_hash
+
+    runtime.world.resources["discovered_ability_ids"] = {"galehook", "cinder"}
+    discovery_hash = runtime.world.snapshot().world_state_hash
+    assert discovery_hash != collected_hash
+    runtime.world.resources["discovered_ability_ids"] = ["cinder", "galehook", "cinder"]
+    assert runtime.world.snapshot().world_state_hash == discovery_hash
 
 
 @pytest.mark.parametrize("source", (SessionPhase.PAUSED, SessionPhase.RESULTS))

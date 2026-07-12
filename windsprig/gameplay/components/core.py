@@ -62,9 +62,10 @@ class ControlIntent:
     move_axis: int = 0
     jump_pressed: bool = False
     hover_held: bool = False
-    draw_pressed: bool = False
+    draw_started: bool = False
     draw_released: bool = False
     ability_pressed: bool = False
+    ability_consumed: bool = False
     guard_held: bool = False
     dodge_pressed: bool = False
     drop_pressed: bool = False
@@ -91,19 +92,53 @@ class DefenseState:
 
 
 @dataclass
-class DrawState:
-    active: bool = False
-    active_ms: int = 0
-    captured_entity: int | None = None
-    captured_echo: str | None = None
+class CaptureState:
+    phase: str = "idle"
+    draw_elapsed_ms: int = 0
+    captured_entity_id: int | None = None
+    captured_ability_id: str | None = None
+    captured_visual_id: str | None = None
+
+
+@dataclass
+class CapturedBy:
+    player_entity_id: int
 
 
 @dataclass
 class AbilityState:
-    current: str = "none"
-    previous: str = "none"
-    cooldown_ms: int = 0
-    is_super: bool = False
+    current_id: str = "none"
+    previous_id: str = "none"
+    cooldown_remaining_ms: int = 0
+    charge_ms: int = 0
+    combo_step: int = 0
+    combo_window_remaining_ms: int = 0
+    meter: int = 0
+    armor_remaining_ms: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AttackRequest:
+    owner_entity_id: int
+    team: str
+    ability_id: str
+    attack_kind: str
+    visual_id: str
+    x: float
+    y: float
+    width: int
+    height: int
+    vx: float
+    vy: float
+    damage: int
+    knockback_x: float
+    knockback_y: float
+    ttl_ms: int
+    pierce: int = 0
+    cuts_projectiles: bool = False
+    guard_break: bool = False
+    pull_strength: float = 0.0
+    interaction_kind: str | None = None
 
 
 @dataclass
@@ -133,6 +168,11 @@ class Collectible:
     kind: str
     value: int = 1
     collected: bool = False
+
+
+@dataclass
+class EchoPickup:
+    ability_id: str
 
 
 @dataclass

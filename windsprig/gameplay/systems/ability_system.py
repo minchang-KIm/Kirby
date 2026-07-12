@@ -21,7 +21,7 @@ from windsprig.gameplay.state_machine import transition
 
 
 class AbilitySystem:
-    """Own ability cooldowns, drops, attacks, and projectile materialization."""
+    """Own legacy ability cooldowns, attacks, and projectile materialization."""
 
     def update(self, world: World, dt_ms: int) -> None:
         registry = cast(AbilityRegistry, world.resources["ability_registry"])
@@ -35,16 +35,14 @@ class AbilitySystem:
         ):
             if team.name != "player":
                 continue
-            ability.cooldown_ms = max(0, ability.cooldown_ms - dt_ms)
+            ability.cooldown_remaining_ms = max(0, ability.cooldown_remaining_ms - dt_ms)
 
-            if intent.drop_pressed and ability.current != "none":
-                ability.previous = ability.current
-                ability.current = "none"
-                ability.is_super = False
-                world.events.publish("ability_dropped", {"actor": entity_id})
-
-            if intent.ability_pressed and ability.cooldown_ms <= 0:
-                strategy = registry.get(ability.current)
+            if (
+                intent.ability_pressed
+                and not intent.ability_consumed
+                and ability.cooldown_remaining_ms <= 0
+            ):
+                strategy = registry.get(ability.current_id)
                 for shape in strategy.get_attack_shapes(entity_id, world.frame_index):
                     requests.append(
                         {
@@ -61,10 +59,12 @@ class AbilitySystem:
                             "height": shape.height,
                         }
                     )
-                ability.cooldown_ms = getattr(strategy, "cooldown_ms", 260)
-                ability.is_super = bool(getattr(strategy, "is_super", False))
+                ability.cooldown_remaining_ms = getattr(strategy, "cooldown_ms", 260)
                 state.name = transition(state.name, "Attack")
-                world.events.publish("ability_used", {"actor": entity_id, "ability": ability.current})
+                world.events.publish(
+                    "ability_used",
+                    {"actor": entity_id, "ability": ability.current_id},
+                )
 
         while requests:
             req = requests.pop(0)

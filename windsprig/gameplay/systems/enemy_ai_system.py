@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from windsprig.core.ecs import World
-from windsprig.gameplay.components import EnemyAI, Health, PlayerSlot, Transform, Velocity
+from windsprig.gameplay.components import (
+    CapturedBy,
+    EnemyAI,
+    Health,
+    PlayerSlot,
+    Transform,
+    Velocity,
+)
 
 
 class EnemyAISystem:
@@ -16,7 +23,11 @@ class EnemyAISystem:
             if not health.dead:
                 players.append((player_id, transform))
 
-        for _entity_id, ai, transform, velocity, health in world.query(EnemyAI, Transform, Velocity, Health):
+        for entity_id, ai, transform, velocity, health in world.query(EnemyAI, Transform, Velocity, Health):
+            if world.has_component(entity_id, CapturedBy):
+                velocity.vx = 0.0
+                velocity.vy = 0.0
+                continue
             if health.dead:
                 velocity.vx = 0.0
                 continue

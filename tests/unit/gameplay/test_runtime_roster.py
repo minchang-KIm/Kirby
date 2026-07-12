@@ -11,7 +11,9 @@ from windsprig.config import GameConfig
 from windsprig.content.loader import CheckpointSpec, EnemySpawn
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
+    AbilityState,
     CameraFocus,
+    CaptureState,
     Collider,
     ControlIntent,
     DefenseState,
@@ -368,6 +370,7 @@ def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
         "MovementSystem",
         "EnemyAISystem",
         "CollisionSystem",
+        "CaptureSystem",
         "AbilitySystem",
         "CombatSystem",
         "DamageSystem",
@@ -378,7 +381,7 @@ def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
     )
 
 
-def test_player_factory_adds_hashed_movement_and_defense_defaults_for_initial_and_joined_players() -> None:
+def test_player_factory_adds_hashed_gameplay_defaults_for_initial_and_joined_players() -> None:
     first = make_active_player(1, leader=True)
     joined = make_active_player(3)
     runtime = make_runtime(players=(first,))
@@ -390,10 +393,30 @@ def test_player_factory_adds_hashed_movement_and_defense_defaults_for_initial_an
             hover_remaining_ms=runtime.config.hover_duration_ms
         )
         assert runtime.world.get_component(entity_id, DefenseState) == DefenseState()
+        assert runtime.world.get_component(entity_id, CaptureState) == CaptureState()
+        assert runtime.world.get_component(entity_id, AbilityState) == AbilityState()
 
     baseline = runtime.world.world_hash()
     runtime.world.get_component(runtime.player_entities[1], MovementState).coyote_remaining_ms = 9
     assert runtime.world.world_hash() != baseline
+
+
+@pytest.mark.parametrize(
+    ("value", "error"),
+    ((None, TypeError), ({"cinder", 7}, TypeError)),
+)
+def test_invalid_discovered_ability_collection_is_rejected_by_view_and_hash(
+    value: object,
+    error: type[Exception],
+) -> None:
+    runtime = make_runtime()
+    runtime.world.resources["discovered_ability_ids"] = value
+
+    assert_view_and_hash_reject(
+        runtime,
+        error,
+        "discovered_ability_ids must be a collection of strings",
+    )
 
 
 def test_player_view_uses_component_guard_dodge_iframe_and_hover_state() -> None:

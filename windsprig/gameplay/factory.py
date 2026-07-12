@@ -11,11 +11,12 @@ from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
     CameraFocus,
+    CaptureState,
     Collectible,
     Collider,
     ControlIntent,
     DefenseState,
-    DrawState,
+    EchoPickup,
     EnemyAI,
     EnemyDropAbility,
     Facing,
@@ -61,10 +62,18 @@ class EntityFactory:
         )
         self.world.add_component(entity_id, DefenseState())
         self.world.add_component(entity_id, Facing(direction=1))
-        self.world.add_component(entity_id, DrawState())
+        self.world.add_component(entity_id, CaptureState())
         self.world.add_component(entity_id, AbilityState())
         self.world.add_component(entity_id, Respawn(x=x, y=y))
         self.world.add_component(entity_id, CameraFocus(weight=1.0))
+        return entity_id
+
+    def spawn_echo_pickup(self, ability_id: str, x: float, y: float) -> int:
+        """Create one non-solid recoverable ability echo."""
+        entity_id = self.world.create_entity()
+        self.world.add_component(entity_id, Transform(x, y))
+        self.world.add_component(entity_id, Collider(width=20, height=20, solid=False))
+        self.world.add_component(entity_id, EchoPickup(ability_id))
         return entity_id
 
     def spawn_enemy(

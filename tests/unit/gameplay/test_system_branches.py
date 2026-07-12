@@ -17,9 +17,7 @@ from windsprig.gameplay.components import (
     ControlIntent,
     DamageRecord,
     DefenseState,
-    DrawState,
     EnemyAI,
-    EnemyDropAbility,
     Facing,
     Health,
     MovementState,
@@ -36,7 +34,6 @@ from windsprig.gameplay.systems import (
     CombatSystem,
     CoopRespawnSystem,
     DamageSystem,
-    DrawSystem,
     EnemyAISystem,
     InputCommandSystem,
     MovementSystem,
@@ -85,7 +82,7 @@ def stage_spec() -> StageSpec:
     )
 
 
-def test_ability_system_drops_one_ability_and_materializes_another_as_a_projectile() -> None:
+def test_ability_system_ignores_drop_and_materializes_an_attack_as_a_projectile() -> None:
     world = World()
     world.resources["ability_registry"] = create_default_registry(GameConfig().content_dir)
     add_entity(
@@ -94,7 +91,7 @@ def test_ability_system_drops_one_ability_and_materializes_another_as_a_projecti
         Transform(0, 0),
         Facing(),
         ControlIntent(ability_pressed=True),
-        AbilityState(current="fire"),
+        AbilityState(current_id="fire"),
         ActorState(),
     )
     dropped = add_entity(
@@ -103,7 +100,7 @@ def test_ability_system_drops_one_ability_and_materializes_another_as_a_projecti
         Transform(20, 30),
         Facing(),
         ControlIntent(drop_pressed=True),
-        AbilityState(current="fire"),
+        AbilityState(current_id="fire"),
         ActorState(),
     )
     caster = add_entity(
@@ -112,7 +109,7 @@ def test_ability_system_drops_one_ability_and_materializes_another_as_a_projecti
         Transform(100, 50),
         Facing(-1),
         ControlIntent(ability_pressed=True),
-        AbilityState(current="ultra_sword", cooldown_ms=10),
+        AbilityState(current_id="ultra_sword", cooldown_remaining_ms=10),
         ActorState(),
     )
 
@@ -120,9 +117,8 @@ def test_ability_system_drops_one_ability_and_materializes_another_as_a_projecti
 
     dropped_ability = world.get_component(dropped, AbilityState)
     caster_ability = world.get_component(caster, AbilityState)
-    assert (dropped_ability.previous, dropped_ability.current, dropped_ability.is_super) == ("fire", "none", False)
-    assert caster_ability.cooldown_ms == 600
-    assert caster_ability.is_super is True
+    assert (dropped_ability.previous_id, dropped_ability.current_id) == ("none", "fire")
+    assert caster_ability.cooldown_remaining_ms == 600
     projectile_rows = world.query(Projectile, Team, Transform, Velocity, Collider)
     assert len(projectile_rows) == 1
     _, projectile, team, transform, velocity, collider = projectile_rows[0]
@@ -133,7 +129,7 @@ def test_ability_system_drops_one_ability_and_materializes_another_as_a_projecti
     assert velocity.vx < 0
     assert collider.solid is False
     assert world.resources["projectile_requests"] == []
-    assert [event.topic for event in world.events.peek()] == ["ability_dropped", "ability_used"]
+    assert [event.topic for event in world.events.peek()] == ["ability_used"]
 
 
 def test_combat_system_expires_projectiles_and_queues_projectile_and_contact_damage() -> None:
@@ -371,93 +367,6 @@ def test_damage_system_ignores_invalid_hits_and_applies_hurt_death_and_respawn_s
     ]
 
 
-def test_draw_system_filters_targets_then_harmonizes_with_the_first_valid_echo() -> None:
-    world = World()
-    player = add_entity(
-        world,
-        Team("player"),
-        Transform(100, 100),
-        Collider(20, 20),
-        ControlIntent(draw_pressed=True),
-        DrawState(),
-        AbilityState(current="none"),
-        ActorState("Idle"),
-        Facing(1),
-    )
-    add_entity(world, Team("player"), Transform(110, 100), Collider(20, 20), Health(2, 2), EnemyDropAbility("ice"))
-    add_entity(
-        world,
-        Team("enemy"),
-        Transform(115, 100),
-        Collider(20, 20),
-        Health(0, 2, dead=True),
-        EnemyDropAbility("ice"),
-    )
-    add_entity(world, Team("enemy"), Transform(110, 200), Collider(20, 20), Health(2, 2), EnemyDropAbility("ice"))
-    add_entity(world, Team("enemy"), Transform(50, 100), Collider(20, 20), Health(2, 2), EnemyDropAbility("ice"))
-    captured = add_entity(
-        world,
-        Team("enemy"),
-        Transform(130, 100),
-        Collider(20, 20),
-        Health(2, 2),
-        EnemyDropAbility("fire"),
-    )
-
-    DrawSystem().update(world, 16)
-
-    draw_state = world.get_component(player, DrawState)
-    assert draw_state.active is True
-    assert draw_state.captured_entity == captured
-    assert world.get_component(captured, Transform).x == 114
-
-    intent = world.get_component(player, ControlIntent)
-    intent.draw_pressed = False
-    intent.draw_released = True
-    DrawSystem().update(world, 16)
-
-    assert captured not in world.alive_entities
-    assert world.get_component(player, AbilityState).current == "fire"
-    assert world.get_component(player, ActorState).name == "Harmonize"
-    assert draw_state == DrawState()
-    assert world.events.peek()[0].topic == "ability_copied"
-
-
-def test_draw_release_without_a_live_capture_launches_a_facing_projectile() -> None:
-    world = World()
-    player = add_entity(
-        world,
-        Team("player"),
-        Transform(50, 40),
-        Collider(20, 20),
-        ControlIntent(draw_released=True),
-        DrawState(active=True, active_ms=30, captured_entity=999),
-        AbilityState(),
-        ActorState("Draw"),
-        Facing(-1),
-    )
-
-    DrawSystem().update(world, 16)
-
-    requests = world.resources["projectile_requests"]
-    assert isinstance(requests, list)
-    assert requests == [
-        {
-            "owner": player,
-            "team": "player",
-            "tag": "spit_star",
-            "x": 60,
-            "y": 48,
-            "vx": -360.0,
-            "vy": -20.0,
-            "damage": 2,
-            "ttl_ms": 300,
-            "width": 20,
-            "height": 16,
-        }
-    ]
-
-
 def test_enemy_ai_covers_dead_chase_and_all_patrol_boundaries() -> None:
     world = World()
     add_entity(world, PlayerSlot(1), Transform(100, 0), Health(5, 5))
@@ -507,7 +416,7 @@ def test_input_command_system_resets_stale_intent_and_maps_every_command_type() 
     system = InputCommandSystem()
     world.frame_input = object()
     system.update(world, 16)
-    assert world.get_component(first, ControlIntent).jump_pressed is True
+    assert world.get_component(first, ControlIntent).jump_pressed is False
 
     world.frame_input = InputFrame(
         commands_by_slot={
@@ -533,7 +442,7 @@ def test_input_command_system_resets_stale_intent_and_maps_every_command_type() 
         move_axis=1,
         jump_pressed=True,
         hover_held=True,
-        draw_pressed=True,
+        draw_started=True,
         draw_released=True,
         ability_pressed=True,
         guard_held=True,

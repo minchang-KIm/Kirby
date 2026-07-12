@@ -20,19 +20,21 @@ class InputCommandSystem:
     def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
         input_frame = world.frame_input
+        for _, _, intent in world.query(PlayerSlot, ControlIntent):
+            intent.jump_pressed = False
+            intent.draw_started = False
+            intent.draw_released = False
+            intent.ability_pressed = False
+            intent.ability_consumed = False
+            intent.dodge_pressed = False
+            intent.drop_pressed = False
         if not isinstance(input_frame, InputFrame):
             return
 
         for _, _, intent in world.query(PlayerSlot, ControlIntent):
             intent.move_axis = 0
-            intent.jump_pressed = False
             intent.hover_held = False
-            intent.draw_pressed = False
-            intent.draw_released = False
-            intent.ability_pressed = False
             intent.guard_held = False
-            intent.dodge_pressed = False
-            intent.drop_pressed = False
 
         for entity_id, slot, intent in world.query(PlayerSlot, ControlIntent):
             for command in input_frame.commands_for(slot.slot):
@@ -46,7 +48,7 @@ class InputCommandSystem:
                 elif isinstance(command, HoverCommand):
                     intent.hover_held = command.held
                 elif isinstance(command, DrawStartCommand):
-                    intent.draw_pressed = True
+                    intent.draw_started = True
                 elif isinstance(command, DrawReleaseCommand):
                     intent.draw_released = True
                 elif isinstance(command, AbilityUseCommand):
