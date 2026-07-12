@@ -19,7 +19,7 @@ from windsprig.gameplay.components import (
     Transform,
     Velocity,
 )
-from windsprig.gameplay.systems import MovementSystem
+from windsprig.gameplay.systems import DefenseSystem, MovementSystem
 
 
 def _movement_player(
@@ -195,3 +195,82 @@ def test_grounding_resets_hover_and_gravity_is_applied_exactly_once() -> None:
     normal_world, normal_player = _movement_player()
     _advance_movement(normal_world)
     assert normal_world.get_component(normal_player, Velocity).vy == pytest.approx(40.0)
+
+
+@pytest.mark.parametrize(
+    ("state_name", "health_dead"),
+    (("Dead", True), ("Hurt", False), ("Draw", False), ("Idle", True)),
+)
+def test_jump_effects_require_an_alive_legal_actor_transition(
+    state_name: str,
+    health_dead: bool,
+) -> None:
+    world, player = _movement_player(on_ground=True)
+    state = world.get_component(player, ActorState)
+    health = world.get_component(player, Health)
+    movement = world.get_component(player, MovementState)
+    intent = world.get_component(player, ControlIntent)
+    velocity = world.get_component(player, Velocity)
+    state.name = state_name
+    health.dead = health_dead
+    intent.jump_pressed = True
+
+    _advance_movement(world)
+
+    assert state.name == state_name
+    assert velocity.vy == pytest.approx(40.0)
+    assert movement.coyote_remaining_ms == 100
+    assert movement.jump_buffer_remaining_ms == 120
+
+
+@pytest.mark.parametrize(
+    ("state_name", "health_dead"),
+    (("Dead", True), ("Hurt", False), ("Draw", False), ("Idle", True)),
+)
+def test_hover_effects_require_an_alive_legal_actor_transition(
+    state_name: str,
+    health_dead: bool,
+) -> None:
+    world, player = _movement_player()
+    state = world.get_component(player, ActorState)
+    health = world.get_component(player, Health)
+    movement = world.get_component(player, MovementState)
+    intent = world.get_component(player, ControlIntent)
+    velocity = world.get_component(player, Velocity)
+    state.name = state_name
+    health.dead = health_dead
+    intent.hover_held = True
+
+    _advance_movement(world)
+
+    assert state.name == state_name
+    assert velocity.vy == pytest.approx(40.0)
+    assert movement.hover_remaining_ms == 850
+    assert movement.hover_ready is True
+
+
+def test_hurt_recovery_timer_cannot_be_overwritten_by_hover_in_the_same_tick() -> None:
+    world, player = _movement_player()
+    state = world.get_component(player, ActorState)
+    intent = world.get_component(player, ControlIntent)
+    velocity = world.get_component(player, Velocity)
+    state.name = "Hurt"
+    state.timer_ms = 32
+    intent.hover_held = True
+
+    DefenseSystem().update(world, 16)
+    MovementSystem().update(world, 16)
+
+    assert (state.name, state.timer_ms) == ("Hurt", 16)
+    assert velocity.vy == pytest.approx(40.0)
+
+
+def test_dead_player_input_cannot_apply_horizontal_acceleration() -> None:
+    world, player = _movement_player()
+    world.get_component(player, ActorState).name = "Dead"
+    world.get_component(player, Health).dead = True
+    world.get_component(player, ControlIntent).move_axis = 1
+
+    _advance_movement(world)
+
+    assert world.get_component(player, Velocity) == Velocity(0.0, 40.0)

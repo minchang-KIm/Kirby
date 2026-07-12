@@ -545,7 +545,7 @@ def test_input_command_system_resets_stale_intent_and_maps_every_command_type() 
     assert world.get_component(third, Facing).direction == -1
 
 
-def test_movement_system_handles_guard_acceleration_deceleration_jump_float_and_gravity() -> None:
+def test_movement_system_handles_guard_acceleration_deceleration_jump_hover_and_gravity() -> None:
     world = World()
     world.resources["config"] = GameConfig()
 
@@ -561,13 +561,14 @@ def test_movement_system_handles_guard_acceleration_deceleration_jump_float_and_
             ActorState("Idle"),
             MovementState(),
             DefenseState(guarding=intent.guard_held),
+            Health(10, 10),
         )
 
     jumping = player(ControlIntent(move_axis=1, jump_pressed=True, guard_held=True), Velocity(), Collider(20, 20, True))
     moving_left = player(ControlIntent(move_axis=-1), Velocity(), Collider(20, 20))
     slowing_right = player(ControlIntent(), Velocity(100, 0), Collider(20, 20))
     slowing_left = player(ControlIntent(), Velocity(-100, 0), Collider(20, 20))
-    floating = player(ControlIntent(hover_held=True), Velocity(0, 0), Collider(20, 20))
+    hovering = player(ControlIntent(hover_held=True), Velocity(0, 0), Collider(20, 20))
     over_speed = player(ControlIntent(move_axis=1), Velocity(500, 2_000), Collider(20, 20))
 
     MovementSystem().update(world, 16)
@@ -579,8 +580,8 @@ def test_movement_system_handles_guard_acceleration_deceleration_jump_float_and_
     assert world.get_component(moving_left, Velocity).vx == pytest.approx(-27.2)
     assert world.get_component(slowing_right, Velocity).vx == pytest.approx(52.0)
     assert world.get_component(slowing_left, Velocity).vx == pytest.approx(-52.0)
-    assert world.get_component(floating, Velocity).vy == pytest.approx(11.2)
-    assert world.get_component(floating, ActorState).name == "Hover"
+    assert world.get_component(hovering, Velocity).vy == pytest.approx(11.2)
+    assert world.get_component(hovering, ActorState).name == "Hover"
     assert world.get_component(over_speed, Velocity).vx == pytest.approx(472.8)
     assert world.get_component(over_speed, Velocity).vy == 1600.0
 

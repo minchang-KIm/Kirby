@@ -11,6 +11,7 @@ from windsprig.gameplay.components import (
     Collider,
     ControlIntent,
     DefenseState,
+    Health,
     MovementState,
     PlayerSlot,
     Projectile,
@@ -29,7 +30,7 @@ class MovementSystem:
         dt_s = dt_ms / 1000.0
         gravity_scales: dict[int, float] = {}
 
-        for entity_id, _, _, _, velocity, collider, intent, state, movement, defense in world.query(
+        for entity_id, _, _, _, velocity, collider, intent, state, movement, defense, health in world.query(
             PlayerSlot,
             Team,
             Transform,
@@ -39,6 +40,7 @@ class MovementSystem:
             ActorState,
             MovementState,
             DefenseState,
+            Health,
         ):
             if collider.on_ground:
                 movement.coyote_remaining_ms = config.coyote_time_ms
@@ -58,21 +60,26 @@ class MovementSystem:
             dodge_active = defense.dodge_remaining_ms > 0
             if not dodge_active:
                 can_jump = collider.on_ground or movement.coyote_remaining_ms > 0
-                if can_jump and movement.jump_buffer_remaining_ms > 0:
+                jump_state = transition(state.name, "Jump")
+                if not health.dead and jump_state == "Jump" and can_jump and movement.jump_buffer_remaining_ms > 0:
                     velocity.vy = -config.jump_velocity
                     collider.on_ground = False
                     movement.coyote_remaining_ms = 0
                     movement.jump_buffer_remaining_ms = 0
-                    state.name = "Jump"
+                    state.name = jump_state
 
-                target_speed = intent.move_axis * config.move_speed
-                if defense.guarding:
-                    target_speed *= config.guard_speed_multiplier
-                _accelerate_horizontal(velocity, target_speed, intent.move_axis, collider, dt_s)
+                if not health.dead:
+                    target_speed = intent.move_axis * config.move_speed
+                    if defense.guarding:
+                        target_speed *= config.guard_speed_multiplier
+                    _accelerate_horizontal(velocity, target_speed, intent.move_axis, collider, dt_s)
 
             gravity_scale = 1.0
+            hover_state = transition(state.name, "Hover")
             hovering = (
-                not dodge_active
+                not health.dead
+                and not dodge_active
+                and hover_state == "Hover"
                 and intent.hover_held
                 and not collider.on_ground
                 and movement.hover_ready
@@ -83,8 +90,8 @@ class MovementSystem:
                 if movement.hover_remaining_ms == 0:
                     movement.hover_ready = False
                 gravity_scale = config.hover_gravity_scale
-                state.name = "Hover"
-            elif state.name == "Hover" and not collider.on_ground:
+                state.name = hover_state
+            elif not health.dead and state.name == "Hover" and not collider.on_ground:
                 state.name = transition(state.name, "Fall")
             gravity_scales[entity_id] = gravity_scale
 
