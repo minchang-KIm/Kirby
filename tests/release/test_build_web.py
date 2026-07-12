@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -14,7 +13,11 @@ from typing import cast
 import pytest
 
 from tools import build_web
-from tools.build_web import apply_web_shell, attach_release_manifest
+from tools.build_web import (
+    apply_web_shell,
+    attach_release_manifest,
+    bind_service_worker_identity,
+)
 from tools.release_common import BuildIdentity
 from tools.web_runtime import RuntimeManifest
 
@@ -28,8 +31,7 @@ def test_apply_web_shell_injects_accessible_metadata_once_and_copies_canonical_a
     output = tmp_path / "dist"
     output.mkdir()
     (output / "index.html").write_text(
-        "<html><head><title>Windsprig</title></head>"
-        "<body><canvas id='canvas' tabindex='1'></canvas></body></html>",
+        "<html><head><title>Windsprig</title></head><body><canvas id='canvas' tabindex='1'></canvas></body></html>",
         encoding="utf-8",
     )
 
@@ -47,18 +49,10 @@ def test_apply_web_shell_injects_accessible_metadata_once_and_copies_canonical_a
     assert "Requires a keyboard or compatible gamepad" in html
     assert "Your profiles stay in this browser. No account or telemetry is used." in html
     assert html.count('navigator.serviceWorker?.register("/service-worker.js")') == 1
-    assert (output / "manifest.webmanifest").read_bytes() == (
-        _ROOT / "web/manifest.webmanifest"
-    ).read_bytes()
-    assert (output / "service-worker.js").read_bytes() == (
-        _ROOT / "web/service-worker.js"
-    ).read_bytes()
-    assert (output / "favicon.png").read_bytes() == (
-        _ROOT / "assets/generated/ui/favicon.png"
-    ).read_bytes()
-    assert (output / "social-card.png").read_bytes() == (
-        _ROOT / "assets/generated/ui/social-card.png"
-    ).read_bytes()
+    assert (output / "manifest.webmanifest").read_bytes() == (_ROOT / "web/manifest.webmanifest").read_bytes()
+    assert (output / "service-worker.js").read_bytes() == (_ROOT / "web/service-worker.js").read_bytes()
+    assert (output / "favicon.png").read_bytes() == (_ROOT / "assets/generated/ui/favicon.png").read_bytes()
+    assert (output / "social-card.png").read_bytes() == (_ROOT / "assets/generated/ui/social-card.png").read_bytes()
     assert not (_ROOT / "web/favicon.png").exists()
 
 
@@ -73,20 +67,12 @@ def test_apply_web_shell_rejects_reinjection_without_changing_the_artifact(
         encoding="utf-8",
     )
     apply_web_shell(output, _ROOT / "web")
-    before = {
-        path.name: path.read_bytes()
-        for path in output.iterdir()
-        if path.is_file()
-    }
+    before = {path.name: path.read_bytes() for path in output.iterdir() if path.is_file()}
 
     with pytest.raises(ValueError, match="already contains"):
         apply_web_shell(output, _ROOT / "web")
 
-    assert {
-        path.name: path.read_bytes()
-        for path in output.iterdir()
-        if path.is_file()
-    } == before
+    assert {path.name: path.read_bytes() for path in output.iterdir() if path.is_file()} == before
 
 
 def test_apply_web_shell_preflights_destination_collisions_before_injection(
@@ -117,32 +103,21 @@ def test_apply_web_shell_is_byte_deterministic_for_identical_pygbag_input(
         (output / "index.html").write_bytes(original)
         apply_web_shell(output, _ROOT / "web")
 
-    first = {
-        path.name: path.read_bytes()
-        for path in outputs[0].iterdir()
-        if path.is_file()
-    }
-    second = {
-        path.name: path.read_bytes()
-        for path in outputs[1].iterdir()
-        if path.is_file()
-    }
+    first = {path.name: path.read_bytes() for path in outputs[0].iterdir() if path.is_file()}
+    second = {path.name: path.read_bytes() for path in outputs[1].iterdir() if path.is_file()}
     assert first == second
-    assert {
-        int(path.stat().st_mtime)
-        for output in outputs
-        for path in output.iterdir()
-        if path.is_file()
-    } == {946_684_800}
+    assert {int(path.stat().st_mtime) for output in outputs for path in output.iterdir() if path.is_file()} == {
+        946_684_800
+    }
 
 
 def test_web_app_manifest_is_canonical_same_origin_install_metadata() -> None:
     path = _ROOT / "web/manifest.webmanifest"
     document = json.loads(path.read_text(encoding="utf-8"))
 
-    assert path.read_bytes() == (
-        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
+    assert path.read_bytes() == (json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
     assert document["name"] == "Windsprig: Echoes of the Gale"
     assert document["short_name"] == "Windsprig"
     assert document["start_url"] == document["scope"] == document["id"] == "/"
@@ -164,9 +139,8 @@ def test_web_app_manifest_is_canonical_same_origin_install_metadata() -> None:
 
 def test_service_worker_uses_versioned_same_origin_cache_with_safe_freshness_rules() -> None:
     worker = (_ROOT / "web/service-worker.js").read_text(encoding="utf-8")
-    project = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert f'const CACHE = "windsprig-v{project["project"]["version"]}";' in worker
+    assert 'const CACHE = "__WINSPRIG_RELEASE_CACHE__";' in worker
     for path in (
         "/",
         "/manifest.webmanifest",
@@ -181,10 +155,30 @@ def test_service_worker_uses_versioned_same_origin_cache_with_safe_freshness_rul
     assert 'request.mode === "navigate"' in worker
     assert 'new Set(["/build-info.json", "/service-worker.js"])' in worker
     assert "await cache.put(request, response.clone())" in worker
-    assert "response.ok && response.type !== \"opaque\"" in worker
+    assert 'response.ok && response.type !== "opaque"' in worker
     assert "keys.filter(key => key !== CACHE)" in worker
+    assert 'caches.match("/", { ignoreSearch: true })' in worker
+    assert "caches.match(request, { ignoreSearch: true })" in worker
     assert "http://" not in worker
     assert "https://" not in worker
+
+
+def test_service_worker_identity_binding_is_commit_specific_and_single_use(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "web"
+    output.mkdir()
+    worker = output / "service-worker.js"
+    worker.write_bytes((_ROOT / "web/service-worker.js").read_bytes())
+    identity = BuildIdentity("1.0.0", "a" * 40, "web")
+
+    bind_service_worker_identity(output, identity)
+
+    bound = worker.read_text(encoding="utf-8")
+    assert 'const CACHE = "windsprig-v1.0.0-aaaaaaaaaaaa";' in bound
+    assert "__WINSPRIG_RELEASE_CACHE__" not in bound
+    with pytest.raises(ValueError, match="release cache token"):
+        bind_service_worker_identity(output, identity)
 
 
 def _make_directory_link(link: Path, target: Path) -> None:
@@ -367,9 +361,7 @@ def _patch_build_dependencies(
     canonical_ui = root / "assets/generated/ui"
     canonical_ui.mkdir(parents=True)
     for name in ("favicon.png", "social-card.png"):
-        (canonical_ui / name).write_bytes(
-            (_ROOT / "assets/generated/ui" / name).read_bytes()
-        )
+        (canonical_ui / name).write_bytes((_ROOT / "assets/generated/ui" / name).read_bytes())
     commands: list[list[str]] = []
     monkeypatch.setattr(build_web, "ROOT", root)
     monkeypatch.setattr(build_web, "verify_toolchain_versions", lambda: None)
@@ -444,9 +436,7 @@ def test_build_web_stages_one_pygbag_artifact_at_an_explicit_output(
     cdn_index = commands[0].index("--cdn")
     assert commands[0][cdn_index + 1] == "runtime/0.9.3/"
     icon_index = commands[0].index("--icon")
-    assert Path(commands[0][icon_index + 1]) == (
-        root / "build/web-stage/assets/generated/ui/favicon.png"
-    )
+    assert Path(commands[0][icon_index + 1]) == (root / "build/web-stage/assets/generated/ui/favicon.png")
     assert report["probe"] is True
     assert report["release_version"] == "1.2.3"
     assert json.loads((output / "build-info.json").read_text(encoding="utf-8")) == {

@@ -1,4 +1,4 @@
-const CACHE = "windsprig-v1.0.0";
+const CACHE = "__WINSPRIG_RELEASE_CACHE__";
 const CORE = Object.freeze([
   "/",
   "/manifest.webmanifest",
@@ -51,14 +51,17 @@ self.addEventListener("fetch", event => {
         await store(request, response);
         return response;
       } catch {
-        return (await caches.match(request)) || Response.error();
+        if (request.mode === "navigate") {
+          return (await caches.match("/", { ignoreSearch: true })) || Response.error();
+        }
+        return (await caches.match(request, { ignoreSearch: true })) || Response.error();
       }
     })());
     return;
   }
 
   event.respondWith((async () => {
-    const hit = await caches.match(request);
+    const hit = await caches.match(request, { ignoreSearch: true });
     if (hit) return hit;
     const response = await fetch(request);
     await store(request, response);

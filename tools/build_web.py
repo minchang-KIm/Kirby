@@ -167,6 +167,7 @@ _DEFAULT_OUTPUT: Final = Path("dist/web")
 _ALLOWED_BUILD_TARGETS: Final = frozenset({Path("build/web-stage"), Path("dist/web")})
 _SHELL_HEAD_MARKER: Final = "<!-- windsprig-pwa:head -->"
 _SHELL_BODY_MARKER: Final = "<!-- windsprig-pwa:body -->"
+_RELEASE_CACHE_TOKEN: Final = "__WINSPRIG_RELEASE_CACHE__"
 _SHELL_COPY_NAMES: Final = ("manifest.webmanifest", "service-worker.js")
 _CANONICAL_SHELL_ART: Final = {
     "favicon.png": Path("assets/generated/ui/favicon.png"),
@@ -239,9 +240,7 @@ def _preflight_shell_destinations(output: Path, names: tuple[str, ...]) -> None:
         except FileNotFoundError:
             continue
         if _is_link_or_reparse(destination) or not stat.S_ISREG(state.st_mode):
-            raise ValueError(
-                f"web shell destination must be a regular file: {destination}"
-            )
+            raise ValueError(f"web shell destination must be a regular file: {destination}")
 
 
 def apply_web_shell(output: Path, source: Path) -> None:
@@ -264,16 +263,10 @@ def apply_web_shell(output: Path, source: Path) -> None:
     index_path = output / "index.html"
     html = _read_regular_source(index_path).decode("utf-8")
     shell = _read_regular_source(source / "index-shell.html").decode("utf-8")
-    copied_payloads = {
-        name: _read_regular_source(source / name)
-        for name in _SHELL_COPY_NAMES
-    }
+    copied_payloads = {name: _read_regular_source(source / name) for name in _SHELL_COPY_NAMES}
     repository_root = source.parent
     copied_payloads.update(
-        {
-            name: _read_regular_source(repository_root / relative)
-            for name, relative in _CANONICAL_SHELL_ART.items()
-        }
+        {name: _read_regular_source(repository_root / relative) for name, relative in _CANONICAL_SHELL_ART.items()}
     )
     try:
         manifest = json.loads(copied_payloads["manifest.webmanifest"])
@@ -296,6 +289,24 @@ def apply_web_shell(output: Path, source: Path) -> None:
     _write_atomic_bytes(index_path, injected.encode("utf-8"))
     for name, payload in copied_payloads.items():
         _write_atomic_bytes(output / name, payload)
+
+
+def bind_service_worker_identity(output: Path, identity: BuildIdentity) -> None:
+    """Bind cache-first runtime bytes to one immutable source commit."""
+
+    if not isinstance(output, Path):
+        raise TypeError("output must be a pathlib.Path")
+    if not isinstance(identity, BuildIdentity) or identity.target != "web":
+        raise TypeError("identity must be a web BuildIdentity")
+    worker_path = Path(os.path.abspath(output)) / "service-worker.js"
+    worker = _read_regular_source(worker_path).decode("utf-8")
+    if worker.count(_RELEASE_CACHE_TOKEN) != 1:
+        raise ValueError("service worker must contain exactly one release cache token")
+    cache_name = f"windsprig-v{identity.version}-{identity.commit_sha[:12]}"
+    _write_atomic_bytes(
+        worker_path,
+        worker.replace(_RELEASE_CACHE_TOKEN, cache_name).encode("utf-8"),
+    )
 
 
 def _probe_capability_source(probe: bool) -> bytes:
@@ -814,15 +825,16 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
         root / "build" / "web-runtime-cache",
         built,
     )
+    identity = read_build_identity(root, "web")
+    if identity.commit_sha != runtime_manifest.source_commit:
+        raise SystemExit("repository HEAD changed during the web build")
     apply_web_shell(built, source)
+    bind_service_worker_identity(built, identity)
     verify_same_origin_runtime_index(built / "index.html")
     _normalize_archives(built)
     verify_probe_artifacts(built, probe=probe)
     prune_unused_pygbag_archives(built)
     measurements = measure_output(built)
-    identity = read_build_identity(root, "web")
-    if identity.commit_sha != runtime_manifest.source_commit:
-        raise SystemExit("repository HEAD changed during the web build")
     final_runtime_manifest = inspect_runtime_source(root)
     if final_runtime_manifest != runtime_manifest:
         raise SystemExit("runtime source or build recipe changed during the web build")
