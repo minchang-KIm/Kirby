@@ -137,6 +137,17 @@ def test_web_app_manifest_is_canonical_same_origin_install_metadata() -> None:
     assert "https://" not in path.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize(
+    "relative",
+    ["web/index-shell.html", "web/manifest.webmanifest", "web/service-worker.js"],
+)
+def test_web_shell_sources_use_canonical_lf_bytes(relative: str) -> None:
+    payload = (_ROOT / relative).read_bytes()
+
+    assert payload.endswith(b"\n")
+    assert b"\r" not in payload
+
+
 def test_service_worker_uses_versioned_same_origin_cache_with_safe_freshness_rules() -> None:
     worker = (_ROOT / "web/service-worker.js").read_text(encoding="utf-8")
 
