@@ -45,6 +45,29 @@ def _services(
     return replace(create_native_services(GameConfig()), storage=storage)
 
 
+def _completed_runtime(
+    stage: object,
+    *,
+    frame_index: int,
+    mote_ids: set[str],
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        stage=stage,
+        result=None,
+        player_entities={1: 1001},
+        world=SimpleNamespace(
+            resources={
+                "run_energy_spheres": 99,
+                "collected_mote_ids": mote_ids,
+                "discovered_ability_ids": set(),
+                "deaths_by_slot": {1: 0},
+            },
+            frame_index=frame_index,
+        ),
+        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
+    )
+
+
 def test_runtime_progress_is_saved_as_immutable_v2_data(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -53,23 +76,22 @@ def test_runtime_progress_is_saved_as_immutable_v2_data(
     services = _services(tmp_path, monkeypatch, storage)
     app = GameApp(services=services)
     stage = app.catalog.stages["world_1_stage_1"]
-    app.runtime = SimpleNamespace(
-        stage=stage,
-        world=SimpleNamespace(
-            resources={"run_energy_spheres": 99},
-            frame_index=10,
-        ),
-        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
+    mote_ids = {
+        "world_1_stage_1:mote:1",
+        "world_1_stage_1:mote:2",
+        "world_1_stage_1:mote:3",
+    }
+    app.runtime = _completed_runtime(
+        stage,
+        frame_index=10,
+        mote_ids=mote_ids,
     )
 
     app._on_stage_progress()
-    app.runtime = SimpleNamespace(
-        stage=stage,
-        world=SimpleNamespace(
-            resources={"run_energy_spheres": 99},
-            frame_index=12,
-        ),
-        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
+    app.runtime = _completed_runtime(
+        stage,
+        frame_index=12,
+        mote_ids=mote_ids,
     )
     app._on_stage_progress()
 
@@ -119,14 +141,10 @@ def test_completed_runtime_is_recorded_once_but_new_run_increments_replay_count(
     storage = ToggleStorage()
     app = GameApp(services=_services(tmp_path, monkeypatch, storage))
     stage = app.catalog.stages["world_1_stage_1"]
-    completed_world = SimpleNamespace(
-        resources={"run_energy_spheres": 1},
+    completed_runtime = _completed_runtime(
+        stage,
         frame_index=10,
-    )
-    completed_runtime = SimpleNamespace(
-        stage=stage,
-        world=completed_world,
-        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
+        mote_ids={"world_1_stage_1:mote:1"},
     )
     app.runtime = completed_runtime
 
@@ -135,10 +153,10 @@ def test_completed_runtime_is_recorded_once_but_new_run_increments_replay_count(
 
     assert app.tracker.clear_counts == {"world_1_stage_1": 1}
 
-    app.runtime = SimpleNamespace(
-        stage=stage,
-        world=completed_world,
-        snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
+    app.runtime = _completed_runtime(
+        stage,
+        frame_index=10,
+        mote_ids={"world_1_stage_1:mote:1"},
     )
     app._on_stage_progress()
 

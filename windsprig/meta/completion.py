@@ -331,6 +331,7 @@ class CompletionTracker:
 
     cleared_nodes: set[str] = field(default_factory=set)
     collected_mote_ids: set[str] = field(default_factory=set)
+    discovered_abilities: set[str] = field(default_factory=set)
     challenge_rewards: set[str] = field(default_factory=set)
     best_times_ms: dict[str, int] = field(default_factory=dict)
     clear_counts: dict[str, int] = field(default_factory=dict)
@@ -338,6 +339,7 @@ class CompletionTracker:
     def __post_init__(self) -> None:
         self.cleared_nodes = set(_id_frozenset(self.cleared_nodes, "cleared_nodes"))
         self.collected_mote_ids = set(_id_frozenset(self.collected_mote_ids, "collected_mote_ids"))
+        self.discovered_abilities = set(_id_frozenset(self.discovered_abilities, "discovered_abilities"))
         self.challenge_rewards = set(_id_frozenset(self.challenge_rewards, "challenge_rewards"))
         self.best_times_ms = self._mutable_int_map(self.best_times_ms, "best_times_ms")
         self.clear_counts = self._mutable_int_map(self.clear_counts, "clear_counts")

@@ -98,6 +98,26 @@ def stage_view(outcome: StageOutcome) -> SimpleNamespace:
     return SimpleNamespace(outcome=outcome)
 
 
+def completed_runtime(stage: object, *, frame_index: int = 10) -> SimpleNamespace:
+    """Return exact pre-Task-9 completion facts without count-to-ID synthesis."""
+
+    return SimpleNamespace(
+        stage=stage,
+        result=None,
+        player_entities={1: 1001},
+        world=SimpleNamespace(
+            resources={
+                "run_energy_spheres": 1,
+                "collected_mote_ids": set(),
+                "discovered_ability_ids": set(),
+                "deaths_by_slot": {1: 0},
+            },
+            frame_index=frame_index,
+        ),
+        snapshot=lambda: stage_view(StageOutcome.COMPLETED),
+    )
+
+
 def make_foundation_screen(
     save_service: RecordingSaveService,
     probe: FoundationProbe | None = None,
@@ -280,14 +300,7 @@ def test_stage_completion_never_auto_flushes_while_reset_is_unresolved() -> None
     )
     screen = make_foundation_screen(save_service)
     stage = screen.catalog.stages["world_1_stage_1"]
-    screen.runtime = SimpleNamespace(
-        stage=stage,
-        world=SimpleNamespace(
-            resources={"run_energy_spheres": 1},
-            frame_index=10,
-        ),
-        snapshot=lambda: stage_view(StageOutcome.COMPLETED),
-    )
+    screen.runtime = completed_runtime(stage)
 
     screen._on_stage_progress()
 
@@ -415,15 +428,8 @@ def test_stage_completion_transitions_to_recovery_when_save_requires_reload() ->
     )
     screen = make_foundation_screen(save_service)
     stage = screen.catalog.stages["world_1_stage_1"]
-    screen.runtime = SimpleNamespace(
-        stage=stage,
-        world=SimpleNamespace(
-            resources={"run_energy_spheres": 1},
-            frame_index=10,
-        ),
-        step=lambda _frame: None,
-        snapshot=lambda: stage_view(StageOutcome.COMPLETED),
-    )
+    screen.runtime = completed_runtime(stage)
+    screen.runtime.step = lambda _frame: None
     screen.screen_id = "playing"
 
     transition = screen.fixed_update(screen.config.fixed_dt_ms, InputFrame.empty())

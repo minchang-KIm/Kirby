@@ -12,14 +12,14 @@ import pygame
 
 from windsprig._build_flags import FOUNDATION_PROBE_AVAILABLE
 from windsprig.config import GameConfig
-from windsprig.content import CampaignCatalog, load_campaign_catalog
+from windsprig.content import CampaignCatalog, CatalogBundle, load_catalog_bundle
 from windsprig.content.loader import WorldNode
 from windsprig.core.rng import derive_stage_seed
 from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.abilities import AbilityRegistry, create_default_registry
 from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
-from windsprig.gameplay.snapshot import StageOutcome
+from windsprig.gameplay.snapshot import StageOutcome, StageResult
 from windsprig.input.commands import (
     CancelCommand,
     ConfirmCommand,
@@ -40,6 +40,7 @@ from windsprig.meta import (
     SaveWriteResult,
     UnlockRules,
     WorldMapService,
+    apply_stage_result,
     migration_catalog,
 )
 from windsprig.meta.save_models import SaveData
@@ -68,6 +69,7 @@ class FoundationScreen(Screen):
         ability_registry: AbilityRegistry,
         migration_catalog: SaveMigrationCatalog,
         probe: FoundationProbe,
+        progression_catalog: CatalogBundle | None = None,
     ) -> None:
         self.config = config
         self.roster = roster
@@ -76,6 +78,11 @@ class FoundationScreen(Screen):
         self.ability_registry = ability_registry
         self.migration_catalog = migration_catalog
         self.probe = probe
+        self.progression_catalog = progression_catalog or load_catalog_bundle(
+            config.content_dir
+        )
+        if self.progression_catalog.campaign != catalog:
+            raise ValueError("progression catalog campaign must match screen catalog")
         self.unlock_rules = UnlockRules(catalog)
         self.world_map_service = WorldMapService(catalog, self.unlock_rules)
         self.screen_id: ScreenId = "world_map"
@@ -283,6 +290,7 @@ class FoundationScreen(Screen):
         self.tracker = CompletionTracker(
             cleared_nodes=cleared_nodes,
             collected_mote_ids=set(profile.collected_mote_ids),
+            discovered_abilities=set(profile.discovered_abilities),
             challenge_rewards=set(profile.challenge_rewards),
             best_times_ms=dict(profile.best_times_ms),
             clear_counts=dict(profile.clear_counts),
@@ -345,26 +353,72 @@ class FoundationScreen(Screen):
         stage = runtime.stage
         self.probe.mark("stage_id", stage.stage_id)
         self.probe.mark("stage", "completed")
-        elapsed_ms = runtime.world.frame_index * self.config.fixed_dt_ms
-        self.tracker.mark_stage_clear(stage.node_id, stage.stage_id, elapsed_ms)
-        run_mote_count = runtime.world.resources.get("run_energy_spheres", 0)
-        if type(run_mote_count) is not int:
-            raise ValueError("run_energy_spheres must be an integer")
-        available_mote_ids = self.migration_catalog.mote_ids_by_stage.get(stage.stage_id, ())
-        clamped_mote_count = max(0, min(run_mote_count, len(available_mote_ids)))
-        # Catalog order converts the prototype count into stable IDs deterministically.
-        for mote_id in available_mote_ids[:clamped_mote_count]:
-            self.tracker.collect_mote(mote_id)
-        self.unlocked_nodes.add(stage.node_id)
-        next_node = self.migration_catalog.next_node_by_node.get(stage.node_id)
-        if next_node is not None:
-            self.unlocked_nodes.add(next_node)
-        self.unlocked_worlds = self.unlock_rules.apply_stage_rewards(stage.node_id, self.unlocked_worlds)
+        result = self._stage_result_for_progression(runtime)
+        if result.stage_id != stage.stage_id:
+            raise ValueError("runtime result stage must match the active stage")
+        profile, _ = apply_stage_result(
+            self.save_data.profiles[0],
+            result,
+            self.progression_catalog,
+        )
+        self.save_data = replace(
+            self.save_data,
+            profiles=(profile, self.save_data.profiles[1], self.save_data.profiles[2]),
+        )
+        self._rebuild_progress()
         self.runtime = None
         save_result = self._flush_save(automatic=True)
         if save_result is not None and save_result.ok:
             self.probe.mark("save", "written")
         return True
+
+    def _stage_result_for_progression(self, runtime: StageRuntime) -> StageResult:
+        """Adapt the pre-Task-9 runtime without inventing collectible identities."""
+
+        runtime_result = runtime.result
+        if runtime_result is not None:
+            return runtime_result
+        resources = runtime.world.resources
+        active_slots = tuple(sorted(runtime.player_entities))
+        if not active_slots:
+            active_slots = tuple(player.slot for player in self.roster.players)
+        raw_deaths = resources.get("deaths_by_slot")
+        if raw_deaths is None:
+            deaths_by_slot = tuple((slot, 0) for slot in active_slots)
+        else:
+            if not isinstance(raw_deaths, Mapping):
+                raise ValueError("deaths_by_slot must be a mapping")
+            deaths: list[tuple[int, int]] = []
+            for slot, count in raw_deaths.items():
+                if type(slot) is not int or type(count) is not int:
+                    raise ValueError("deaths_by_slot must map integer slots to integer counts")
+                deaths.append((slot, count))
+            deaths_by_slot = tuple(sorted(deaths))
+        return StageResult(
+            stage_id=runtime.stage.stage_id,
+            world_id=runtime.stage.world_id,
+            node_id=runtime.stage.node_id,
+            clear_time_ms=runtime.world.frame_index * self.config.fixed_dt_ms,
+            collected_mote_ids=self._result_ids(resources, "collected_mote_ids"),
+            discovered_ability_ids=self._result_ids(
+                resources,
+                "discovered_ability_ids",
+            ),
+            active_slots=active_slots,
+            deaths_by_slot=deaths_by_slot,
+        )
+
+    @staticmethod
+    def _result_ids(resources: Mapping[str, object], name: str) -> tuple[str, ...]:
+        raw_ids = resources.get(name, ())
+        if isinstance(raw_ids, (str, bytes)) or not isinstance(
+            raw_ids,
+            (tuple, list, set, frozenset),
+        ):
+            raise ValueError(f"{name} must be a collection of IDs")
+        if any(not isinstance(item, str) for item in raw_ids):
+            raise ValueError(f"{name} must contain only string IDs")
+        return tuple(sorted(raw_ids))
 
     def _flush_save(self, *, automatic: bool = False) -> SaveWriteResult | None:
         profile = replace(
@@ -372,6 +426,7 @@ class FoundationScreen(Screen):
             unlocked_nodes=frozenset(self.unlocked_nodes),
             unlocked_worlds=frozenset(self.unlocked_worlds),
             collected_mote_ids=frozenset(self.tracker.collected_mote_ids),
+            discovered_abilities=frozenset(self.tracker.discovered_abilities),
             best_times_ms=dict(self.tracker.best_times_ms),
             clear_counts=dict(self.tracker.clear_counts),
             challenge_rewards=frozenset(self.tracker.challenge_rewards),
@@ -606,7 +661,8 @@ class FoundationScreenFactory(ScreenFactory):
             probe = FoundationProbe(services.storage, enabled=enabled)
         probe.start_session()
         self.probe = probe
-        catalog = load_campaign_catalog(config.content_dir)
+        progression_catalog = load_catalog_bundle(config.content_dir)
+        catalog = progression_catalog.campaign
         migrations = migration_catalog(catalog)
         service = save_service or SaveManager(services.storage, migrations, now_utc)
         self.foundation_screen = FoundationScreen(
@@ -617,6 +673,7 @@ class FoundationScreenFactory(ScreenFactory):
             ability_registry=create_default_registry(config.content_dir),
             migration_catalog=migrations,
             probe=self.probe,
+            progression_catalog=progression_catalog,
         )
 
     def create(self, screen_id: ScreenId) -> FoundationScreen:
