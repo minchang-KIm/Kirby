@@ -4,12 +4,13 @@ import asyncio
 import math
 import os
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
 import pygame
 
+from windsprig.audio.composition import load_canonical_sound_paths
 from windsprig.config import GameConfig
 from windsprig.platform.services import (
     AudioBus,
@@ -85,16 +86,24 @@ class NativeStorage:
 
 
 class PygameAudioService:
+    """Own mixer initialization, canonical sound decoding, and playback channels."""
+
     def __init__(
         self,
         requires_gesture: bool,
         sounds: Mapping[str, pygame.mixer.Sound] | None = None,
+        sound_paths_loader: Callable[[], Mapping[str, Path]] | None = None,
     ) -> None:
+        if sounds is not None and sound_paths_loader is not None:
+            raise ValueError("provide injected sounds or a deferred sound-path loader, not both")
         self.requires_gesture = requires_gesture
         self._sounds = dict(sounds or {})
+        self._sound_paths_loader = sound_paths_loader
         self._bus_volumes: dict[AudioBus, float] = {"music": 1.0, "sfx": 1.0}
         self._user_muted = False
         self._focus_paused = False
+        self._music_channel: pygame.mixer.Channel | None = None
+        self._current_music_cue: str | None = None
         self._status = AudioStatus(ready=False, muted=True)
 
     @property
@@ -112,11 +121,35 @@ class PygameAudioService:
         except pygame.error:
             self._status = AudioStatus(ready=False, muted=True, error_code="audio_init_failed")
         else:
-            self._status = AudioStatus(
-                ready=True,
-                muted=self._user_muted or self._focus_paused,
-                error_code="focus_lost" if self._focus_paused else None,
-            )
+            decode_failed = False
+            try:
+                self._decode_deferred_sounds()
+            except Exception:
+                # A corrupt optional audio device/asset capability must not stop gameplay.
+                decode_failed = True
+                self._sounds.clear()
+                self._music_channel = None
+                self._current_music_cue = None
+                self._status = AudioStatus(
+                    ready=False,
+                    muted=True,
+                    error_code="audio_assets_invalid",
+                )
+            if not decode_failed:
+                if not self._sounds:
+                    self._status = AudioStatus(
+                        ready=False,
+                        muted=True,
+                        error_code="audio_assets_unavailable",
+                    )
+                else:
+                    pygame.mixer.set_reserved(1)
+                    self._music_channel = pygame.mixer.Channel(0)
+                    self._status = AudioStatus(
+                        ready=True,
+                        muted=self._user_muted or self._focus_paused,
+                        error_code="focus_lost" if self._focus_paused else None,
+                    )
         self._publish_status()
         return self._status
 
@@ -128,11 +161,22 @@ class PygameAudioService:
         if sound is None:
             return False
         try:
-            sound.set_volume(self._bus_volumes[validated_bus])
-            channel = sound.play(loops=-1 if validated_bus == "music" else 0)
+            volume = self._bus_volumes[validated_bus]
+            # Channel gain is the sole bus control. Keeping source gain at one
+            # prevents pygame from multiplying the requested volume twice.
+            sound.set_volume(1.0)
+            if validated_bus == "music":
+                started = self._play_music(cue_id, sound, volume)
+            else:
+                channel = sound.play(loops=0)
+                started = channel is not None
+                if channel is not None:
+                    channel.set_volume(volume)
         except pygame.error:
             return False
-        return channel is not None
+        if started:
+            self._publish_playback(cue_id, validated_bus)
+        return started
 
     def pause(self) -> None:
         if not self._status.ready:
@@ -165,6 +209,7 @@ class PygameAudioService:
         if not math.isfinite(number) or not 0.0 <= number <= 1.0:
             raise ValueError("audio bus volume must be a finite number between zero and one")
         self._bus_volumes[validated_bus] = number
+        self._apply_volume_to_playing_channels(validated_bus, number)
 
     def set_muted(self, muted: bool) -> None:
         """Apply explicit user mute without losing focus-suspension ownership."""
@@ -190,6 +235,61 @@ class PygameAudioService:
 
     def _publish_status(self) -> None:
         """Allow web adapters to surface each immutable status transition."""
+
+    def _publish_playback(self, cue_id: str, bus: AudioBus) -> None:
+        """Allow web adapters to expose evidence only after a channel starts."""
+
+    def _decode_deferred_sounds(self) -> None:
+        """Decode an all-or-nothing verified inventory after mixer initialization."""
+
+        loader = self._sound_paths_loader
+        if loader is None or self._sounds:
+            return
+        paths = loader()
+        decoded: dict[str, pygame.mixer.Sound] = {}
+        for cue_id, path in paths.items():
+            if type(cue_id) is not str or not isinstance(path, Path):
+                raise TypeError("sound-path loader must return string IDs and pathlib paths")
+            decoded[cue_id] = pygame.mixer.Sound(path.as_posix())
+        if not decoded:
+            return
+        self._sounds = decoded
+
+    def _play_music(
+        self,
+        cue_id: str,
+        sound: pygame.mixer.Sound,
+        volume: float,
+    ) -> bool:
+        """Replace the previous infinite loop on the one reserved music channel."""
+
+        channel = self._music_channel
+        if channel is None:
+            return False
+        if self._current_music_cue == cue_id and channel.get_busy():
+            channel.set_volume(volume)
+            return True
+        channel.play(sound, loops=-1, fade_ms=100)
+        channel.set_volume(volume)
+        started = channel.get_busy()
+        if started:
+            self._current_music_cue = cue_id
+        return started
+
+    def _apply_volume_to_playing_channels(self, bus: AudioBus, volume: float) -> None:
+        """Update channel gain so settings affect sounds already in flight."""
+
+        if pygame.mixer.get_init() is None:
+            return
+        if bus == "music":
+            channel = self._music_channel
+            if channel is not None and channel.get_busy():
+                channel.set_volume(volume)
+            return
+        for index in range(1, pygame.mixer.get_num_channels()):
+            channel = pygame.mixer.Channel(index)
+            if channel.get_busy():
+                channel.set_volume(volume)
 
     @staticmethod
     def _validate_bus(bus: object) -> AudioBus:
@@ -286,7 +386,10 @@ def create_native_services(config: GameConfig) -> PlatformServices:
         root = Path.home() / "AppData" / "Local" / "Windsprig"
     return PlatformServices(
         storage=NativeStorage(root),
-        audio=PygameAudioService(requires_gesture=False),
+        audio=PygameAudioService(
+            requires_gesture=False,
+            sound_paths_loader=lambda: load_canonical_sound_paths(config),
+        ),
         display=PygameDisplayService(config.resolution),
         time=PygameTimeService(),
         lifecycle=PygameLifecycleService(),

@@ -175,6 +175,41 @@ def _validate_lookup_id(asset_id: object) -> str:
     return asset_id
 
 
+def _validated_asset_root(root: Path, manifest: AssetManifest) -> Path:
+    """Validate the shared manifest/root boundary before any asset is published."""
+
+    if not isinstance(root, Path):
+        raise TypeError("root must be a pathlib.Path")
+    if not isinstance(manifest, AssetManifest):
+        raise TypeError("manifest must be an AssetManifest")
+    lexical_root = Path(os.path.abspath(root))
+    if _is_link_or_reparse(lexical_root) or not lexical_root.is_dir():
+        raise MissingAssetError(f"asset root: unsafe or missing directory: {lexical_root}")
+    return lexical_root
+
+
+def _verified_audio_entries(
+    lexical_root: Path,
+    manifest: AssetManifest,
+) -> tuple[dict[str, Path], list[str]]:
+    """Verify canonical WAV bytes once for both audio-only and full catalogs."""
+
+    sounds: dict[str, Path] = {}
+    failures: list[str] = []
+    for cue_id, audio_spec in manifest.audio.items():
+        try:
+            path = _safe_relative_path(lexical_root, audio_spec.path)
+            payload = _read_regular_file(path)
+            if _sha256(payload) != audio_spec.sha256:
+                raise ValueError("file hash mismatch")
+            _validate_wav(payload)
+            sounds[cue_id] = path
+        except (FileNotFoundError, OSError, ValueError) as error:
+            if audio_spec.mandatory:
+                failures.append(f"{cue_id}: {error}")
+    return sounds, failures
+
+
 @dataclass(slots=True)
 class AssetCatalog:
     """Own verified runtime assets and expose only typed deterministic lookups."""
@@ -196,18 +231,11 @@ class AssetCatalog:
     ) -> AssetCatalog:
         """Verify every mandatory file before publishing an immutable catalog."""
 
-        if not isinstance(root, Path):
-            raise TypeError("root must be a pathlib.Path")
-        if not isinstance(manifest, AssetManifest):
-            raise TypeError("manifest must be an AssetManifest")
         if type(developer_mode) is not bool:
             raise TypeError("developer_mode must be a boolean")
-        lexical_root = Path(os.path.abspath(root))
-        if _is_link_or_reparse(lexical_root) or not lexical_root.is_dir():
-            raise MissingAssetError(f"asset root: unsafe or missing directory: {lexical_root}")
+        lexical_root = _validated_asset_root(root, manifest)
 
         images: dict[str, pygame.Surface] = {}
-        sounds: dict[str, Path] = {}
         failures: list[str] = []
         for asset_id, art_spec in manifest.art.items():
             try:
@@ -227,17 +255,8 @@ class AssetCatalog:
                 if developer_mode:
                     images[asset_id] = _diagnostic_placeholder(art_spec, asset_id)
 
-        for cue_id, audio_spec in manifest.audio.items():
-            try:
-                path = _safe_relative_path(lexical_root, audio_spec.path)
-                payload = _read_regular_file(path)
-                if _sha256(payload) != audio_spec.sha256:
-                    raise ValueError("file hash mismatch")
-                _validate_wav(payload)
-                sounds[cue_id] = path
-            except (FileNotFoundError, OSError, ValueError) as error:
-                if audio_spec.mandatory:
-                    failures.append(f"{cue_id}: {error}")
+        sounds, audio_failures = _verified_audio_entries(lexical_root, manifest)
+        failures.extend(audio_failures)
 
         font_payload: bytes | None = None
         try:
@@ -264,6 +283,27 @@ class AssetCatalog:
             font_payload,
             developer_mode,
         )
+
+    @classmethod
+    def verified_audio_paths(
+        cls,
+        root: Path,
+        manifest: AssetManifest,
+    ) -> MappingProxyType[str, Path]:
+        """Return only integrity-checked WAV paths without decoding unrelated art.
+
+        Platform audio initialization uses this narrow view after mixer ownership
+        has been established. The validation implementation is shared with
+        :meth:`load`, keeping the manifest and ``AssetCatalog`` authoritative.
+        """
+
+        lexical_root = _validated_asset_root(root, manifest)
+        sounds, failures = _verified_audio_entries(lexical_root, manifest)
+        if failures:
+            raise MissingAssetError(
+                "asset catalog release load failed: " + "; ".join(sorted(failures))
+            )
+        return MappingProxyType(dict(sorted(sounds.items())))
 
     def frame_count(self, asset_id: str) -> int:
         """Return the manifest-declared frame count for one verified atlas."""

@@ -188,9 +188,12 @@ def test_all_thirty_six_boss_telegraphs_resolve_to_manifested_exact_boss_cues() 
 def test_release_asset_catalog_verifies_and_exposes_all_fifty_seven_audio_files() -> None:
     manifest = load_asset_manifest(MANIFEST_PATH)
     catalog = AssetCatalog.load(ASSET_ROOT, manifest)
+    verified_paths = AssetCatalog.verified_audio_paths(ASSET_ROOT, manifest)
 
     for cue_id, spec in manifest.audio.items():
         assert catalog.sound_path(cue_id) == ASSET_ROOT / spec.path
+        assert verified_paths[cue_id] == ASSET_ROOT / spec.path
+    assert set(verified_paths) == MUSIC_CUE_IDS | SFX_CUE_IDS
 
 
 def test_audio_provenance_and_paths_contain_no_legacy_public_identity() -> None:

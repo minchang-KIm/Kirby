@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import parse_qs
 
 import pygame
 
+from windsprig.audio.catalog import MUSIC_CUE_IDS, SFX_CUE_IDS
+from windsprig.audio.composition import load_canonical_sound_paths
 from windsprig.config import GameConfig
 from windsprig.platform.native import (
     PygameAudioService,
@@ -64,6 +67,9 @@ class _WindowWithLocalStorage(Protocol):
 class _AudioStatusElement(Protocol):
     textContent: str
     hidden: bool
+
+    def setAttribute(self, name: str, value: str) -> None:
+        raise NotImplementedError
 
 
 class _JsonParser(Protocol):
@@ -165,6 +171,25 @@ class PygbagBrowserBridge:
         except Exception:
             return
 
+    def publish_audio_playback(self, cue_id: str) -> None:
+        """Publish DOM evidence only after pygame reports a started channel."""
+
+        if type(cue_id) is not str or cue_id not in MUSIC_CUE_IDS | SFX_CUE_IDS:
+            raise ValueError("playback cue must be a canonical audio ID")
+        document = _optional_attribute(self.window, "document")
+        get_element = _optional_attribute(document, "getElementById")
+        if not callable(get_element):
+            return
+        try:
+            element = get_element("audio-status")
+            if element is None:
+                return
+            status_element = cast(_AudioStatusElement, element)
+            status_element.setAttribute("data-playback", "started")
+            status_element.setAttribute("data-cue", cue_id)
+        except Exception:
+            return
+
     def publish_diagnostic(
         self,
         name: str,
@@ -222,8 +247,18 @@ class WebStorage:
 
 
 class WebAudioService(PygameAudioService):
-    def __init__(self, bridge: BrowserBridge) -> None:
-        super().__init__(requires_gesture=True)
+    def __init__(
+        self,
+        bridge: BrowserBridge,
+        *,
+        sounds: Mapping[str, pygame.mixer.Sound] | None = None,
+        sound_paths_loader: Callable[[], Mapping[str, Path]] | None = None,
+    ) -> None:
+        super().__init__(
+            requires_gesture=True,
+            sounds=sounds,
+            sound_paths_loader=sound_paths_loader,
+        )
         self.bridge = bridge
         self._status = AudioStatus(ready=False, muted=True, error_code="gesture_required")
         self.bridge.publish_audio_status(self._status)
@@ -233,6 +268,10 @@ class WebAudioService(PygameAudioService):
 
     def _publish_status(self) -> None:
         self.bridge.publish_audio_status(self._status)
+
+    def _publish_playback(self, cue_id: str, bus: object) -> None:
+        del bus
+        self.bridge.publish_audio_playback(cue_id)
 
 
 class WebDisplayService(PygameDisplayService):
@@ -266,7 +305,10 @@ def create_web_services(config: GameConfig, window: object | None = None) -> Pla
     gamepads = bridge.gamepads_available()
     return PlatformServices(
         storage=WebStorage(bridge),
-        audio=WebAudioService(bridge),
+        audio=WebAudioService(
+            bridge,
+            sound_paths_loader=lambda: load_canonical_sound_paths(config),
+        ),
         display=WebDisplayService(config.resolution, bridge),
         time=PygameTimeService(),
         lifecycle=PygameLifecycleService(),

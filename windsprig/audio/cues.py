@@ -10,7 +10,6 @@ from windsprig.core.events import GameEvent
 
 STATIC_EVENT_CUES: Final = MappingProxyType(
     {
-        "PlayerDamaged": "sfx.damage",
         "PlayerDodged": "sfx.dodge",
         "EnemyCaptured": "sfx.draw.start",
         "CaptureReleased": "sfx.draw.release",
@@ -61,6 +60,13 @@ def cue_for_event(event: GameEvent) -> str | None:
 
     if type(event) is not GameEvent:
         raise TypeError("event must be an exact GameEvent")
+    if event.topic == "PlayerDamaged":
+        guarded = event.payload.get("guarded")
+        if guarded is True:
+            return "sfx.guard"
+        if guarded is False or guarded is None:
+            return "sfx.damage"
+        return None
     if event.topic in {"AbilityUsed", "AttackSpawned"}:
         return _ability_cue(event)
     if event.topic == "BossAttackTelegraphed":

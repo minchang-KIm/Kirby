@@ -154,6 +154,10 @@ class BrowserBridge(Protocol):
     def publish_audio_status(self, status: AudioStatus) -> None:
         raise NotImplementedError
 
+    def publish_audio_playback(self, cue_id: str) -> None:
+        """Expose that one canonical cue reached a real playback channel."""
+        raise NotImplementedError
+
     def publish_diagnostic(
         self,
         name: str,

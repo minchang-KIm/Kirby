@@ -65,6 +65,7 @@ class FakeAudio:
         self.pause_count = 0
         self.resume_count = 0
         self.fail_initialize = False
+        self.play_calls: list[tuple[str, str]] = []
 
     @property
     def status(self) -> AudioStatus:
@@ -78,9 +79,9 @@ class FakeAudio:
         self._status = AudioStatus(ready=True, muted=False)
         return self._status
 
-    def play_cue(self, _cue_id: str, bus: str = "sfx") -> bool:
-        _ = bus
-        return False
+    def play_cue(self, cue_id: str, bus: str = "sfx") -> bool:
+        self.play_calls.append((cue_id, bus))
+        return self._status.ready and not self._status.muted
 
     def pause(self) -> None:
         self.pause_count += 1
@@ -645,6 +646,16 @@ async def test_pointer_gesture_attempts_audio_initialization_once_and_failure_is
     assert harness.audio.initialize_count == 1
     assert len(harness.display.presented) == 2
     assert harness.time.yield_count == 2
+
+
+async def test_successful_pointer_audio_unlock_starts_a_committed_confirmation_cue() -> None:
+    harness = make_harness(audio_requires_gesture=True)
+    harness.events.append(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1))
+
+    await harness.app.run_frame()
+
+    assert harness.audio.initialize_count == 1
+    assert harness.audio.play_calls == [("sfx.ui.confirm", "sfx")]
 
 
 async def test_native_pointer_does_not_repeat_non_gesture_audio_initialization() -> None:

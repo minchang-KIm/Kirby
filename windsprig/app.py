@@ -141,6 +141,13 @@ class GameApp:
                 # Audio is an explicitly nonfatal platform capability.
                 audio_status = self.services.audio.status
             if audio_status.ready:
+                # The unlocking pointer is itself a confirm action. Starting a
+                # committed cue here proves browser decoding/channel ownership
+                # without feeding any additional input into the simulation.
+                try:
+                    self.services.audio.play_cue("sfx.ui.confirm", "sfx")
+                except Exception:
+                    pass
                 self.probe.mark("audio", "ready")
             elif audio_status.muted:
                 self.probe.mark("audio", "muted")

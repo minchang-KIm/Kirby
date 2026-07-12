@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pygame
 import pytest
 
+import windsprig.audio as audio_package
 from windsprig.assets import AssetManager
-from windsprig.audio import AudioManager
 from windsprig.camera import Camera
 from windsprig.hud import HudRenderer
 
@@ -39,36 +39,8 @@ def test_asset_manager_builds_the_complete_tile_and_sprite_catalog() -> None:
     assert assets.sprites["player_idle"].get_at((14, 14))[:3] == (255, 170, 194)
 
 
-def test_audio_manager_initializes_an_uninitialized_mixer(monkeypatch: pytest.MonkeyPatch) -> None:
-    initialized: list[bool] = []
-    monkeypatch.setattr(pygame.mixer, "get_init", lambda: None)
-    monkeypatch.setattr(pygame.mixer, "init", lambda: initialized.append(True))
-
-    audio = AudioManager()
-
-    assert audio.enabled is True
-    assert initialized == [True]
-    assert audio.play_sfx("jump") is None
-    assert audio.play_bgm("world_1") is None
-
-
-def test_audio_manager_reuses_an_initialized_mixer(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(pygame.mixer, "get_init", lambda: (44_100, -16, 2))
-    monkeypatch.setattr(pygame.mixer, "init", lambda: pytest.fail("mixer was initialized twice"))
-
-    assert AudioManager().enabled is True
-
-
-def test_audio_manager_degrades_to_disabled_when_mixer_initialization_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fail_init() -> None:
-        raise pygame.error("no audio device")
-
-    monkeypatch.setattr(pygame.mixer, "get_init", lambda: None)
-    monkeypatch.setattr(pygame.mixer, "init", fail_init)
-
-    assert AudioManager().enabled is False
+def test_audio_package_does_not_expose_a_second_mixer_owning_facade() -> None:
+    assert not hasattr(audio_package, "AudioManager")
 
 
 def test_camera_smooths_toward_clamped_world_bounds_and_converts_coordinates() -> None:

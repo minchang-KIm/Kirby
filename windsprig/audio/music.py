@@ -43,6 +43,30 @@ def _boss_music_cue(event: GameEvent) -> str | None:
     return f"music.boss.{boss_id}.p{phase_index}"
 
 
+def _is_player_damage_pair(first: GameEvent, second: GameEvent) -> bool:
+    """Recognize the adjacent canonical attack/damage pair emitted by DamageSystem."""
+
+    if first.topic != "AttackHit" or second.topic != "PlayerDamaged":
+        return False
+    first_frame = first.payload.get("frame_index")
+    second_frame = second.payload.get("frame_index")
+    first_target = first.payload.get("target_id")
+    second_target = second.payload.get("target_id")
+    first_guarded = first.payload.get("guarded")
+    second_guarded = second.payload.get("guarded")
+    return (
+        type(first_frame) is int
+        and type(second_frame) is int
+        and first_frame == second_frame
+        and type(first_target) is int
+        and type(second_target) is int
+        and first_target == second_target
+        and type(first_guarded) is bool
+        and type(second_guarded) is bool
+        and first_guarded is second_guarded
+    )
+
+
 class MusicDirector:
     """Own presentation audio selection while preserving input event order."""
 
@@ -78,8 +102,16 @@ class MusicDirector:
         """Play valid events in order and isolate one runtime audio failure."""
 
         played: list[str] = []
-        for event in events:
+        for index, event in enumerate(events):
             if type(event) is not GameEvent:
+                continue
+            if (
+                event.topic == "AttackHit"
+                and index + 1 < len(events)
+                and type(events[index + 1]) is GameEvent
+                and _is_player_damage_pair(event, events[index + 1])
+            ):
+                # PlayerDamaged is the semantic owner of guarded/ordinary player audio.
                 continue
             if event.topic == "BossPhaseChanged":
                 cue_id = _boss_music_cue(event)

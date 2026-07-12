@@ -202,6 +202,59 @@ def test_event_order_is_preserved_and_one_sfx_failure_does_not_suppress_later_ev
     assert tuple((event.topic, dict(event.payload)) for event in events) == before
 
 
+def test_guarded_player_hit_emits_one_guard_cue_from_the_semantic_damage_payload() -> None:
+    audio = FakeAudioService()
+    director = MusicDirector(audio)
+    events = (
+        GameEvent(
+            "AttackHit",
+            {"frame_index": 17, "target_id": 4, "damage": 1, "guarded": True},
+        ),
+        GameEvent(
+            "PlayerDamaged",
+            {"frame_index": 17, "target_id": 4, "amount": 1, "guarded": True},
+        ),
+    )
+
+    assert cue_for_event(events[1]) == "sfx.guard"
+    assert director.handle(events) == ("sfx.guard",)
+    assert audio.calls == [("sfx.guard", "sfx")]
+
+
+def test_ordinary_player_hit_is_deduplicated_to_one_damage_cue() -> None:
+    audio = FakeAudioService()
+    director = MusicDirector(audio)
+    events = (
+        GameEvent(
+            "AttackHit",
+            {"frame_index": 18, "target_id": 4, "damage": 3, "guarded": False},
+        ),
+        GameEvent(
+            "PlayerDamaged",
+            {"frame_index": 18, "target_id": 4, "amount": 3, "guarded": False},
+        ),
+    )
+
+    assert director.handle(events) == ("sfx.damage",)
+    assert audio.calls == [("sfx.damage", "sfx")]
+
+
+def test_enemy_attack_hit_and_projectile_cut_keep_their_independent_semantics() -> None:
+    audio = FakeAudioService()
+    director = MusicDirector(audio)
+
+    assert director.handle(
+        (
+            GameEvent(
+                "AttackHit",
+                {"frame_index": 20, "target_id": 8, "damage": 2, "guarded": False},
+            ),
+            GameEvent("ProjectileCut", {"frame_index": 20, "projectile_id": 9}),
+        )
+    ) == ("sfx.damage", "sfx.guard")
+    assert audio.calls == [("sfx.damage", "sfx"), ("sfx.guard", "sfx")]
+
+
 def _forged_audio_settings(master: object, music: object, sfx: object, muted: object) -> AudioSettings:
     settings = object.__new__(AudioSettings)
     object.__setattr__(settings, "master_volume", master)

@@ -8,6 +8,7 @@ from pathlib import Path
 import pygame
 import pytest
 
+from windsprig.audio.catalog import MUSIC_CUE_IDS, SFX_CUE_IDS
 from windsprig.config import GameConfig
 from windsprig.platform import (
     AudioService,
@@ -182,9 +183,150 @@ def test_audio_initializes_and_plays_only_known_cues() -> None:
         audio.set_bus_volume("sfx", 0.25)
         assert audio.play_cue("missing") is False
         assert audio.play_cue("known") is True
-        assert sound.get_volume() == pytest.approx(0.25, abs=0.01)
+        assert sound.get_volume() == pytest.approx(1.0, abs=0.01)
+        active = [
+            pygame.mixer.Channel(index)
+            for index in range(1, pygame.mixer.get_num_channels())
+            if pygame.mixer.Channel(index).get_sound() is sound
+        ]
+        assert len(active) == 1
+        assert active[0].get_volume() == pytest.approx(0.25, abs=0.01)
         audio.pause()
         audio.resume()
+    finally:
+        pygame.mixer.quit()
+
+
+def test_production_factory_defers_and_loads_every_verified_release_cue(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The production boundary must not confuse an empty mixer with ready audio."""
+
+    pygame.mixer.quit()
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    services = create_native_services(GameConfig())
+    audio = services.audio
+    assert isinstance(audio, PygameAudioService)
+    assert audio._sounds == {}  # noqa: SLF001 - proves factory construction is load-free.
+
+    try:
+        status = asyncio.run(audio.initialize(after_user_gesture=False))
+
+        assert status == AudioStatus(ready=True, muted=False)
+        assert set(audio._sounds) == MUSIC_CUE_IDS | SFX_CUE_IDS  # noqa: SLF001
+        assert audio.play_cue("sfx.ui.confirm", "sfx") is True
+        assert any(
+            pygame.mixer.Channel(index).get_busy()
+            for index in range(pygame.mixer.get_num_channels())
+        )
+    finally:
+        pygame.mixer.quit()
+
+
+def test_audio_never_reports_ready_without_at_least_one_playable_sound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pygame.mixer.quit()
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    audio = PygameAudioService(requires_gesture=False)
+    try:
+        assert asyncio.run(audio.initialize()) == AudioStatus(
+            ready=False,
+            muted=True,
+            error_code="audio_assets_unavailable",
+        )
+    finally:
+        pygame.mixer.quit()
+
+
+def test_deferred_decode_failure_is_atomic_and_reports_invalid_assets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pygame.mixer.quit()
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    audio = PygameAudioService(
+        requires_gesture=False,
+        sound_paths_loader=lambda: {
+            "sfx.ui.confirm": Path(__file__).resolve().parents[3]
+            / "assets/generated/audio/sfx/ui-confirm.wav",
+            "sfx.damage": tmp_path / "missing.wav",
+        },
+    )
+    try:
+        assert asyncio.run(audio.initialize()) == AudioStatus(
+            ready=False,
+            muted=True,
+            error_code="audio_assets_invalid",
+        )
+        assert audio._sounds == {}  # noqa: SLF001 - proves partial decode was not published.
+        assert audio.play_cue("sfx.ui.confirm") is False
+    finally:
+        pygame.mixer.quit()
+
+
+def test_music_replacement_owns_one_reserved_channel_and_never_grows_busy_channels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pygame.mixer.quit()
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    try:
+        pygame.mixer.init(frequency=22_050, size=-16, channels=1)
+        first = pygame.mixer.Sound(buffer=b"\x00\x00" * 22_050)
+        second = pygame.mixer.Sound(buffer=b"\x00\x00" * 22_050)
+        audio = PygameAudioService(
+            requires_gesture=False,
+            sounds={"music.title": first, "music.map": second},
+        )
+        assert asyncio.run(audio.initialize()).ready
+
+        assert audio.play_cue("music.title", "music")
+        assert audio.play_cue("music.map", "music")
+        for _ in range(12):
+            assert audio.play_cue("music.map", "music")
+
+        busy = [
+            index
+            for index in range(pygame.mixer.get_num_channels())
+            if pygame.mixer.Channel(index).get_busy()
+        ]
+        assert busy == [0]
+        assert pygame.mixer.Channel(0).get_sound() is second
+    finally:
+        pygame.mixer.quit()
+
+
+def test_bus_volume_updates_music_and_sfx_channels_that_are_already_playing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pygame.mixer.quit()
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    try:
+        pygame.mixer.init(frequency=22_050, size=-16, channels=1)
+        music = pygame.mixer.Sound(buffer=b"\x00\x00" * 22_050)
+        sfx = pygame.mixer.Sound(buffer=b"\x00\x00" * 22_050)
+        audio = PygameAudioService(
+            requires_gesture=False,
+            sounds={"music.title": music, "sfx.damage": sfx},
+        )
+        assert asyncio.run(audio.initialize()).ready
+        assert audio.play_cue("music.title", "music")
+        assert audio.play_cue("sfx.damage", "sfx")
+
+        audio.set_bus_volume("music", 0.2)
+        audio.set_bus_volume("sfx", 0.35)
+
+        assert pygame.mixer.Channel(0).get_sound() is music
+        assert pygame.mixer.Channel(0).get_volume() == pytest.approx(0.2, abs=0.01)
+        sfx_channels = [
+            pygame.mixer.Channel(index)
+            for index in range(1, pygame.mixer.get_num_channels())
+            if pygame.mixer.Channel(index).get_sound() is sfx
+        ]
+        assert len(sfx_channels) == 1
+        assert sfx_channels[0].get_volume() == pytest.approx(0.35, abs=0.01)
     finally:
         pygame.mixer.quit()
 
@@ -231,7 +373,7 @@ def test_audio_bus_volume_rejects_invalid_values_without_changing_the_previous_v
             audio.set_bus_volume("sfx", value)  # type: ignore[arg-type]
 
         assert audio.play_cue("known")
-        assert sound.get_volume() == pytest.approx(0.25, abs=0.01)
+        assert sound.get_volume() == pytest.approx(1.0, abs=0.01)
         assert math.isfinite(sound.get_volume())
     finally:
         pygame.mixer.quit()

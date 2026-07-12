@@ -182,6 +182,10 @@ def test_web_boot_input_canvas_and_save_reload(page: Page, web_url: str) -> None
     assert len(screenshot) > 1_000
 
     canvas.click(position={"x": 640, "y": 360})
+    audio_status = page.locator("#audio-status")
+    expect(audio_status).to_have_attribute("data-playback", "started", timeout=5_000)
+    expect(audio_status).to_have_attribute("data-cue", "sfx.ui.confirm")
+    expect(audio_status).to_have_text("Audio: ready")
     page.keyboard.press("Enter")
     page.wait_for_function(
         "window.__WINSPRIG_TEST__?.activePlayers === 1",

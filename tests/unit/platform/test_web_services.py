@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
 import pygame
 import pytest
 
+from windsprig.audio.catalog import MUSIC_CUE_IDS, SFX_CUE_IDS
 from windsprig.config import GameConfig
 from windsprig.platform import (
     AudioService,
@@ -33,6 +35,8 @@ from windsprig.platform.web import (
     WebStorage,
     create_web_services,
 )
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass
@@ -68,6 +72,10 @@ class FakeElement:
 class FakeStatusElement:
     textContent: str = ""
     hidden: bool = True
+    attributes: dict[str, str] = field(default_factory=dict)
+
+    def setAttribute(self, name: str, value: str) -> None:
+        self.attributes[name] = value
 
 
 @dataclass
@@ -331,13 +339,45 @@ def test_bridge_publishes_exact_visible_audio_status(
     assert window.document.audio_status.hidden is False
 
 
+def test_bridge_publishes_real_playback_evidence_on_the_visible_audio_status() -> None:
+    window = FakeWindow()
+
+    PygbagBrowserBridge(window).publish_audio_playback("sfx.ui.confirm")
+
+    assert window.document.audio_status.attributes == {
+        "data-playback": "started",
+        "data-cue": "sfx.ui.confirm",
+    }
+
+
+def test_bridge_rejects_noncanonical_playback_evidence_before_dom_mutation() -> None:
+    window = FakeWindow()
+
+    with pytest.raises(ValueError, match="canonical audio ID"):
+        PygbagBrowserBridge(window).publish_audio_playback("sfx.not-a-release-cue")
+
+    assert window.document.audio_status.attributes == {}
+
+
 def test_web_audio_requires_a_gesture_before_mixer_initialization(monkeypatch: pytest.MonkeyPatch) -> None:
     pygame.mixer.quit()
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
     initializations: list[bool] = []
+    real_initialize = pygame.mixer.init
     monkeypatch.setattr(pygame.mixer, "get_init", lambda: None)
-    monkeypatch.setattr(pygame.mixer, "init", lambda: initializations.append(True))
+
+    def initialize_mixer() -> None:
+        initializations.append(True)
+        real_initialize(frequency=22_050, size=-16, channels=1)
+
+    monkeypatch.setattr(pygame.mixer, "init", initialize_mixer)
     window = FakeWindow()
-    audio = WebAudioService(PygbagBrowserBridge(window))
+    audio = WebAudioService(
+        PygbagBrowserBridge(window),
+        sound_paths_loader=lambda: {
+            "sfx.ui.confirm": ROOT / "assets/generated/audio/sfx/ui-confirm.wav"
+        },
+    )
 
     assert window.document.audio_status.textContent == "Audio: click the game to enable"
 
@@ -350,6 +390,7 @@ def test_web_audio_requires_a_gesture_before_mixer_initialization(monkeypatch: p
     assert asyncio.run(audio.initialize(after_user_gesture=True)) == AudioStatus(ready=True, muted=False)
     assert initializations == [True]
     assert window.document.audio_status.textContent == "Audio: ready"
+    pygame.mixer.quit()
 
 
 def test_web_audio_surfaces_muted_fallback_after_failed_initialization(
@@ -377,21 +418,61 @@ def test_web_audio_publishes_user_mute_and_focus_loss_restore_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pygame.mixer.quit()
-    monkeypatch.setattr(pygame.mixer, "get_init", lambda: (22_050, -16, 1))
-    window = FakeWindow()
-    audio = WebAudioService(PygbagBrowserBridge(window))
-    assert asyncio.run(audio.initialize(after_user_gesture=True)) == AudioStatus(ready=True, muted=False)
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    try:
+        pygame.mixer.init(frequency=22_050, size=-16, channels=1)
+        sound = pygame.mixer.Sound(buffer=b"\x00\x00" * 256)
+        window = FakeWindow()
+        audio = WebAudioService(
+            PygbagBrowserBridge(window),
+            sounds={"sfx.ui.confirm": sound},
+        )
+        assert asyncio.run(audio.initialize(after_user_gesture=True)) == AudioStatus(ready=True, muted=False)
 
-    audio.set_muted(True)
-    assert window.document.audio_status.textContent == "Audio: muted"
-    audio.pause()
-    assert audio.status == AudioStatus(ready=True, muted=True, error_code="focus_lost")
-    assert window.document.audio_status.textContent == "Audio: muted"
-    audio.resume()
-    assert audio.status == AudioStatus(ready=True, muted=True)
-    assert window.document.audio_status.textContent == "Audio: muted"
-    audio.set_muted(False)
-    assert window.document.audio_status.textContent == "Audio: ready"
+        audio.set_muted(True)
+        assert window.document.audio_status.textContent == "Audio: muted"
+        audio.pause()
+        assert audio.status == AudioStatus(ready=True, muted=True, error_code="focus_lost")
+        assert window.document.audio_status.textContent == "Audio: muted"
+        audio.resume()
+        assert audio.status == AudioStatus(ready=True, muted=True)
+        assert window.document.audio_status.textContent == "Audio: muted"
+        audio.set_muted(False)
+        assert window.document.audio_status.textContent == "Audio: ready"
+    finally:
+        pygame.mixer.quit()
+
+
+def test_web_factory_loads_canonical_audio_only_after_gesture_and_publishes_started_channel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pygame.mixer.quit()
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    window = FakeWindow()
+    services = create_web_services(GameConfig(), window=window)
+    audio = services.audio
+    assert isinstance(audio, WebAudioService)
+    assert audio._sounds == {}  # noqa: SLF001 - gesture must own all browser decoding.
+
+    try:
+        assert asyncio.run(audio.initialize()) == AudioStatus(
+            ready=False,
+            muted=True,
+            error_code="gesture_required",
+        )
+        assert audio._sounds == {}  # noqa: SLF001
+        assert asyncio.run(audio.initialize(after_user_gesture=True)) == AudioStatus(
+            ready=True,
+            muted=False,
+        )
+        assert set(audio._sounds) == MUSIC_CUE_IDS | SFX_CUE_IDS  # noqa: SLF001
+        assert audio.play_cue("sfx.ui.confirm", "sfx")
+        assert window.document.audio_status.attributes == {
+            "data-playback": "started",
+            "data-cue": "sfx.ui.confirm",
+        }
+    finally:
+        pygame.mixer.quit()
 
 
 def test_web_display_requests_browser_fullscreen_but_cannot_exit() -> None:
