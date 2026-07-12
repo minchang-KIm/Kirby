@@ -8,6 +8,8 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from tools.verify_release import verify_local_release
+
 ROOT = Path(__file__).resolve().parents[2]
 VERCEL_CONFIG = ROOT / "vercel.json"
 VERCEL_IGNORE = ROOT / ".vercelignore"
@@ -253,3 +255,27 @@ def test_vercel_source_upload_keeps_every_remote_build_input() -> None:
 
     dangerously_broad_patterns = {"*", "/*", "*.json", "*.lock", "*.py", "*.toml"}
     assert dangerously_broad_patterns.isdisjoint(patterns)
+
+
+def test_release_documents_and_active_artifacts_are_consistent() -> None:
+    assert verify_local_release(ROOT) == []
+
+
+def test_public_release_copy_states_local_only_save_and_input_requirements() -> None:
+    copy = (ROOT / "docs/launch/release-copy.md").read_text(encoding="utf-8")
+
+    assert "No account or telemetry" in copy
+    assert "keyboard or compatible gamepad" in copy
+    assert "1024×576" in copy
+
+
+def test_public_support_and_policy_documents_name_actionable_routes() -> None:
+    support = (ROOT / "SUPPORT.md").read_text(encoding="utf-8")
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    privacy = (ROOT / "PRIVACY.md").read_text(encoding="utf-8")
+
+    assert "%LOCALAPPDATA%/Windsprig" in support
+    assert "github.com/minchang-KIm/windsprig/issues" in support
+    assert "security/advisories/new" in security
+    assert "1.0.x" in security
+    assert all(term in privacy for term in ("No account", "No analytics", "No server save"))
