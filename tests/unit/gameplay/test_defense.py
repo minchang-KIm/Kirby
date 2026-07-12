@@ -85,6 +85,7 @@ def test_damage_record_has_the_exact_typed_queue_boundary() -> None:
         "knockback_x",
         "knockback_y",
         "guard_break",
+        "attack_id",
     )
 
 

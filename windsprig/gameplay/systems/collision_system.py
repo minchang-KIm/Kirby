@@ -6,6 +6,7 @@ from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     NON_ENTITY_DAMAGE_SOURCE_ID,
     ActorState,
+    Attack,
     CapturedBy,
     Collider,
     DamageRecord,
@@ -22,7 +23,9 @@ class CollisionSystem:
         collision_world = cast(TileCollisionWorld, world.resources["collision_world"])
         dt_s = dt_ms / 1000.0
         for entity_id, transform, velocity, collider in world.query(Transform, Velocity, Collider):
-            # WHY: Combat owns legacy projectile motion until Task 8 introduces AttackMotionSystem.
+            if world.has_component(entity_id, Attack):
+                continue
+            # WHY: Combat retains ownership of only the pre-Task-8 projectile path.
             if world.has_component(entity_id, Projectile):
                 continue
             if world.has_component(entity_id, CapturedBy):

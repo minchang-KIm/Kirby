@@ -20,11 +20,13 @@ from windsprig.gameplay.bosses import (
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
+    Attack,
     AttackRequest,
     CameraFocus,
     CapturedBy,
     CaptureState,
     Collider,
+    DamageRecord,
     DefenseState,
     EchoPickup,
     EnemyAI,
@@ -33,6 +35,7 @@ from windsprig.gameplay.components import (
     Health,
     Interaction,
     MovementState,
+    PendingEnemyLaunch,
     PlayerSlot,
     Projectile,
     StageGoal,
@@ -59,6 +62,8 @@ from windsprig.gameplay.snapshot import (
 )
 from windsprig.gameplay.systems import (
     AbilitySystem,
+    AttackMotionSystem,
+    AttackSpawnSystem,
     CameraSystem,
     CaptureSystem,
     CollisionSystem,
@@ -87,7 +92,9 @@ class _ValidatedGameplayResources:
     run_energy_spheres: int
     collected_mote_ids: tuple[str, ...]
     discovered_ability_ids: tuple[str, ...]
+    damage_queue: tuple[DamageRecord, ...]
     attack_requests: tuple[AttackRequest, ...]
+    pending_enemy_launches: tuple[PendingEnemyLaunch, ...]
     boss_commands: tuple[BossCommand, ...]
 
 
@@ -113,9 +120,7 @@ class StageRuntime:
         if stage.boss_id is not None:
             boss_specs = load_boss_catalog(config.content_dir)
             if stage.boss_id not in boss_specs:
-                raise ValueError(
-                    f"stage boss_id is absent from the boss catalog: {stage.boss_id}"
-                )
+                raise ValueError(f"stage boss_id is absent from the boss catalog: {stage.boss_id}")
             self._boss_specs = boss_specs
             self._boss_director = BossDirector(boss_specs)
         self.world = self._new_world()
@@ -143,6 +148,8 @@ class StageRuntime:
             CollisionSystem(),
             CaptureSystem(),
             AbilitySystem(),
+            AttackSpawnSystem(),
+            AttackMotionSystem(),
             CombatSystem(),
             DamageSystem(),
             InteractionSystem(),
@@ -283,6 +290,7 @@ class StageRuntime:
         world.resources["camera_target"] = None
         world.resources["damage_queue"] = []
         world.resources["attack_requests"] = []
+        world.resources["pending_enemy_launches"] = []
         world.resources["boss_commands"] = ()
         world.set_resource_hash_projection(self._gameplay_resource_hash)
         return world
@@ -347,12 +355,10 @@ class StageRuntime:
             "run_energy_spheres": resources.run_energy_spheres,
             "collected_mote_ids": resources.collected_mote_ids,
             "discovered_ability_ids": resources.discovered_ability_ids,
-            "attack_requests": tuple(
-                astuple(request) for request in resources.attack_requests
-            ),
-            "boss_commands": tuple(
-                astuple(command) for command in resources.boss_commands
-            ),
+            "damage_queue": tuple(astuple(item) for item in resources.damage_queue),
+            "attack_requests": tuple(astuple(request) for request in resources.attack_requests),
+            "pending_enemy_launches": tuple(astuple(launch) for launch in resources.pending_enemy_launches),
+            "boss_commands": tuple(astuple(command) for command in resources.boss_commands),
         }
 
     def _validate_gameplay_resources(
@@ -404,11 +410,19 @@ class StageRuntime:
             not isinstance(ability_id, str) for ability_id in discovered
         ):
             raise TypeError("discovered_ability_ids must be a collection of strings")
+        raw_damage_queue = world.resources.get("damage_queue")
+        if not isinstance(raw_damage_queue, list) or any(type(item) is not DamageRecord for item in raw_damage_queue):
+            raise TypeError("damage_queue must be a list of DamageRecord values")
         raw_attack_requests = world.resources.get("attack_requests")
         if not isinstance(raw_attack_requests, list) or any(
             type(request) is not AttackRequest for request in raw_attack_requests
         ):
             raise TypeError("attack_requests must be a list of AttackRequest values")
+        raw_pending_launches = world.resources.get("pending_enemy_launches")
+        if not isinstance(raw_pending_launches, list) or any(
+            type(launch) is not PendingEnemyLaunch for launch in raw_pending_launches
+        ):
+            raise TypeError("pending_enemy_launches must be a list of PendingEnemyLaunch values")
         raw_boss_commands = world.resources.get("boss_commands")
         if not isinstance(raw_boss_commands, tuple) or any(
             type(command) is not BossCommand for command in raw_boss_commands
@@ -424,7 +438,9 @@ class StageRuntime:
             run_energy_spheres=run_motes,
             collected_mote_ids=tuple(sorted(set(collected))),
             discovered_ability_ids=tuple(sorted(set(discovered))),
+            damage_queue=tuple(raw_damage_queue),
             attack_requests=tuple(raw_attack_requests),
+            pending_enemy_launches=tuple(raw_pending_launches),
             boss_commands=boss_commands,
         )
 
@@ -620,6 +636,26 @@ class StageRuntime:
                 Velocity,
             )
         ]
+        views.extend(
+            AttackView(
+                entity_id=entity_id,
+                owner_entity_id=attack.owner_entity_id,
+                attack_kind=attack.attack_kind,
+                visual_id=attack.visual_id,
+                x=transform.x,
+                y=transform.y,
+                width=collider.width,
+                height=collider.height,
+                facing=(-1 if velocity.vx < 0.0 or (velocity.vx == 0.0 and attack.knockback_x < 0.0) else 1),
+                ttl_ms=attack.ttl_ms,
+            )
+            for entity_id, attack, transform, collider, velocity in self.world.query(
+                Attack,
+                Transform,
+                Collider,
+                Velocity,
+            )
+        )
         return tuple(sorted(views, key=lambda view: view.entity_id))
 
     def _echo_pickup_views(self) -> tuple[EchoPickupView, ...]:

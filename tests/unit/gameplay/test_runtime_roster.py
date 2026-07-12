@@ -373,6 +373,8 @@ def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
         "CollisionSystem",
         "CaptureSystem",
         "AbilitySystem",
+        "AttackSpawnSystem",
+        "AttackMotionSystem",
         "CombatSystem",
         "DamageSystem",
         "InteractionSystem",

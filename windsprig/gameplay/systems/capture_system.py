@@ -18,6 +18,7 @@ from windsprig.gameplay.components import (
     EnemyDropAbility,
     Facing,
     Health,
+    PendingEnemyLaunch,
     PlayerSlot,
     Team,
     Transform,
@@ -28,11 +29,6 @@ from windsprig.gameplay.factory import EntityFactory
 from windsprig.gameplay.state_machine import transition
 
 
-def provisional_attack_request_id(requests: list[AttackRequest]) -> int:
-    """Return the Task 5 ordinal that Task 8 replaces with a spawned entity ID."""
-    return len(requests) + 1
-
-
 class CaptureSystem:
     """Resolve one mutually exclusive terminal outcome per captured enemy."""
 
@@ -41,7 +37,6 @@ class CaptureSystem:
             list[AttackRequest],
             world.resources.setdefault("attack_requests", []),
         )
-        requests.clear()
         self._recover_orphaned_enemies(world)
 
         for (
@@ -236,9 +231,7 @@ class CaptureSystem:
             return
         ability.previous_id = ability.current_id
         ability.current_id = capture.captured_ability_id
-        cast(set[str], world.resources.setdefault("discovered_ability_ids", set())).add(
-            ability.current_id
-        )
+        cast(set[str], world.resources.setdefault("discovered_ability_ids", set())).add(ability.current_id)
         publish(
             world,
             GameplayTopic.ABILITY_EQUIPPED,
@@ -260,7 +253,6 @@ class CaptureSystem:
         requests: list[AttackRequest],
     ) -> None:
         enemy_id, transform, _, collider, _, _, _ = held
-        attack_id = provisional_attack_request_id(requests)
         requests.append(
             AttackRequest(
                 owner_entity_id=player_id,
@@ -285,14 +277,12 @@ class CaptureSystem:
                 interaction_kind=None,
             )
         )
-        world.destroy_entity(enemy_id)
-        publish(
-            world,
-            GameplayTopic.ENEMY_LAUNCHED,
-            player_id=player_id,
-            enemy_id=enemy_id,
-            attack_id=attack_id,
+        pending = cast(
+            list[PendingEnemyLaunch],
+            world.resources.setdefault("pending_enemy_launches", []),
         )
+        pending.append(PendingEnemyLaunch(player_id=player_id, enemy_id=enemy_id))
+        world.destroy_entity(enemy_id)
 
     def _drop_ability(
         self,

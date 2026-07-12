@@ -23,6 +23,7 @@ from windsprig.gameplay.components import (
     EnemyDropAbility,
     Facing,
     Health,
+    PendingEnemyLaunch,
     PlayerSlot,
     Team,
     Transform,
@@ -35,7 +36,6 @@ from windsprig.gameplay.systems import (
     EnemyAISystem,
     PickupSystem,
 )
-from windsprig.gameplay.systems.capture_system import provisional_attack_request_id
 from windsprig.physics import TileCollisionWorld
 
 
@@ -50,6 +50,7 @@ def _capture_world(*, facing: int = 1) -> tuple[World, int]:
     world = World()
     world.resources["config"] = GameConfig()
     world.resources["attack_requests"] = []
+    world.resources["pending_enemy_launches"] = []
     world.resources["discovered_ability_ids"] = set()
     player = _add(
         world,
@@ -226,7 +227,7 @@ def test_capture_respects_flipped_facing_and_configured_growing_range() -> None:
     assert not world.has_component(behind, CapturedBy)
 
 
-def test_empty_release_clears_stale_frame_request_and_is_idempotent() -> None:
+def test_empty_release_preserves_spawn_owned_request_and_is_idempotent() -> None:
     world, player = _capture_world()
     intent = world.get_component(player, ControlIntent)
     intent.draw_released = True
@@ -236,7 +237,7 @@ def test_empty_release_clears_stale_frame_request_and_is_idempotent() -> None:
     system.update(world, 16)
     system.update(world, 16)
 
-    assert world.resources["attack_requests"] == []
+    assert world.resources["attack_requests"] == [_request()]
     assert _event_payload(world, "CaptureReleased") == {
         "frame_index": 0,
         "player_id": player,
@@ -259,7 +260,7 @@ def test_idle_release_preserves_non_capture_actor_state(actor_name: str) -> None
     assert [event.topic for event in world.events.peek()] == ["CaptureReleased"]
 
 
-def test_release_with_capture_queues_one_fully_populated_launch_and_one_event() -> None:
+def test_release_with_capture_queues_one_launch_for_real_id_publication() -> None:
     world, player = _capture_world()
     enemy = _enemy(world, x=120.0)
     intent = world.get_component(player, ControlIntent)
@@ -298,13 +299,8 @@ def test_release_with_capture_queues_one_fully_populated_launch_and_one_event() 
             interaction_kind=None,
         )
     ]
-    assert provisional_attack_request_id(requests) == 2
-    assert _event_payload(world, "EnemyLaunched") == {
-        "frame_index": 0,
-        "player_id": player,
-        "enemy_id": enemy,
-        "attack_id": 1,
-    }
+    assert world.resources["pending_enemy_launches"] == [PendingEnemyLaunch(player_id=player, enemy_id=enemy)]
+    assert world.events.peek() == []
 
 
 def test_simultaneous_compatible_harmonize_consumes_release_and_ability_use() -> None:

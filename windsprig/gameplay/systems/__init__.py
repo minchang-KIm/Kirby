@@ -1,6 +1,8 @@
 """Expose the ordered production gameplay system types."""
 
 from .ability_system import AbilitySystem
+from .attack_motion_system import AttackMotionSystem
+from .attack_spawn_system import AttackSpawnSystem
 from .camera_system import CameraSystem
 from .capture_system import CaptureSystem
 from .collision_system import CollisionSystem
@@ -17,6 +19,8 @@ from .stage_goal_system import StageGoalSystem
 
 __all__ = [
     "AbilitySystem",
+    "AttackMotionSystem",
+    "AttackSpawnSystem",
     "CameraSystem",
     "CaptureSystem",
     "CollisionSystem",

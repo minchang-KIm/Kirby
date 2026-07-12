@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from tests.helpers.gameplay import frame, make_active_player, make_runtime, make_stage
 from windsprig.content.loader import AbilityId, EnemySpawn
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
-    AttackRequest,
     CapturedBy,
     CaptureState,
     Collider,
@@ -73,16 +70,17 @@ def test_runtime_capture_snapshot_and_simultaneous_harmonize_are_canonical() -> 
     assert result.view.attacks == ()
 
 
-def test_launch_request_is_frame_local_and_later_empty_release_cannot_reuse_it() -> None:
+def test_launch_attack_uses_real_entity_id_and_later_empty_release_cannot_reuse_it() -> None:
     runtime, _, enemy = _runtime_with_enemy(None)
     runtime.step(frame(1, DrawStartCommand(1)))
 
     launched = runtime.step(frame(1, DrawReleaseCommand(1)))
 
     assert enemy not in runtime.world.alive_entities
-    assert [event.topic for event in launched.events] == ["EnemyLaunched"]
-    requests = cast(list[AttackRequest], runtime.world.resources["attack_requests"])
-    assert len(requests) == 1
+    assert [event.topic for event in launched.events] == ["AttackSpawned", "EnemyLaunched"]
+    assert len(launched.view.attacks) == 1
+    assert launched.events[1].payload["attack_id"] == launched.view.attacks[0].entity_id
+    assert runtime.world.resources["attack_requests"] == []
 
     empty = runtime.step(frame(1, DrawReleaseCommand(1)))
 

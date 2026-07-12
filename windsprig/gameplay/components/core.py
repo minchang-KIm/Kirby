@@ -163,6 +163,14 @@ class Attack:
     hit_entity_ids: set[int] = field(default_factory=set)
 
 
+@dataclass(frozen=True, slots=True)
+class PendingEnemyLaunch:
+    """Pair one queued launch request with its destroyed source enemy."""
+
+    player_id: int
+    enemy_id: int
+
+
 @dataclass
 class EnemyAI:
     kind: str
@@ -234,6 +242,7 @@ class DamageRecord:
     knockback_x: float
     knockback_y: float
     guard_break: bool
+    attack_id: int | None = None
 
 
 NON_ENTITY_DAMAGE_SOURCE_ID = 0

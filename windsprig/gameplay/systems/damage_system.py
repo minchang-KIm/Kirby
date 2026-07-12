@@ -63,6 +63,17 @@ class DamageSystem:
                 velocity.vx += knockback_x
                 velocity.vy += knockback_y
 
+            if item.attack_id is not None:
+                publish(
+                    world,
+                    GameplayTopic.ATTACK_HIT,
+                    attack_id=item.attack_id,
+                    owner_id=item.source_id,
+                    target_id=target_id,
+                    damage=amount,
+                    guarded=guarded,
+                )
+
             slot = world.try_component(target_id, PlayerSlot)
             if slot is not None:
                 publish(
@@ -90,6 +101,20 @@ class DamageSystem:
                     respawn = world.try_component(target_id, Respawn)
                     if respawn is not None:
                         respawn.timer_ms = config.respawn_delay_ms
+                    publish(
+                        world,
+                        GameplayTopic.PLAYER_DEFEATED,
+                        entity_id=target_id,
+                        slot=slot.slot,
+                        lives_remaining=slot.lives,
+                    )
+                else:
+                    publish(
+                        world,
+                        GameplayTopic.ENEMY_DEFEATED,
+                        enemy_id=target_id,
+                        source_id=item.source_id,
+                    )
                 world.events.publish("actor_dead", {"entity_id": target_id})
             elif not guarded:
                 if defense is not None:
