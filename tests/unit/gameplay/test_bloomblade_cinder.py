@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 
@@ -234,6 +235,96 @@ def test_registry_uses_six_metadata_only_rows_and_none_is_the_only_empty_sentine
     assert registry.get("not-public").activate(context).attacks == ()
     assert not hasattr(ability_types, "AttackShape")
     assert not hasattr(ability_types, "DataDrivenAbilityStrategy")
+
+
+_BLOOMBLADE_METADATA = """
+    "bloomblade": {
+      "strategy": "bloomblade",
+      "icon_id": "ability.bloomblade",
+      "palette_token": "bloomblade",
+      "enemy_source_tag": "bloomblade"
+    }
+"""
+_OTHER_ABILITY_METADATA = """
+    "cinder": {
+      "strategy": "cinder",
+      "icon_id": "ability.cinder",
+      "palette_token": "cinder",
+      "enemy_source_tag": "cinder"
+    },
+    "voltsong": {
+      "strategy": "voltsong",
+      "icon_id": "ability.voltsong",
+      "palette_token": "voltsong",
+      "enemy_source_tag": "voltsong"
+    },
+    "galehook": {
+      "strategy": "galehook",
+      "icon_id": "ability.galehook",
+      "palette_token": "galehook",
+      "enemy_source_tag": "galehook"
+    },
+    "stoneheart": {
+      "strategy": "stoneheart",
+      "icon_id": "ability.stoneheart",
+      "palette_token": "stoneheart",
+      "enemy_source_tag": "stoneheart"
+    },
+    "tempest": {
+      "strategy": "tempest",
+      "icon_id": "ability.tempest",
+      "palette_token": "tempest",
+      "enemy_source_tag": "tempest"
+    }
+"""
+
+
+def _metadata_document(bloomblade_member: str = _BLOOMBLADE_METADATA) -> str:
+    return f'{{"abilities": {{{bloomblade_member}, {_OTHER_ABILITY_METADATA}}}}}'
+
+
+@pytest.mark.parametrize(
+    ("source", "duplicate_path"),
+    [
+        (
+            f'{{"abilities": {{{_BLOOMBLADE_METADATA}, {_OTHER_ABILITY_METADATA}}}, '
+            f'"abilities": {{{_BLOOMBLADE_METADATA}, {_OTHER_ABILITY_METADATA}}}}}',
+            "abilities",
+        ),
+        (
+            _metadata_document(f"{_BLOOMBLADE_METADATA}, {_BLOOMBLADE_METADATA}"),
+            "abilities.bloomblade",
+        ),
+        (
+            _metadata_document(
+                """
+                "bloomblade": {
+                  "strategy": "bloomblade",
+                  "strategy": "bloomblade",
+                  "icon_id": "ability.bloomblade",
+                  "palette_token": "bloomblade",
+                  "enemy_source_tag": "bloomblade"
+                }
+                """
+            ),
+            "abilities.bloomblade.strategy",
+        ),
+    ],
+)
+def test_registry_rejects_duplicate_json_members_at_every_metadata_level(
+    tmp_path: Path,
+    source: str,
+    duplicate_path: str,
+) -> None:
+    metadata_path = tmp_path / "abilities.json"
+    metadata_path.write_text(source, encoding="utf-8")
+    registry = create_default_registry(GameConfig().content_dir)
+
+    with pytest.raises(
+        ValueError,
+        match=rf"^duplicate ability metadata member: {re.escape(duplicate_path)}$",
+    ):
+        registry.validate_metadata(metadata_path)
 
 
 def test_bloomblade_system_cycles_combo_and_expiry_restarts_at_step_one() -> None:

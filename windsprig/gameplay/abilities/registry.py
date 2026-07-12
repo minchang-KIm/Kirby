@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from windsprig.content.loader import PUBLIC_ABILITY_IDS
@@ -12,6 +13,37 @@ from .bloomblade import BloombladeStrategy
 from .cinder import CinderStrategy
 
 METADATA_FIELDS = frozenset({"strategy", "icon_id", "palette_token", "enemy_source_tag"})
+
+
+@dataclass(frozen=True, slots=True)
+class _ObjectMembers:
+    values: tuple[tuple[str, object], ...]
+
+
+def _preserve_object_members(values: list[tuple[str, object]]) -> _ObjectMembers:
+    return _ObjectMembers(tuple(values))
+
+
+def _reject_duplicate_members(value: object, path: str = "") -> object:
+    if isinstance(value, _ObjectMembers):
+        decoded: dict[str, object] = {}
+        for name, member in value.values:
+            member_path = f"{path}.{name}" if path else name
+            if name in decoded:
+                raise ValueError(f"duplicate ability metadata member: {member_path}")
+            decoded[name] = _reject_duplicate_members(member, member_path)
+        return decoded
+    if isinstance(value, list):
+        return [
+            _reject_duplicate_members(member, f"{path}[{index}]")
+            for index, member in enumerate(value)
+        ]
+    return value
+
+
+def _decode_metadata(source: str) -> object:
+    preserved: object = json.loads(source, object_pairs_hook=_preserve_object_members)
+    return _reject_duplicate_members(preserved)
 
 
 class AbilityRegistry:
@@ -37,7 +69,7 @@ class AbilityRegistry:
 
     def validate_metadata(self, path: Path) -> None:
         """Reject metadata that changes the six public IDs or embeds gameplay tuning."""
-        payload: object = json.loads(path.read_text(encoding="utf-8"))
+        payload = _decode_metadata(path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict) or set(payload) != {"abilities"}:
             raise ValueError("abilities metadata must contain only the 'abilities' object")
         raw_abilities = payload["abilities"]
