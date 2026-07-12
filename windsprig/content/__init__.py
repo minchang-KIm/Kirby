@@ -3,6 +3,7 @@
 from .loader import (
     ContentError,
     load_asset_manifest,
+    load_boss_catalog,
     load_campaign_catalog,
     load_catalog_bundle,
     load_locales,
@@ -58,6 +59,7 @@ __all__ = [
     "WorldNode",
     "WorldSpec",
     "load_campaign_catalog",
+    "load_boss_catalog",
     "load_catalog_bundle",
     "load_asset_manifest",
     "load_locales",

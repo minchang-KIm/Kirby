@@ -769,9 +769,450 @@ REWARDS = tuple(
     )
 )
 
+
+def attack(
+    attack_id: str,
+    telegraph_ms: int,
+    active_ms: int,
+    recovery_ms: int,
+    marker: str,
+    cue_id: str,
+    **parameters: int | float | str | bool,
+) -> dict[str, object]:
+    """Build one canonical boss attack with object-shaped parameters."""
+
+    return {
+        "attack_id": attack_id,
+        "telegraph_ms": telegraph_ms,
+        "active_ms": active_ms,
+        "recovery_ms": recovery_ms,
+        "marker": marker,
+        "cue_id": cue_id,
+        "parameters": {key: parameters[key] for key in sorted(parameters)},
+    }
+
+
+def phase(
+    phase_id: str,
+    ratio: float,
+    vulnerability: str,
+    arena_rule: str,
+    attacks: tuple[dict[str, object], dict[str, object]],
+) -> dict[str, object]:
+    """Build one authored boss phase without sharing mutable attack storage."""
+
+    return {
+        "phase_id": phase_id,
+        "enter_at_hp_ratio": ratio,
+        "vulnerability": vulnerability,
+        "arena_rule": arena_rule,
+        "attacks": list(attacks),
+    }
+
+
+BOSSES = (
+    {
+        "boss_id": "rootjaw",
+        "name_key": "boss.rootjaw.name",
+        "max_hp": 120,
+        "visual_id": "boss.rootjaw",
+        "phases": [
+            phase(
+                "rootjaw.buried_hunger",
+                1.0,
+                "hidden",
+                "burrow_tells",
+                (
+                    attack("rootjaw.burrow_line", 900, 500, 700, "ground", "sfx.boss.rootjaw", lanes=1, speed=180),
+                    attack("rootjaw.seed_spit", 700, 650, 800, "orbit", "sfx.boss.rootjaw", projectiles=5, arc=70),
+                ),
+            ),
+            phase(
+                "rootjaw.tangled_fury",
+                0.66,
+                "vulnerable",
+                "root_cages",
+                (
+                    attack("rootjaw.root_cage", 850, 900, 750, "arena", "sfx.boss.rootjaw", columns=3, gap=2),
+                    attack(
+                        "rootjaw.bramble_sweep", 650, 700, 850, "silhouette", "sfx.boss.rootjaw", sweeps=2, width=96
+                    ),
+                ),
+            ),
+            phase(
+                "rootjaw.heartwood_quake",
+                0.33,
+                "armored",
+                "alternating_burrows",
+                (
+                    attack("rootjaw.quake_bloom", 1000, 800, 650, "ground", "sfx.boss.rootjaw", rings=3, spacing=64),
+                    attack("rootjaw.tunnel_feint", 750, 950, 550, "lane", "sfx.boss.rootjaw", feints=2, lanes=4),
+                ),
+            ),
+        ],
+    },
+    {
+        "boss_id": "crucible_crab",
+        "name_key": "boss.crucible_crab.name",
+        "max_hp": 132,
+        "visual_id": "boss.crucible_crab",
+        "phases": [
+            phase(
+                "crucible_crab.forged_shell",
+                1.0,
+                "armored",
+                "cooling_vents",
+                (
+                    attack(
+                        "crucible_crab.claw_press",
+                        750,
+                        550,
+                        700,
+                        "ground",
+                        "sfx.boss.crucible_crab",
+                        presses=2,
+                        width=80,
+                    ),
+                    attack(
+                        "crucible_crab.slag_cast",
+                        800,
+                        900,
+                        650,
+                        "lane",
+                        "sfx.boss.crucible_crab",
+                        lanes=2,
+                        duration=1200,
+                    ),
+                ),
+            ),
+            phase(
+                "crucible_crab.molten_lanes",
+                0.66,
+                "vulnerable",
+                "moving_molten_lanes",
+                (
+                    attack(
+                        "crucible_crab.lane_pour",
+                        950,
+                        1300,
+                        500,
+                        "lane",
+                        "sfx.boss.crucible_crab",
+                        lanes=3,
+                        safe_lane=1,
+                    ),
+                    attack(
+                        "crucible_crab.shell_spin",
+                        650,
+                        850,
+                        750,
+                        "silhouette",
+                        "sfx.boss.crucible_crab",
+                        bounces=3,
+                        speed=240,
+                    ),
+                ),
+            ),
+            phase(
+                "crucible_crab.overheat",
+                0.33,
+                "vulnerable",
+                "vent_cycle",
+                (
+                    attack(
+                        "crucible_crab.vent_burst",
+                        700,
+                        900,
+                        550,
+                        "ground",
+                        "sfx.boss.crucible_crab",
+                        vents=6,
+                        interval=140,
+                    ),
+                    attack(
+                        "crucible_crab.forge_drop",
+                        1050,
+                        600,
+                        600,
+                        "ground",
+                        "sfx.boss.crucible_crab",
+                        drops=4,
+                        radius=44,
+                    ),
+                ),
+            ),
+        ],
+    },
+    {
+        "boss_id": "luma_eel",
+        "name_key": "boss.luma_eel.name",
+        "max_hp": 126,
+        "visual_id": "boss.luma_eel",
+        "phases": [
+            phase(
+                "luma_eel.moonlit_current",
+                1.0,
+                "vulnerable",
+                "clockwise_current",
+                (
+                    attack(
+                        "luma_eel.current_dash", 800, 650, 700, "silhouette", "sfx.boss.luma_eel", passes=2, speed=260
+                    ),
+                    attack("luma_eel.lumen_orbs", 700, 1000, 650, "orbit", "sfx.boss.luma_eel", orbs=6, turn_rate=40),
+                ),
+            ),
+            phase(
+                "luma_eel.decoy_tide",
+                0.66,
+                "hidden",
+                "light_decoys",
+                (
+                    attack(
+                        "luma_eel.decoy_flash",
+                        900,
+                        750,
+                        650,
+                        "arena",
+                        "sfx.boss.luma_eel",
+                        decoys=3,
+                        true_index_cycle=3,
+                    ),
+                    attack(
+                        "luma_eel.reverse_current",
+                        750,
+                        1200,
+                        550,
+                        "lane",
+                        "sfx.boss.luma_eel",
+                        direction=-1,
+                        strength=190,
+                    ),
+                ),
+            ),
+            phase(
+                "luma_eel.eclipse_spiral",
+                0.33,
+                "vulnerable",
+                "alternating_currents",
+                (
+                    attack("luma_eel.eclipse_ring", 1000, 1000, 500, "orbit", "sfx.boss.luma_eel", rings=2, gaps=2),
+                    attack(
+                        "luma_eel.spiral_dive", 700, 1100, 500, "silhouette", "sfx.boss.luma_eel", dives=3, curve=0.7
+                    ),
+                ),
+            ),
+        ],
+    },
+    {
+        "boss_id": "volt_roc",
+        "name_key": "boss.volt_roc.name",
+        "max_hp": 138,
+        "visual_id": "boss.volt_roc",
+        "phases": [
+            phase(
+                "volt_roc.storm_perch",
+                1.0,
+                "vulnerable",
+                "charged_perches",
+                (
+                    attack("volt_roc.dive_lane", 850, 600, 650, "lane", "sfx.boss.volt_roc", dives=2, speed=320),
+                    attack("volt_roc.feather_bolts", 650, 900, 750, "orbit", "sfx.boss.volt_roc", bolts=7, spread=100),
+                ),
+            ),
+            phase(
+                "volt_roc.chain_sky",
+                0.66,
+                "vulnerable",
+                "linked_conductors",
+                (
+                    attack("volt_roc.lightning_chain", 950, 800, 600, "ground", "sfx.boss.volt_roc", nodes=4, jumps=3),
+                    attack("volt_roc.rail_talon", 700, 1000, 550, "silhouette", "sfx.boss.volt_roc", rails=2, passes=2),
+                ),
+            ),
+            phase(
+                "volt_roc.tempest_dive",
+                0.33,
+                "invulnerable",
+                "eye_of_storm_windows",
+                (
+                    attack("volt_roc.tempest_wall", 1050, 1100, 500, "arena", "sfx.boss.volt_roc", walls=2, gap=96),
+                    attack(
+                        "volt_roc.thunder_dive", 750, 1200, 450, "ground", "sfx.boss.volt_roc", dives=4, shock_radius=72
+                    ),
+                ),
+            ),
+        ],
+    },
+    {
+        "boss_id": "prism_warden",
+        "name_key": "boss.prism_warden.name",
+        "max_hp": 144,
+        "visual_id": "boss.prism_warden",
+        "phases": [
+            phase(
+                "prism_warden.reflection",
+                1.0,
+                "armored",
+                "mirror_weak_side",
+                (
+                    attack(
+                        "prism_warden.prism_beam", 900, 900, 650, "beam", "sfx.boss.prism_warden", bounces=2, width=24
+                    ),
+                    attack(
+                        "prism_warden.mirror_guard",
+                        650,
+                        700,
+                        800,
+                        "silhouette",
+                        "sfx.boss.prism_warden",
+                        reflect_ms=700,
+                        weak_side="rear",
+                    ),
+                ),
+            ),
+            phase(
+                "prism_warden.clone_garden",
+                0.66,
+                "hidden",
+                "three_clones",
+                (
+                    attack(
+                        "prism_warden.clone_cast",
+                        850,
+                        1000,
+                        600,
+                        "arena",
+                        "sfx.boss.prism_warden",
+                        clones=3,
+                        real_glint_ms=180,
+                    ),
+                    attack(
+                        "prism_warden.color_cross", 750, 900, 650, "beam", "sfx.boss.prism_warden", beams=4, rotation=45
+                    ),
+                ),
+            ),
+            phase(
+                "prism_warden.gravity_refraction",
+                0.33,
+                "vulnerable",
+                "gravity_flip_beams",
+                (
+                    attack(
+                        "prism_warden.gravity_shard",
+                        1000,
+                        1100,
+                        500,
+                        "ground",
+                        "sfx.boss.prism_warden",
+                        shards=8,
+                        gravity=-1,
+                    ),
+                    attack(
+                        "prism_warden.refraction_bloom",
+                        800,
+                        1200,
+                        450,
+                        "orbit",
+                        "sfx.boss.prism_warden",
+                        petals=10,
+                        gaps=2,
+                    ),
+                ),
+            ),
+        ],
+    },
+    {
+        "boss_id": "the_stillness",
+        "name_key": "boss.the_stillness.name",
+        "max_hp": 180,
+        "visual_id": "boss.the_stillness",
+        "phases": [
+            phase(
+                "the_stillness.silenced_motion",
+                1.0,
+                "vulnerable",
+                "moving_silence_fields",
+                (
+                    attack(
+                        "the_stillness.hush_wave", 900, 1000, 600, "arena", "sfx.boss.the_stillness", fields=2, speed=90
+                    ),
+                    attack(
+                        "the_stillness.locked_echo",
+                        750,
+                        850,
+                        700,
+                        "silhouette",
+                        "sfx.boss.the_stillness",
+                        lock_ms=1200,
+                        orbs=4,
+                    ),
+                ),
+            ),
+            phase(
+                "the_stillness.stolen_systems",
+                0.66,
+                "armored",
+                "learned_world_remix",
+                (
+                    attack(
+                        "the_stillness.system_chain",
+                        1050,
+                        1300,
+                        500,
+                        "arena",
+                        "sfx.boss.the_stillness",
+                        systems="gust,vent,current,rail",
+                        interval=260,
+                    ),
+                    attack(
+                        "the_stillness.prism_lock",
+                        800,
+                        1000,
+                        550,
+                        "beam",
+                        "sfx.boss.the_stillness",
+                        beams=3,
+                        lock_zones=2,
+                    ),
+                ),
+            ),
+            phase(
+                "the_stillness.motion_returns",
+                0.33,
+                "vulnerable",
+                "ability_rotation",
+                (
+                    attack(
+                        "the_stillness.echo_crown",
+                        1100,
+                        1400,
+                        400,
+                        "orbit",
+                        "sfx.boss.the_stillness",
+                        rings=3,
+                        ability_windows=6,
+                    ),
+                    attack(
+                        "the_stillness.final_release",
+                        900,
+                        1500,
+                        350,
+                        "arena",
+                        "sfx.boss.the_stillness",
+                        waves=5,
+                        safe_arc=50,
+                    ),
+                ),
+            ),
+        ],
+    },
+)
+
+
 OUTPUT_PATHS = (
     Path("windsprig/content/campaign.json"),
     Path("windsprig/content/rewards.json"),
+    Path("windsprig/content/bosses.json"),
 )
 
 
@@ -944,6 +1385,7 @@ def generated_outputs() -> dict[Path, object]:
     return {
         OUTPUT_PATHS[0]: build_campaign(),
         OUTPUT_PATHS[1]: build_rewards(),
+        OUTPUT_PATHS[2]: {"bosses": list(BOSSES)},
     }
 
 
@@ -1004,7 +1446,7 @@ def main(argv: Sequence[str] | None = None, *, root: Path = Path(".")) -> int:
             return 1
     else:
         write_outputs(root)
-    print("campaign: 6 worlds, 30 stages, 90 motes, 18 rewards")
+    print("campaign: 6 worlds, 30 stages, 6 bosses, 90 motes, 18 rewards")
     return 0
 
 

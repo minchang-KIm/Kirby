@@ -384,7 +384,10 @@ class CatalogBundle:
     rewards: RewardCatalog
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "bosses", frozen_map(self.bosses))
+        # Boss iteration follows the authored world order, which is gameplay-significant
+        # for one-to-one campaign/boss reconciliation. The copied proxy still prevents
+        # callers from mutating the catalog after validation.
+        object.__setattr__(self, "bosses", MappingProxyType(dict(self.bosses)))
 
 
 @dataclass(frozen=True, slots=True)

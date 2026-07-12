@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from windsprig.content.models import StageSpec
 from windsprig.core.ecs import World
+from windsprig.gameplay.bosses import BossState
 from windsprig.gameplay.components import Collider, Health, StageGoal, Team, Transform
 from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.math2d import Rect
@@ -17,6 +19,15 @@ class StageGoalSystem:
             raise TypeError("stage_outcome must be a StageOutcome")
         if outcome is not StageOutcome.RUNNING:
             return
+        stage = world.resources.get("stage_spec")
+        if not isinstance(stage, StageSpec):
+            raise TypeError("stage_spec must be a StageSpec")
+        if stage.boss_id is not None:
+            boss_rows = world.query(BossState)
+            if len(boss_rows) != 1:
+                raise RuntimeError("boss stages must retain exactly one boss entity")
+            if not boss_rows[0][1].defeated:
+                return
         players = [
             row
             for row in world.query(Team, Transform, Collider, Health)

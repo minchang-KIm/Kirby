@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import astuple, dataclass, replace
 
 from windsprig.config import GameConfig
-from windsprig.content.loader import StageSpec
-from windsprig.core.ecs import World
+from windsprig.content.loader import BossSpec, StageSpec, load_boss_catalog
+from windsprig.core.ecs import System, World
 from windsprig.core.events import GameEvent
 from windsprig.gameplay.abilities import AbilityRegistry
+from windsprig.gameplay.bosses import (
+    BossCommand,
+    BossDirector,
+    BossState,
+    BossSystem,
+    boss_command_sort_key,
+)
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
@@ -29,6 +36,7 @@ from windsprig.gameplay.components import (
     PlayerSlot,
     Projectile,
     StageGoal,
+    Team,
     Transform,
     Velocity,
 )
@@ -36,6 +44,7 @@ from windsprig.gameplay.events import GameplayTopic, make_event
 from windsprig.gameplay.factory import EntityFactory
 from windsprig.gameplay.snapshot import (
     AttackView,
+    BossView,
     CameraTargetView,
     CheckpointView,
     EchoPickupView,
@@ -79,6 +88,7 @@ class _ValidatedGameplayResources:
     collected_mote_ids: tuple[str, ...]
     discovered_ability_ids: tuple[str, ...]
     attack_requests: tuple[AttackRequest, ...]
+    boss_commands: tuple[BossCommand, ...]
 
 
 class StageRuntime:
@@ -98,6 +108,16 @@ class StageRuntime:
         self.stage = stage
         self.ability_registry = ability_registry
         self.seed = seed
+        self._boss_specs: Mapping[str, BossSpec] | None = None
+        self._boss_director: BossDirector | None = None
+        if stage.boss_id is not None:
+            boss_specs = load_boss_catalog(config.content_dir)
+            if stage.boss_id not in boss_specs:
+                raise ValueError(
+                    f"stage boss_id is absent from the boss catalog: {stage.boss_id}"
+                )
+            self._boss_specs = boss_specs
+            self._boss_director = BossDirector(boss_specs)
         self.world = self._new_world()
         self.factory = EntityFactory(self.world)
         self.player_entities: dict[int, int] = {}
@@ -115,7 +135,7 @@ class StageRuntime:
         self._last_simulation = self.world.snapshot()
 
     def _install_scheduler(self) -> None:
-        self.world.scheduler.systems = [
+        systems: list[System] = [
             InputCommandSystem(),
             DefenseSystem(),
             MovementSystem(),
@@ -126,11 +146,18 @@ class StageRuntime:
             CombatSystem(),
             DamageSystem(),
             InteractionSystem(),
-            PickupSystem(),
-            CoopRespawnSystem(),
-            StageGoalSystem(),
-            CameraSystem(),
         ]
+        if self._boss_director is not None:
+            systems.append(BossSystem(self._boss_director))
+        systems.extend(
+            [
+                PickupSystem(),
+                CoopRespawnSystem(),
+                StageGoalSystem(),
+                CameraSystem(),
+            ]
+        )
+        self.world.scheduler.systems = systems
 
     def step(self, input_frame: InputFrame) -> StageFrame:
         """Advance one fixed step and return its immutable state and events."""
@@ -219,6 +246,8 @@ class StageRuntime:
         self.world = replacement.world
         self.factory = replacement.factory
         self.player_entities = replacement.player_entities
+        self._boss_specs = replacement._boss_specs
+        self._boss_director = replacement._boss_director
         self._step_events.clear()
         self._capturing_step_events = False
         self._result = replacement._result
@@ -254,6 +283,7 @@ class StageRuntime:
         world.resources["camera_target"] = None
         world.resources["damage_queue"] = []
         world.resources["attack_requests"] = []
+        world.resources["boss_commands"] = ()
         world.set_resource_hash_projection(self._gameplay_resource_hash)
         return world
 
@@ -271,7 +301,33 @@ class StageRuntime:
             self.factory.spawn_energy_sphere(mote.tile_x, mote.tile_y, self.stage.tile_size)
         for interaction in self.stage.interactions:
             self.factory.spawn_interaction(interaction, self.stage.tile_size)
+        self._spawn_boss()
         self.factory.spawn_stage_goal(self.stage)
+
+    def _spawn_boss(self) -> None:
+        if self.stage.boss_id is None:
+            return
+        if self._boss_specs is None or self._boss_director is None:
+            raise RuntimeError("boss stage composition is incomplete")
+        spec = self._boss_specs[self.stage.boss_id]
+        entity_id = self.world.create_entity()
+        width = height = 64
+        goal_x, _ = self.stage.goal_tile
+        x = float(max(0, goal_x - 4) * self.stage.tile_size)
+        y = float(max(0, self.stage.ground_y_tile * self.stage.tile_size - height))
+        self.world.add_component(entity_id, Transform(x, y))
+        self.world.add_component(entity_id, Collider(width=width, height=height))
+        self.world.add_component(entity_id, Team("enemy"))
+        self.world.add_component(
+            entity_id,
+            Health(current=spec.max_hp, maximum=spec.max_hp),
+        )
+        self.world.add_component(entity_id, ActorState())
+        self.world.add_component(entity_id, Facing(direction=-1))
+        self.world.add_component(
+            entity_id,
+            self._boss_director.start(spec.boss_id, entity_id),
+        )
 
     def _current_players_for_reset(self) -> tuple[ActivePlayer, ...]:
         resources = self._validate_gameplay_resources(self.world)
@@ -291,7 +347,12 @@ class StageRuntime:
             "run_energy_spheres": resources.run_energy_spheres,
             "collected_mote_ids": resources.collected_mote_ids,
             "discovered_ability_ids": resources.discovered_ability_ids,
-            "attack_requests": tuple(astuple(request) for request in resources.attack_requests),
+            "attack_requests": tuple(
+                astuple(request) for request in resources.attack_requests
+            ),
+            "boss_commands": tuple(
+                astuple(command) for command in resources.boss_commands
+            ),
         }
 
     def _validate_gameplay_resources(
@@ -348,6 +409,14 @@ class StageRuntime:
             type(request) is not AttackRequest for request in raw_attack_requests
         ):
             raise TypeError("attack_requests must be a list of AttackRequest values")
+        raw_boss_commands = world.resources.get("boss_commands")
+        if not isinstance(raw_boss_commands, tuple) or any(
+            type(command) is not BossCommand for command in raw_boss_commands
+        ):
+            raise TypeError("boss_commands must be a tuple of BossCommand values")
+        boss_commands = tuple(raw_boss_commands)
+        if boss_commands != tuple(sorted(boss_commands, key=boss_command_sort_key)):
+            raise ValueError("boss_commands must be sorted canonically")
         return _ValidatedGameplayResources(
             active_players=active_players,
             active_authority=tuple(active_authority),
@@ -356,6 +425,7 @@ class StageRuntime:
             collected_mote_ids=tuple(sorted(set(collected))),
             discovered_ability_ids=tuple(sorted(set(discovered))),
             attack_requests=tuple(raw_attack_requests),
+            boss_commands=boss_commands,
         )
 
     def _capture_step_event(self, event: GameEvent) -> None:
@@ -385,6 +455,7 @@ class StageRuntime:
         attacks = self._attack_views()
         echo_pickups = self._echo_pickup_views()
         interactions = self._interaction_views()
+        bosses = self._boss_views()
         camera_targets = self._camera_target_views(active_slots)
         checkpoints = tuple(
             sorted(
@@ -432,6 +503,7 @@ class StageRuntime:
                 countdown_remaining_ms=0,
             ),
             camera_targets=camera_targets,
+            bosses=bosses,
             collected_mote_ids=self._collected_mote_ids(resources),
         )
 
@@ -580,6 +652,40 @@ class StageRuntime:
                 Collider,
             )
         ]
+        return tuple(sorted(views, key=lambda view: view.entity_id))
+
+    def _boss_views(self) -> tuple[BossView, ...]:
+        if self._boss_specs is None:
+            return ()
+        views: list[BossView] = []
+        for entity_id, state, transform, collider, facing, actor, health in self.world.query(
+            BossState,
+            Transform,
+            Collider,
+            Facing,
+            ActorState,
+            Health,
+        ):
+            phase = self._boss_specs[state.boss_id].phases[state.phase_index]
+            telegraphing = state.mode == "telegraph"
+            views.append(
+                BossView(
+                    entity_id=entity_id,
+                    boss_id=state.boss_id,
+                    phase_id=state.phase_id,
+                    x=transform.x,
+                    y=transform.y,
+                    width=collider.width,
+                    height=collider.height,
+                    facing=facing.direction,
+                    actor_state=actor.name,
+                    hp=health.current,
+                    maximum_hp=health.maximum,
+                    telegraph_id=(state.active_attack_id if telegraphing else None),
+                    telegraph_remaining_ms=(state.remaining_ms if telegraphing else 0),
+                    vulnerability_state=phase.vulnerability,
+                )
+            )
         return tuple(sorted(views, key=lambda view: view.entity_id))
 
     def _camera_target_views(self, active_slots: set[int]) -> tuple[CameraTargetView, ...]:

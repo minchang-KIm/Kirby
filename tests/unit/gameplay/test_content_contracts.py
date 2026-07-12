@@ -25,6 +25,7 @@ from windsprig.core.ecs import World
 from windsprig.gameplay.events import GameplayTopic, make_event, publish
 from windsprig.gameplay.snapshot import (
     AttackView,
+    BossView,
     CameraTargetView,
     CheckpointView,
     EchoPickupView,
@@ -477,6 +478,22 @@ def test_snapshot_types_are_frozen_render_facing_contracts() -> None:
         "weight",
         "enabled",
     )
+    assert tuple(field.name for field in fields(BossView)) == (
+        "entity_id",
+        "boss_id",
+        "phase_id",
+        "x",
+        "y",
+        "width",
+        "height",
+        "facing",
+        "actor_state",
+        "hp",
+        "maximum_hp",
+        "telegraph_id",
+        "telegraph_remaining_ms",
+        "vulnerability_state",
+    )
     assert tuple(field.name for field in fields(StageSnapshot)) == (
         "frame_index",
         "elapsed_ms",
@@ -492,6 +509,7 @@ def test_snapshot_types_are_frozen_render_facing_contracts() -> None:
         "checkpoints",
         "goal_gather",
         "camera_targets",
+        "bosses",
         "collected_mote_ids",
     )
     assert tuple(field.name for field in fields(StageResult)) == (

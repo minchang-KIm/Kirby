@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from windsprig.content.models import Vulnerability
 from windsprig.core.ecs import FrameSnapshot
 from windsprig.core.events import GameEvent
 
@@ -103,6 +104,26 @@ class InteractionView:
 
 
 @dataclass(frozen=True, slots=True)
+class BossView:
+    """Presentation-safe state for one authored boss encounter."""
+
+    entity_id: int
+    boss_id: str
+    phase_id: str
+    x: float
+    y: float
+    width: int
+    height: int
+    facing: int
+    actor_state: str
+    hp: int
+    maximum_hp: int
+    telegraph_id: str | None
+    telegraph_remaining_ms: int
+    vulnerability_state: Vulnerability
+
+
+@dataclass(frozen=True, slots=True)
 class CheckpointView:
     """Presentation-safe checkpoint position and activation state."""
 
@@ -155,6 +176,7 @@ class StageSnapshot:
     checkpoints: tuple[CheckpointView, ...]
     goal_gather: GoalGatherView
     camera_targets: tuple[CameraTargetView, ...]
+    bosses: tuple[BossView, ...]
     collected_mote_ids: tuple[str, ...]
 
 

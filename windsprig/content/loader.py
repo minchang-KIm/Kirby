@@ -7,6 +7,7 @@ import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import cast
 
 from .models import (
@@ -651,12 +652,15 @@ def _load_bosses(content_dir: Path) -> dict[str, BossSpec]:
         frozenset({"bosses"}),
     )
     values = _sequence(raw["bosses"], "bosses.bosses", _load_boss)
-    return _unique_index(
-        values,
-        lambda boss: boss.boss_id,
-        tuple(f"bosses.bosses[{index}]" for index in range(len(values))),
-        "boss_id",
-    )
+    result: dict[str, BossSpec] = {}
+    for index, boss in enumerate(values):
+        if boss.boss_id in result:
+            raise ContentError(
+                f"bosses.bosses[{index}].boss_id",
+                "duplicate value",
+            )
+        result[boss.boss_id] = boss
+    return result
 
 
 def _load_reward(value: object, path: str) -> RewardSpec:
@@ -817,8 +821,16 @@ def load_campaign_catalog(content_dir: Path) -> CampaignCatalog:
     return _load_campaign(content_dir)
 
 
+def load_boss_catalog(content_dir: Path) -> Mapping[str, BossSpec]:
+    """Load the strict authored-order boss projection for gameplay composition."""
+
+    if not isinstance(content_dir, Path):
+        raise TypeError("content_dir must be a pathlib.Path")
+    return MappingProxyType(_load_bosses(content_dir))
+
+
 def load_reward_catalog(content_dir: Path) -> RewardCatalog:
-    """Load the strict reward projection without requiring Task 3 boss content."""
+    """Load the strict reward projection without loading unrelated catalogs."""
 
     if not isinstance(content_dir, Path):
         raise TypeError("content_dir must be a pathlib.Path")
@@ -859,6 +871,7 @@ __all__ = [
     "WorldNode",
     "WorldSpec",
     "load_campaign_catalog",
+    "load_boss_catalog",
     "load_catalog_bundle",
     "load_asset_manifest",
     "load_locales",

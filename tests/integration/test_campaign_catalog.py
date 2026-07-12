@@ -144,7 +144,6 @@ def test_every_authored_target_is_reachable_from_the_stage_start() -> None:
 
 
 def test_reward_projection_loads_the_exact_strictly_increasing_recipe() -> None:
-    # Task 3 adds bosses.json; Task 2 intentionally loads strict campaign and reward projections separately.
     rewards = load_reward_catalog(CONTENT_DIR)
     assert (
         tuple((reward.threshold, reward.reward_id, reward.kind) for reward in rewards.mote_thresholds)
@@ -162,14 +161,22 @@ def test_reward_projection_rejects_non_path_content_directory() -> None:
 
 def test_generator_embeds_every_normative_recipe_row_exactly() -> None:
     recipe_digest = sha256(
-        repr((generate_campaign.WORLDS, generate_campaign.STAGES, generate_campaign.REWARDS)).encode()
+        repr(
+            (
+                generate_campaign.WORLDS,
+                generate_campaign.STAGES,
+                generate_campaign.BOSSES,
+                generate_campaign.REWARDS,
+            )
+        ).encode()
     ).hexdigest()
-    assert recipe_digest == "ad0d6cfaad4c0efcb8620619fc61fb0a86d875af64d3d5ebf1cd123215fbb523"
+    assert recipe_digest == "06c176067a49fbbf8fd7db52769920fb8b6dfe80ae172622bf21ec04b3d87d4f"
     assert (
         len(generate_campaign.WORLDS),
         len(generate_campaign.STAGES),
+        len(generate_campaign.BOSSES),
         len(generate_campaign.REWARDS),
-    ) == (6, 30, 18)
+    ) == (6, 30, 6, 18)
 
 
 def test_representative_stage_converts_tiles_to_canonical_runtime_schema() -> None:
@@ -217,6 +224,7 @@ def test_canonical_output_is_repeatable_and_matches_tracked_bytes() -> None:
     assert tuple(first) == (
         Path("windsprig/content/campaign.json"),
         Path("windsprig/content/rewards.json"),
+        Path("windsprig/content/bosses.json"),
     )
     for relative_path, canonical in first.items():
         assert relative_path.read_bytes() == canonical.encode("utf-8")
@@ -230,18 +238,23 @@ def test_generated_catalogs_are_checked_out_with_canonical_lf_bytes() -> None:
     attributes = set(attributes_path.read_text(encoding="utf-8").splitlines())
     assert "windsprig/content/campaign.json text eol=lf" in attributes
     assert "windsprig/content/rewards.json text eol=lf" in attributes
+    assert "windsprig/content/bosses.json text eol=lf" in attributes
 
 
 def test_check_mode_reports_all_stale_paths_without_writing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     campaign_path = tmp_path / "windsprig/content/campaign.json"
     reward_path = tmp_path / "windsprig/content/rewards.json"
+    boss_path = tmp_path / "windsprig/content/bosses.json"
     campaign_path.parent.mkdir(parents=True)
     campaign_path.write_text("campaign sentinel\n", encoding="utf-8")
     reward_path.write_text("reward sentinel\n", encoding="utf-8")
-    before = {path: path.read_bytes() for path in (campaign_path, reward_path)}
+    boss_path.write_text("boss sentinel\n", encoding="utf-8")
+    before = {path: path.read_bytes() for path in (campaign_path, reward_path, boss_path)}
 
     assert generate_campaign.main(["--check"], root=tmp_path) == 1
-    assert capsys.readouterr().out == ("STALE: windsprig/content/campaign.json, windsprig/content/rewards.json\n")
+    assert capsys.readouterr().out == (
+        "STALE: windsprig/content/bosses.json, windsprig/content/campaign.json, windsprig/content/rewards.json\n"
+    )
     assert {path: path.read_bytes() for path in before} == before
 
 
@@ -250,13 +263,13 @@ def test_generation_writes_canonical_outputs_and_then_checks_clean(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     assert generate_campaign.main([], root=tmp_path) == 0
-    assert capsys.readouterr().out == "campaign: 6 worlds, 30 stages, 90 motes, 18 rewards\n"
+    assert capsys.readouterr().out == ("campaign: 6 worlds, 30 stages, 6 bosses, 90 motes, 18 rewards\n")
     for relative_path, canonical in generate_campaign.canonical_outputs().items():
         assert (tmp_path / relative_path).read_bytes() == canonical.encode("utf-8")
     assert not tuple(tmp_path.rglob("*.tmp"))
 
     assert generate_campaign.main(["--check"], root=tmp_path) == 0
-    assert capsys.readouterr().out == "campaign: 6 worlds, 30 stages, 90 motes, 18 rewards\n"
+    assert capsys.readouterr().out == ("campaign: 6 worlds, 30 stages, 6 bosses, 90 motes, 18 rewards\n")
 
 
 def test_generation_serializes_every_output_before_replacing_files(
@@ -265,9 +278,11 @@ def test_generation_serializes_every_output_before_replacing_files(
 ) -> None:
     campaign_path = tmp_path / "windsprig/content/campaign.json"
     reward_path = tmp_path / "windsprig/content/rewards.json"
+    boss_path = tmp_path / "windsprig/content/bosses.json"
     campaign_path.parent.mkdir(parents=True)
     campaign_path.write_text("campaign sentinel\n", encoding="utf-8")
     reward_path.write_text("reward sentinel\n", encoding="utf-8")
+    boss_path.write_text("boss sentinel\n", encoding="utf-8")
     original_dumps = generate_campaign.json.dumps
     serialization_calls = 0
 
@@ -285,3 +300,4 @@ def test_generation_serializes_every_output_before_replacing_files(
     assert serialization_calls == 2
     assert campaign_path.read_text(encoding="utf-8") == "campaign sentinel\n"
     assert reward_path.read_text(encoding="utf-8") == "reward sentinel\n"
+    assert boss_path.read_text(encoding="utf-8") == "boss sentinel\n"
