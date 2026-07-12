@@ -23,7 +23,7 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
     web.mkdir()
     package.mkdir()
     levels.mkdir()
-    for name in ("main.py", "template.tmpl", "favicon.png"):
+    for name in ("main.py", "runtime-manifest.json", "template.tmpl", "favicon.png"):
         (web / name).write_bytes(name.encode())
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "feasibility.py").write_text("PROBE = True\n", encoding="utf-8")
@@ -39,15 +39,12 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
 
     build_web.stage_sources(root, stage, probe=True)
 
-    staged = {
-        path.relative_to(stage).as_posix()
-        for path in stage.rglob("*")
-        if path.is_file()
-    }
+    staged = {path.relative_to(stage).as_posix() for path in stage.rglob("*") if path.is_file()}
     assert staged == {
         "favicon.png",
         "levels/level.json",
         "main.py",
+        "runtime-manifest.json",
         "template.tmpl",
         "windsprig/__init__.py",
         "windsprig/_build_flags.py",
@@ -55,8 +52,7 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
         "windsprig/feasibility.py",
     }
     assert (stage / "windsprig" / "_build_flags.py").read_text(encoding="utf-8") == (
-        '"""Generated browser artifact capabilities; do not edit."""\n\n'
-        "FOUNDATION_PROBE_AVAILABLE = True\n"
+        '"""Generated browser artifact capabilities; do not edit."""\n\nFOUNDATION_PROBE_AVAILABLE = True\n'
     )
 
 
@@ -68,7 +64,7 @@ def test_non_probe_staging_overrides_source_capability_to_false(tmp_path: Path) 
     web.mkdir()
     package.mkdir()
     levels.mkdir()
-    for name in ("main.py", "template.tmpl", "favicon.png"):
+    for name in ("main.py", "runtime-manifest.json", "template.tmpl", "favicon.png"):
         (web / name).write_bytes(name.encode())
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "_build_flags.py").write_text(
@@ -80,8 +76,7 @@ def test_non_probe_staging_overrides_source_capability_to_false(tmp_path: Path) 
     build_web.stage_sources(root, stage, probe=False)
 
     assert (stage / "windsprig" / "_build_flags.py").read_text(encoding="utf-8") == (
-        '"""Generated browser artifact capabilities; do not edit."""\n\n'
-        "FOUNDATION_PROBE_AVAILABLE = False\n"
+        '"""Generated browser artifact capabilities; do not edit."""\n\nFOUNDATION_PROBE_AVAILABLE = False\n'
     )
 
 
@@ -285,7 +280,7 @@ def test_browser_entry_and_template_keep_the_real_loader_and_runtime_boundaries(
     assert "pygame.quit" not in entry
     assert "SystemExit" not in entry
     assert "{{cookiecutter.cdn}}pythons.js" in template
-    assert "BrowserFS/2.0.0/browserfs.min.js" in template
+    assert "runtime/browserfs/2.0.0/browserfs.min.js" in template
     assert "async def custom_site()" in template
     assert "function custom_onload" in template
     assert 'id="canvas"' in template

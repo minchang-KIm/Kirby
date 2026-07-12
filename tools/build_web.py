@@ -35,6 +35,12 @@ from tools.release_common import (
     read_build_identity,
     write_build_manifest,
 )
+from tools.web_runtime import (
+    RUNTIME_CDN_PATH,
+    load_runtime_manifest,
+    stage_runtime_assets,
+    verify_same_origin_runtime_index,
+)
 from tools.web_source_manifest import inspect_runtime_source, runtime_source_files
 
 ROOT: Final = Path(__file__).resolve().parents[1]
@@ -42,7 +48,6 @@ PYGBAG_VERSION: Final = "0.9.3"
 PYGAME_CE_VERSION: Final = "2.5.7"
 PYTHON_BUILD: Final = "3.12"
 COMPRESSED_LIMIT_BYTES: Final = 30 * 1024 * 1024
-PINNED_CDN: Final = f"https://pygame-web.github.io/cdn/{PYGBAG_VERSION}/"
 _NORMALIZED_MTIME: Final = 946_684_800
 _PROBE_CAPABILITY_MEMBER: Final = "assets/windsprig/_build_flags.py"
 _DEFAULT_OUTPUT: Final = Path("dist/web")
@@ -188,23 +193,18 @@ def _resolve_web_output(root: Path, output: Path | None) -> Path:
     else:
         destination = Path(os.path.abspath(lexical_root / requested))
         if not destination.is_relative_to(lexical_root):
-            raise ValueError(
-                f"relative web output must stay inside the repository: {requested}"
-            )
+            raise ValueError(f"relative web output must stay inside the repository: {requested}")
 
     source = lexical_root / "web"
     stage = lexical_root / "build" / "web-stage"
     if _paths_overlap(destination, source) or _paths_overlap(destination, stage):
-        raise ValueError(
-            f"web output must not overlap source or staging directories: {destination}"
-        )
+        raise ValueError(f"web output must not overlap source or staging directories: {destination}")
     _validate_output_path_components(destination)
 
     default_output = lexical_root / _DEFAULT_OUTPUT
     if destination != default_output and destination.exists():
         raise FileExistsError(
-            "custom web output already exists; choose a new path or remove it explicitly: "
-            f"{destination}"
+            f"custom web output already exists; choose a new path or remove it explicitly: {destination}"
         )
     return destination
 
@@ -222,8 +222,7 @@ def _prepare_web_output(root: Path, output: Path) -> _PathIdentity:
         _validate_output_path_components(output)
         if output.exists():
             raise FileExistsError(
-                "custom web output already exists; choose a new path or remove it explicitly: "
-                f"{output}"
+                f"custom web output already exists; choose a new path or remove it explicitly: {output}"
             )
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -391,11 +390,7 @@ def attach_release_manifest(output: Path, identity: BuildIdentity) -> Path:
     if _is_link_or_reparse(index_path) or not index_path.is_file():
         raise FileNotFoundError(f"Pygbag did not create a regular {index_path}")
 
-    files = [
-        path.relative_to(output).as_posix()
-        for path in _regular_artifact_files(output)
-        if path != manifest_path
-    ]
+    files = [path.relative_to(output).as_posix() for path in _regular_artifact_files(output) if path != manifest_path]
 
     if not any(Path(member).suffix == ".apk" for member in files):
         raise FileNotFoundError(f"Pygbag application archive is missing from {output}")
@@ -502,9 +497,7 @@ def _publish_web_output(
                 _validate_output_path_components(output)
                 current_parent = output.parent.lstat()
                 if _path_identity(current_parent) != expected_parent_identity:
-                    raise ValueError(
-                        f"web output parent identity changed during build: {output.parent}"
-                    )
+                    raise ValueError(f"web output parent identity changed during build: {output.parent}")
                 if output.exists() or _is_link_or_reparse(output):
                     raise FileExistsError(f"web output appeared during the build: {output}")
 
@@ -512,10 +505,7 @@ def _publish_web_output(
                 if _is_link_or_reparse(staged) or not stat.S_ISDIR(staged_state.st_mode):
                     raise ValueError(f"staged web output is not a regular directory: {staged}")
                 if staged_state.st_dev != current_parent.st_dev:
-                    raise OSError(
-                        "atomic web publication requires output on the build filesystem: "
-                        f"{output}"
-                    )
+                    raise OSError(f"atomic web publication requires output on the build filesystem: {output}")
                 _regular_artifact_files(staged)
                 _atomic_rename_directory(
                     staged,
@@ -527,9 +517,7 @@ def _publish_web_output(
 
                 _validate_output_path_components(output)
                 if _path_identity(output.parent.lstat()) != expected_parent_identity:
-                    raise ValueError(
-                        f"web output parent identity changed during publication: {output.parent}"
-                    )
+                    raise ValueError(f"web output parent identity changed during publication: {output.parent}")
                 _regular_artifact_files(output)
     except BaseException as error:
         if published:
@@ -547,6 +535,7 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
     verify_toolchain_versions()
     generate_favicon(source / "favicon.png")
     runtime_manifest = inspect_runtime_source(root)
+    browser_runtime_manifest = load_runtime_manifest(source / "runtime-manifest.json")
     _remove_build_target(root, Path("build/web-stage"))
     output_parent_identity = _prepare_web_output(root, output_path)
     stage_sources(root, stage, probe=probe)
@@ -573,7 +562,7 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
         "--title",
         "Windsprig: Echoes of the Gale",
         "--cdn",
-        PINNED_CDN,
+        RUNTIME_CDN_PATH,
         "--template",
         str(stage / "template.tmpl"),
         "--icon",
@@ -584,6 +573,12 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
     built = stage / "build" / "web"
     if not (built / "index.html").is_file():
         raise SystemExit(f"Pygbag did not produce {built / 'index.html'}")
+    browser_runtime_bytes = stage_runtime_assets(
+        browser_runtime_manifest,
+        root / "build" / "web-runtime-cache",
+        built,
+    )
+    verify_same_origin_runtime_index(built / "index.html")
     _normalize_archives(built)
     verify_probe_artifacts(built, probe=probe)
     measurements = measure_output(built)
@@ -592,6 +587,8 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
         raise SystemExit("repository HEAD changed during the web build")
     report: dict[str, object] = {
         **measurements,
+        "browser_runtime_bytes": browser_runtime_bytes,
+        "browser_runtime_manifest_sha256": browser_runtime_manifest.sha256,
         "compressed_limit_bytes": COMPRESSED_LIMIT_BYTES,
         "probe": probe,
         "pygbag": PYGBAG_VERSION,

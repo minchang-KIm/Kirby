@@ -27,6 +27,7 @@ def _committed_runtime(tmp_path: Path) -> Path:
     (root / "levels").mkdir()
     (root / "web" / "main.py").write_text("print('web')\n", encoding="utf-8")
     (root / "web" / "template.tmpl").write_text("<html></html>\n", encoding="utf-8")
+    (root / "web" / "runtime-manifest.json").write_text("{}\n", encoding="utf-8")
     (root / "web" / "favicon.png").write_bytes(b"png")
     (root / "windsprig" / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
     (root / "levels" / "stage.json").write_text("{}\n", encoding="utf-8")
@@ -60,6 +61,7 @@ def test_runtime_manifest_is_stable_and_bound_to_clean_head(tmp_path: Path) -> N
         "levels/stage.json",
         "web/favicon.png",
         "web/main.py",
+        "web/runtime-manifest.json",
         "web/template.tmpl",
         "windsprig/app.py",
     )

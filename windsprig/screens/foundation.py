@@ -43,7 +43,7 @@ from windsprig.meta import (
     migration_catalog,
 )
 from windsprig.meta.save_models import SaveData
-from windsprig.platform.services import PlatformServices
+from windsprig.platform.services import PlatformServices, WebTestStatus
 from windsprig.screens.base import Screen, ScreenFactory, ScreenId, ScreenTransition
 
 _RELOAD_NOTICE_CODES = {
@@ -190,10 +190,7 @@ class FoundationScreen(Screen):
         input_frame: InputFrame,
         commands: tuple[InputCommand, ...],
     ) -> ScreenTransition | None:
-        if any(
-            isinstance(command, CancelCommand) and command.origin == "cancel"
-            for command in commands
-        ):
+        if any(isinstance(command, CancelCommand) and command.origin == "cancel" for command in commands):
             return ScreenTransition("paused")
         if any(isinstance(command, PauseCommand) for command in commands):
             return ScreenTransition("paused")
@@ -625,6 +622,17 @@ class FoundationScreenFactory(ScreenFactory):
         """Select ``screen_id`` after the coordinator exits the prior activation."""
         self.foundation_screen._select_screen(screen_id)
         return self.foundation_screen
+
+    def web_test_status(self, screen_id: ScreenId, active_players: int) -> WebTestStatus:
+        """Project shared foundation state through the factory composition boundary."""
+        profile = self.foundation_screen.save_data.profiles[0]
+        return WebTestStatus(
+            state=screen_id,
+            save_version=self.foundation_screen.save_data.save_version,
+            save_status=self.foundation_screen.save_status,
+            cleared_stages=len(profile.clear_counts),
+            active_players=active_players,
+        )
 
     @property
     def initial_screen_id(self) -> ScreenId:

@@ -33,7 +33,9 @@ from windsprig.platform.services import (
     PlatformCapabilities,
     PlatformServices,
     StorageCapabilities,
+    WebTestStatus,
 )
+from windsprig.screens import ScreenId
 from windsprig.screens import foundation as foundation_module
 
 
@@ -207,10 +209,15 @@ class RecordingFactory:
     def __init__(self, screens: Mapping[str, RecordingScreen]) -> None:
         self.screens = dict(screens)
         self.created: list[str] = []
+        self.status_calls: list[tuple[ScreenId, int]] = []
 
-    def create(self, screen_id: str) -> RecordingScreen:
+    def create(self, screen_id: ScreenId) -> RecordingScreen:
         self.created.append(screen_id)
         return self.screens[screen_id]
+
+    def web_test_status(self, screen_id: ScreenId, active_players: int) -> WebTestStatus:
+        self.status_calls.append((screen_id, active_players))
+        return WebTestStatus(screen_id, 2, "ready", 0, active_players)
 
 
 @dataclass(slots=True)
@@ -324,19 +331,16 @@ async def test_probe_counts_a_confirm_edge_at_the_fixed_step_boundary_once_durin
     probe.start_session()
     harness = make_harness(probe=probe, storage=storage)
     harness.time.elapsed = 32.0
-    harness.router.next_routed = RoutedInput(
-        InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]})
-    )
+    harness.router.next_routed = RoutedInput(InputFrame(commands_by_slot={1: [ConfirmCommand(player_slot=1)]}))
 
     await harness.app.run_frame()
 
     assert storage.values["probe/input"] == "consumed_once"
     assert len(harness.screen.frames) == 2
-    assert sum(
-        isinstance(command, ConfirmCommand)
-        for frame in harness.screen.frames
-        for command in frame.commands_for(1)
-    ) == 1
+    assert (
+        sum(isinstance(command, ConfirmCommand) for frame in harness.screen.frames for command in frame.commands_for(1))
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -458,6 +462,49 @@ async def test_foundation_app_publishes_only_changed_post_render_product_status(
     assert len(browser.published) == 2
 
 
+@pytest.mark.asyncio
+async def test_non_foundation_status_provider_publishes_across_transitions() -> None:
+    world_map = RecordingScreen()
+    playing = RecordingScreen()
+    world_map.next_transition = FakeTransition("playing")
+    factory = RecordingFactory({"world_map": world_map, "playing": playing})
+    browser = RecordingDiagnosticBrowser()
+    time = FakeTime()
+    services = PlatformServices(
+        storage=FakeStorage(),
+        audio=FakeAudio(),
+        display=FakeDisplay(),
+        time=time,
+        lifecycle=FakeLifecycle(),
+        browser=cast(BrowserBridge, browser),
+        capabilities=PlatformCapabilities(
+            is_web=True,
+            persistent_storage=True,
+            fullscreen=False,
+            gamepads=False,
+            audio_requires_gesture=False,
+        ),
+    )
+    app = GameApp(
+        GameConfig(),
+        services,
+        factory,
+        event_source=lambda: (),
+        key_source=FakeKeys,
+        initial_screen_id="world_map",
+    )
+
+    await app.run_frame()
+    time.elapsed = 16.0
+    await app.run_frame()
+
+    assert factory.status_calls == [("world_map", 0), ("playing", 0)]
+    assert [payload["state"] for _, payload in browser.published] == [
+        "world_map",
+        "playing",
+    ]
+
+
 def test_staged_non_probe_capability_blocks_query_and_f9_in_active_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -528,20 +575,14 @@ async def test_async_app_keeps_edge_until_first_fixed_step_then_consumes_it_once
     player = harness.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
     harness.time.elapsed = 1
     harness.router.next_routed = RoutedInput(
-        InputFrame(
-            commands_by_slot={
-                player.slot: [MoveCommand(player.slot, 1), JumpCommand(player.slot, True)]
-            }
-        )
+        InputFrame(commands_by_slot={player.slot: [MoveCommand(player.slot, 1), JumpCommand(player.slot, True)]})
     )
 
     await harness.app.run_frame()
 
     assert harness.screen.frames == []
     harness.time.elapsed = 15
-    harness.router.next_routed = RoutedInput(
-        InputFrame(commands_by_slot={player.slot: [MoveCommand(player.slot, 1)]})
-    )
+    harness.router.next_routed = RoutedInput(InputFrame(commands_by_slot={player.slot: [MoveCommand(player.slot, 1)]}))
     await harness.app.run_frame()
     harness.time.elapsed = 16
     await harness.app.run_frame()
@@ -571,15 +612,9 @@ async def test_async_app_clamps_elapsed_before_bounded_catch_up_and_records_drop
 async def test_focus_loss_clears_old_and_same_frame_input_then_audio_resumes_on_gain() -> None:
     harness = make_harness()
     player = harness.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
-    harness.queue.push(
-        InputFrame(commands_by_slot={player.slot: [JumpCommand(player.slot, True)]})
-    )
+    harness.queue.push(InputFrame(commands_by_slot={player.slot: [JumpCommand(player.slot, True)]}))
     harness.router.next_routed = RoutedInput(
-        InputFrame(
-            commands_by_slot={
-                player.slot: [MoveCommand(player.slot, 1), JumpCommand(player.slot, True)]
-            }
-        )
+        InputFrame(commands_by_slot={player.slot: [MoveCommand(player.slot, 1), JumpCommand(player.slot, True)]})
     )
     harness.lifecycle.next_events = (LifecycleEvent("focus_lost"),)
     harness.time.elapsed = 16
@@ -629,9 +664,7 @@ async def test_disconnect_clears_slot_before_reuse_and_joined_owner_gets_no_stal
     queue = InputQueue()
     queue.push(
         InputFrame(
-            commands_by_slot={
-                old_player.slot: [MoveCommand(old_player.slot, 1), JumpCommand(old_player.slot, True)]
-            }
+            commands_by_slot={old_player.slot: [MoveCommand(old_player.slot, 1), JumpCommand(old_player.slot, True)]}
         )
     )
     harness = make_harness(roster=roster, queue=queue)
@@ -658,9 +691,7 @@ async def test_same_frame_disconnect_overrides_matching_join_and_clears_old_owne
     queue = InputQueue()
     queue.push(
         InputFrame(
-            commands_by_slot={
-                old_player.slot: [MoveCommand(old_player.slot, 1), JumpCommand(old_player.slot, True)]
-            }
+            commands_by_slot={old_player.slot: [MoveCommand(old_player.slot, 1), JumpCommand(old_player.slot, True)]}
         )
     )
     harness = make_harness(roster=roster, queue=queue)

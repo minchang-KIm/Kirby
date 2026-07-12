@@ -15,7 +15,12 @@ _IGNORED_DIRS: Final = frozenset(
 )
 _ALLOWED_SUFFIXES: Final = frozenset({".json", ".jpg", ".jpeg", ".ogg", ".otf", ".png", ".py", ".ttf", ".txt", ".webp"})
 _SECRET_SUFFIXES: Final = frozenset({".key", ".p12", ".pem", ".pfx"})
-_WEB_ENTRY_FILES: Final = ("favicon.png", "main.py", "template.tmpl")
+_WEB_ENTRY_FILES: Final = (
+    "favicon.png",
+    "main.py",
+    "runtime-manifest.json",
+    "template.tmpl",
+)
 _GENERATED_RUNTIME_FILES: Final = frozenset({"windsprig/_build_flags.py"})
 
 

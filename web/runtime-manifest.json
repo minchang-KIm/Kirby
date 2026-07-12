@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "runtime_id": "pygbag-0.9.3-cpython312-vt",
+  "assets": [
+    {
+      "artifact_path": "runtime/browserfs/2.0.0/browserfs.min.js",
+      "source_url": "https://cdnjs.cloudflare.com/ajax/libs/BrowserFS/2.0.0/browserfs.min.js",
+      "size_bytes": 247362,
+      "sha256": "f6f7e897d91b43d284a92865fb67a3729b044a5f2e4002362bcd6f9b5115911a"
+    },
+    {
+      "artifact_path": "runtime/0.9.3/pythons.js",
+      "source_url": "https://pygame-web.github.io/cdn/0.9.3/pythons.js",
+      "size_bytes": 69205,
+      "sha256": "6da43e3e62c3db933421b99681e8ef99ed9b0ce1589ed8a0c69b88443278e019"
+    },
+    {
+      "artifact_path": "runtime/0.9.3/cpythonrc.py",
+      "source_url": "https://pygame-web.github.io/cdn/0.9.3/cpythonrc.py",
+      "size_bytes": 50426,
+      "sha256": "b8a0b8168b58ef7c38c17d4705c9cbe1751fa667a0a6d26ed26f0537134735de"
+    },
+    {
+      "artifact_path": "runtime/0.9.3/empty.ogg",
+      "source_url": "https://pygame-web.github.io/cdn/0.9.3/empty.ogg",
+      "size_bytes": 4035,
+      "sha256": "884c20d864222b845aa78fb078ec370f4ddaa203cd92ace28440ed7733403b40"
+    },
+    {
+      "artifact_path": "runtime/0.9.3/cpython312/main.js",
+      "source_url": "https://pygame-web.github.io/cdn/0.9.3/cpython312/main.js",
+      "size_bytes": 849985,
+      "sha256": "01c4e4dc7145a482ad259d8272ce73d97b58ec2a141bfb57e620347730d159c7"
+    },
+    {
+      "artifact_path": "runtime/0.9.3/cpython312/main.data",
+      "source_url": "https://pygame-web.github.io/cdn/0.9.3/cpython312/main.data",
+      "size_bytes": 6668609,
+      "sha256": "b068df4d59b06b113cfc3c4d6419bdf699d2c2eeb547c9119e2044c98cdc4a59"
+    },
+    {
+      "artifact_path": "runtime/0.9.3/cpython312/main.wasm",
+      "source_url": "https://pygame-web.github.io/cdn/0.9.3/cpython312/main.wasm",
+      "size_bytes": 13447111,
+      "sha256": "3cfb882de90feeb367325f0c58731932880c8f424fb5a670b98d035ae862b280"
+    },
+    {
+      "artifact_path": "runtime/vt.js",
+      "source_url": "https://pygame-web.github.io/cdn/vt.js",
+      "size_bytes": 14656,
+      "sha256": "ef5d853b3dd27ebcb62b5d88f92b51606a0a6f11c75f9af10426b8e93781c2c3"
+    }
+  ]
+}

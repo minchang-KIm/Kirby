@@ -15,6 +15,7 @@ import pytest
 from tools import build_web
 from tools.build_web import attach_release_manifest
 from tools.release_common import BuildIdentity
+from tools.web_runtime import RuntimeManifest
 
 _REAL_SUBPROCESS_RUN = subprocess.run
 
@@ -223,6 +224,24 @@ def _patch_build_dependencies(
     monkeypatch.setattr(build_web, "verify_probe_artifacts", lambda _output, *, probe: None)
     monkeypatch.setattr(
         build_web,
+        "load_runtime_manifest",
+        lambda _path: RuntimeManifest(1, "test-runtime", (), "f" * 64),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        build_web,
+        "stage_runtime_assets",
+        lambda _manifest, _cache, _output: 0,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        build_web,
+        "verify_same_origin_runtime_index",
+        lambda _index: None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        build_web,
         "read_build_identity",
         lambda _root, _target: BuildIdentity("1.2.3", "a" * 40, "web"),
     )
@@ -242,6 +261,8 @@ def test_build_web_stages_one_pygbag_artifact_at_an_explicit_output(
     assert len(commands) == 1
     assert commands[0][1:3] == ["-m", "pygbag"]
     assert commands[0].count("pygbag") == 1
+    cdn_index = commands[0].index("--cdn")
+    assert commands[0][cdn_index + 1] == "runtime/0.9.3/"
     assert report["probe"] is True
     assert report["release_version"] == "1.2.3"
     assert json.loads((output / "build-info.json").read_text(encoding="utf-8")) == {
@@ -250,6 +271,61 @@ def test_build_web_stages_one_pygbag_artifact_at_an_explicit_output(
         "target": "web",
         "version": "1.2.3",
     }
+
+
+def test_build_web_stages_runtime_before_size_measurement_and_release_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "repo"
+    _patch_build_dependencies(monkeypatch, root)
+    output = tmp_path / "publish" / "web"
+    staged_payload = b"pinned-runtime"
+    calls: list[str] = []
+
+    def stage_runtime(
+        _manifest: RuntimeManifest,
+        cache: Path,
+        built: Path,
+    ) -> int:
+        calls.append("stage")
+        assert cache == root / "build" / "web-runtime-cache"
+        runtime = built / "runtime" / "0.9.3" / "pythons.js"
+        runtime.parent.mkdir(parents=True)
+        runtime.write_bytes(staged_payload)
+        return len(staged_payload)
+
+    def verify_index(index: Path) -> None:
+        calls.append("verify")
+        assert index == root / "build" / "web-stage" / "build" / "web" / "index.html"
+
+    monkeypatch.setattr(build_web, "stage_runtime_assets", stage_runtime, raising=False)
+    monkeypatch.setattr(
+        build_web,
+        "verify_same_origin_runtime_index",
+        verify_index,
+        raising=False,
+    )
+
+    report = build_web.build_web(probe=False, output=output)
+    release_manifest = json.loads((output / "build-info.json").read_text(encoding="utf-8"))
+
+    assert calls == ["stage", "verify"]
+    assert report["browser_runtime_bytes"] == len(staged_payload)
+    assert report["browser_runtime_manifest_sha256"] == "f" * 64
+    assert "runtime/0.9.3/pythons.js" in report["files"]
+    assert "runtime/0.9.3/pythons.js" in release_manifest["files"]
+
+
+def test_web_template_uses_only_the_relative_vt_runtime_graph() -> None:
+    template = (Path(__file__).resolve().parents[2] / "web" / "template.tmpl").read_text(encoding="utf-8")
+
+    assert "http://" not in template
+    assert "https://" not in template
+    assert 'src="runtime/browserfs/2.0.0/browserfs.min.js"' in template
+    assert 'src="{{cookiecutter.cdn}}pythons.js"' in template
+    assert 'data-os="vt,snd,gui"' in template
+    assert 'data-os="vtx' not in template
 
 
 def test_build_web_refreshes_only_the_allowlisted_default_output(

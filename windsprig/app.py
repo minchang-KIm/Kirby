@@ -110,6 +110,7 @@ class GameApp:
         self._audio_initialization_attempted = False
         self._last_web_test_status: WebTestStatus | None = None
         selected_initial_id = initial_screen_id or self._factory_initial_screen_id()
+        self._active_screen_id = selected_initial_id
         self.screen: Screen = self.screen_factory.create(selected_initial_id)
         self.screen.on_enter(MappingProxyType({}))
 
@@ -148,13 +149,9 @@ class GameApp:
         # Queue against the old ownership snapshot, then explicitly invalidate reused slots.
         self.input_queue.push(routed.frame)
         self._remove_disconnected_players(routed.disconnected_devices)
-        disconnected_identities = {
-            (device.kind, device.uid) for device in routed.disconnected_devices
-        }
+        disconnected_identities = {(device.kind, device.uid) for device in routed.disconnected_devices}
         non_disconnected_joins = tuple(
-            device
-            for device in routed.join_requests
-            if (device.kind, device.uid) not in disconnected_identities
+            device for device in routed.join_requests if (device.kind, device.uid) not in disconnected_identities
         )
         self._join_requested_players(non_disconnected_joins)
         self.disconnected_devices = routed.disconnected_devices
@@ -185,6 +182,7 @@ class GameApp:
             payload = MappingProxyType(dict(transition.payload))
             self.screen.on_exit()
             self.screen = self.screen_factory.create(transition.target)
+            self._active_screen_id = transition.target
             self.screen.on_enter(payload)
 
         self.screen.render(self.canvas, batch.alpha)
@@ -192,7 +190,7 @@ class GameApp:
         self._publish_web_test_status()
         gameplay_active = (
             isinstance(self.screen, FoundationScreen)
-            and self.screen.screen_id == "playing"
+            and self._active_screen_id == "playing"
             and isinstance(self.screen.runtime, StageRuntime)
         )
         self.probe.presented_frame(raw_elapsed_ms, gameplay_active=gameplay_active)
@@ -200,15 +198,9 @@ class GameApp:
 
     def _publish_web_test_status(self) -> None:
         """Publish changed post-render product state without feeding simulation input."""
-        if not isinstance(self.screen, FoundationScreen):
-            return
-        profile = self.screen.save_data.profiles[0]
-        status = WebTestStatus(
-            state=self.screen.screen_id,
-            save_version=self.screen.save_data.save_version,
-            save_status=self.screen.save_status,
-            cleared_stages=len(profile.clear_counts),
-            active_players=len(self.roster.players),
+        status = self.screen_factory.web_test_status(
+            self._active_screen_id,
+            len(self.roster.players),
         )
         if status == self._last_web_test_status:
             return

@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 import pygame
 
 from windsprig.input.commands import InputFrame
+from windsprig.platform.services import WebTestStatus
 
 ScreenId = Literal[
     "boot",
@@ -60,7 +61,15 @@ class Screen(Protocol):
         raise NotImplementedError
 
 
-class ScreenFactory(Protocol):
+class WebTestStatusProvider(Protocol):
+    """Describe the read-only browser summary owned by a screen composition."""
+
+    def web_test_status(self, screen_id: ScreenId, active_players: int) -> WebTestStatus:
+        """Return primitive product status without granting mutation authority."""
+        raise NotImplementedError
+
+
+class ScreenFactory(WebTestStatusProvider, Protocol):
     """Resolve stable screen IDs without owning the application loop."""
 
     def create(self, screen_id: ScreenId) -> Screen:
