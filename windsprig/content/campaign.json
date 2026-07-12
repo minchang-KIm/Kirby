@@ -1,7 +1,15 @@
 {
+  "version": "1.0.0",
   "worlds": [
     {
       "world_id": "world_1",
+      "order": 1,
+      "name_key": "world.world_1.name",
+      "identity_key": "world.world_1.identity",
+      "mechanic_keys": [
+        "mechanic.world_1"
+      ],
+      "palette_id": "world_1",
       "nodes": [
         {
           "node_id": "world_1_node_1",
@@ -72,6 +80,13 @@
     },
     {
       "world_id": "world_2",
+      "order": 2,
+      "name_key": "world.world_2.name",
+      "identity_key": "world.world_2.identity",
+      "mechanic_keys": [
+        "mechanic.world_2"
+      ],
+      "palette_id": "world_2",
       "nodes": [
         {
           "node_id": "world_2_node_1",
@@ -144,6 +159,13 @@
     },
     {
       "world_id": "world_3",
+      "order": 3,
+      "name_key": "world.world_3.name",
+      "identity_key": "world.world_3.identity",
+      "mechanic_keys": [
+        "mechanic.world_3"
+      ],
+      "palette_id": "world_3",
       "nodes": [
         {
           "node_id": "world_3_node_1",
@@ -216,6 +238,13 @@
     },
     {
       "world_id": "world_4",
+      "order": 4,
+      "name_key": "world.world_4.name",
+      "identity_key": "world.world_4.identity",
+      "mechanic_keys": [
+        "mechanic.world_4"
+      ],
+      "palette_id": "world_4",
       "nodes": [
         {
           "node_id": "world_4_node_1",
@@ -288,6 +317,13 @@
     },
     {
       "world_id": "world_5",
+      "order": 5,
+      "name_key": "world.world_5.name",
+      "identity_key": "world.world_5.identity",
+      "mechanic_keys": [
+        "mechanic.world_5"
+      ],
+      "palette_id": "world_5",
       "nodes": [
         {
           "node_id": "world_5_node_1",
@@ -360,6 +396,13 @@
     },
     {
       "world_id": "world_6",
+      "order": 6,
+      "name_key": "world.world_6.name",
+      "identity_key": "world.world_6.identity",
+      "mechanic_keys": [
+        "mechanic.world_6"
+      ],
+      "palette_id": "world_6",
       "nodes": [
         {
           "node_id": "world_6_node_1",
@@ -461,57 +504,81 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_1_stage_1.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_1_stage_1.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_1_stage_1.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_1_stage_1.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_1_stage_1.enemy.5",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          29,
-          11
-        ],
-        [
-          44,
-          8
-        ],
-        [
-          78,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_1_stage_1:mote:1",
+          "tile_x": 29,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_1_stage_1:mote:2",
+          "tile_x": 44,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_1_stage_1:mote:3",
+          "tile_x": 78,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_1_stage_1.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         84,
         17
@@ -1409,7 +1476,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 1,
+      "name_key": "stage.world_1_stage_1.name",
+      "intro_key": "stage.world_1_stage_1.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_1_stage_2",
@@ -1442,65 +1513,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_1_stage_2.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_1_stage_2.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_1_stage_2.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_1_stage_2.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_1_stage_2.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_1_stage_2.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          32,
-          11
-        ],
-        [
-          48,
-          8
-        ],
-        [
-          86,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_1_stage_2:mote:1",
+          "tile_x": 32,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_1_stage_2:mote:2",
+          "tile_x": 48,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_1_stage_2:mote:3",
+          "tile_x": 86,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_1_stage_2.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         92,
         17
@@ -2462,7 +2559,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 2,
+      "name_key": "stage.world_1_stage_2.name",
+      "intro_key": "stage.world_1_stage_2.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_1_stage_3",
@@ -2495,65 +2596,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_1_stage_3.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_1_stage_3.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_1_stage_3.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_1_stage_3.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_1_stage_3.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_1_stage_3.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          34,
-          11
-        ],
-        [
-          52,
-          8
-        ],
-        [
-          94,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_1_stage_3:mote:1",
+          "tile_x": 34,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_1_stage_3:mote:2",
+          "tile_x": 52,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_1_stage_3:mote:3",
+          "tile_x": 94,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_1_stage_3.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         100,
         17
@@ -3587,7 +3714,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 3,
+      "name_key": "stage.world_1_stage_3.name",
+      "intro_key": "stage.world_1_stage_3.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_1_stage_4",
@@ -3620,73 +3751,101 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_1_stage_4.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_1_stage_4.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_1_stage_4.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_1_stage_4.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_1_stage_4.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_1_stage_4.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_1_stage_4.enemy.7",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          37,
-          11
-        ],
-        [
-          56,
-          8
-        ],
-        [
-          102,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_1_stage_4:mote:1",
+          "tile_x": 37,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_1_stage_4:mote:2",
+          "tile_x": 56,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_1_stage_4:mote:3",
+          "tile_x": 102,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_1_stage_4.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         108,
         17
@@ -4792,7 +4951,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 4,
+      "name_key": "stage.world_1_stage_4.name",
+      "intro_key": "stage.world_1_stage_4.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_1_stage_5",
@@ -4825,81 +4988,111 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_1_stage_5.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_1_stage_5.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "boss",
-          "copy_ability": "ultra_sword",
+          "ability_id": "tempest",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_1_stage_5.enemy.3",
+          "elite": true
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_1_stage_5.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_1_stage_5.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_1_stage_5.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_1_stage_5.enemy.7",
+          "elite": false
         },
         {
           "x": 3264.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 3104.0,
-          "patrol_right": 3424.0
+          "patrol_right": 3424.0,
+          "spawn_id": "world_1_stage_5.enemy.8",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          40,
-          11
-        ],
-        [
-          60,
-          8
-        ],
-        [
-          110,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_1_stage_5:mote:1",
+          "tile_x": 40,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_1_stage_5:mote:2",
+          "tile_x": 60,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_1_stage_5:mote:3",
+          "tile_x": 110,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_1_stage_5.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         116,
         17
@@ -6069,7 +6262,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 5,
+      "name_key": "stage.world_1_stage_5.name",
+      "intro_key": "stage.world_1_stage_5.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_2_stage_1",
@@ -6102,57 +6299,81 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_2_stage_1.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_2_stage_1.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_2_stage_1.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_2_stage_1.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_2_stage_1.enemy.5",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          29,
-          11
-        ],
-        [
-          44,
-          8
-        ],
-        [
-          78,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_2_stage_1:mote:1",
+          "tile_x": 29,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_2_stage_1:mote:2",
+          "tile_x": 44,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_2_stage_1:mote:3",
+          "tile_x": 78,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_2_stage_1.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         84,
         17
@@ -7050,7 +7271,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 1,
+      "name_key": "stage.world_2_stage_1.name",
+      "intro_key": "stage.world_2_stage_1.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_2_stage_2",
@@ -7083,65 +7308,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_2_stage_2.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_2_stage_2.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_2_stage_2.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_2_stage_2.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_2_stage_2.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_2_stage_2.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          32,
-          11
-        ],
-        [
-          48,
-          8
-        ],
-        [
-          86,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_2_stage_2:mote:1",
+          "tile_x": 32,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_2_stage_2:mote:2",
+          "tile_x": 48,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_2_stage_2:mote:3",
+          "tile_x": 86,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_2_stage_2.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         92,
         17
@@ -8103,7 +8354,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 2,
+      "name_key": "stage.world_2_stage_2.name",
+      "intro_key": "stage.world_2_stage_2.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_2_stage_3",
@@ -8136,65 +8391,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_2_stage_3.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_2_stage_3.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_2_stage_3.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_2_stage_3.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_2_stage_3.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_2_stage_3.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          34,
-          11
-        ],
-        [
-          52,
-          8
-        ],
-        [
-          94,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_2_stage_3:mote:1",
+          "tile_x": 34,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_2_stage_3:mote:2",
+          "tile_x": 52,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_2_stage_3:mote:3",
+          "tile_x": 94,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_2_stage_3.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         100,
         17
@@ -9228,7 +9509,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 3,
+      "name_key": "stage.world_2_stage_3.name",
+      "intro_key": "stage.world_2_stage_3.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_2_stage_4",
@@ -9261,73 +9546,101 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_2_stage_4.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_2_stage_4.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_2_stage_4.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_2_stage_4.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_2_stage_4.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_2_stage_4.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_2_stage_4.enemy.7",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          37,
-          11
-        ],
-        [
-          56,
-          8
-        ],
-        [
-          102,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_2_stage_4:mote:1",
+          "tile_x": 37,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_2_stage_4:mote:2",
+          "tile_x": 56,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_2_stage_4:mote:3",
+          "tile_x": 102,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_2_stage_4.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         108,
         17
@@ -10433,7 +10746,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 4,
+      "name_key": "stage.world_2_stage_4.name",
+      "intro_key": "stage.world_2_stage_4.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_2_stage_5",
@@ -10466,81 +10783,111 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_2_stage_5.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_2_stage_5.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "boss",
-          "copy_ability": "ultra_sword",
+          "ability_id": "tempest",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_2_stage_5.enemy.3",
+          "elite": true
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_2_stage_5.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_2_stage_5.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_2_stage_5.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_2_stage_5.enemy.7",
+          "elite": false
         },
         {
           "x": 3264.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 3104.0,
-          "patrol_right": 3424.0
+          "patrol_right": 3424.0,
+          "spawn_id": "world_2_stage_5.enemy.8",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          40,
-          11
-        ],
-        [
-          60,
-          8
-        ],
-        [
-          110,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_2_stage_5:mote:1",
+          "tile_x": 40,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_2_stage_5:mote:2",
+          "tile_x": 60,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_2_stage_5:mote:3",
+          "tile_x": 110,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_2_stage_5.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         116,
         17
@@ -11710,7 +12057,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 5,
+      "name_key": "stage.world_2_stage_5.name",
+      "intro_key": "stage.world_2_stage_5.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_3_stage_1",
@@ -11743,57 +12094,81 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_3_stage_1.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_3_stage_1.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_3_stage_1.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_3_stage_1.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_3_stage_1.enemy.5",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          29,
-          11
-        ],
-        [
-          44,
-          8
-        ],
-        [
-          78,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_3_stage_1:mote:1",
+          "tile_x": 29,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_3_stage_1:mote:2",
+          "tile_x": 44,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_3_stage_1:mote:3",
+          "tile_x": 78,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_3_stage_1.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         84,
         17
@@ -12691,7 +13066,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 1,
+      "name_key": "stage.world_3_stage_1.name",
+      "intro_key": "stage.world_3_stage_1.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_3_stage_2",
@@ -12724,65 +13103,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_3_stage_2.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_3_stage_2.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_3_stage_2.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_3_stage_2.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_3_stage_2.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_3_stage_2.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          32,
-          11
-        ],
-        [
-          48,
-          8
-        ],
-        [
-          86,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_3_stage_2:mote:1",
+          "tile_x": 32,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_3_stage_2:mote:2",
+          "tile_x": 48,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_3_stage_2:mote:3",
+          "tile_x": 86,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_3_stage_2.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         92,
         17
@@ -13744,7 +14149,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 2,
+      "name_key": "stage.world_3_stage_2.name",
+      "intro_key": "stage.world_3_stage_2.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_3_stage_3",
@@ -13777,65 +14186,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_3_stage_3.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_3_stage_3.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_3_stage_3.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_3_stage_3.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_3_stage_3.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_3_stage_3.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          34,
-          11
-        ],
-        [
-          52,
-          8
-        ],
-        [
-          94,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_3_stage_3:mote:1",
+          "tile_x": 34,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_3_stage_3:mote:2",
+          "tile_x": 52,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_3_stage_3:mote:3",
+          "tile_x": 94,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_3_stage_3.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         100,
         17
@@ -14869,7 +15304,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 3,
+      "name_key": "stage.world_3_stage_3.name",
+      "intro_key": "stage.world_3_stage_3.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_3_stage_4",
@@ -14902,73 +15341,101 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_3_stage_4.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_3_stage_4.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_3_stage_4.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_3_stage_4.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_3_stage_4.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_3_stage_4.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_3_stage_4.enemy.7",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          37,
-          11
-        ],
-        [
-          56,
-          8
-        ],
-        [
-          102,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_3_stage_4:mote:1",
+          "tile_x": 37,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_3_stage_4:mote:2",
+          "tile_x": 56,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_3_stage_4:mote:3",
+          "tile_x": 102,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_3_stage_4.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         108,
         17
@@ -16074,7 +16541,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 4,
+      "name_key": "stage.world_3_stage_4.name",
+      "intro_key": "stage.world_3_stage_4.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_3_stage_5",
@@ -16107,81 +16578,111 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_3_stage_5.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_3_stage_5.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "boss",
-          "copy_ability": "ultra_sword",
+          "ability_id": "tempest",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_3_stage_5.enemy.3",
+          "elite": true
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_3_stage_5.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_3_stage_5.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_3_stage_5.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_3_stage_5.enemy.7",
+          "elite": false
         },
         {
           "x": 3264.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 3104.0,
-          "patrol_right": 3424.0
+          "patrol_right": 3424.0,
+          "spawn_id": "world_3_stage_5.enemy.8",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          40,
-          11
-        ],
-        [
-          60,
-          8
-        ],
-        [
-          110,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_3_stage_5:mote:1",
+          "tile_x": 40,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_3_stage_5:mote:2",
+          "tile_x": 60,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_3_stage_5:mote:3",
+          "tile_x": 110,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_3_stage_5.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         116,
         17
@@ -17351,7 +17852,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 5,
+      "name_key": "stage.world_3_stage_5.name",
+      "intro_key": "stage.world_3_stage_5.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_4_stage_1",
@@ -17384,57 +17889,81 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_4_stage_1.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_4_stage_1.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_4_stage_1.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_4_stage_1.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_4_stage_1.enemy.5",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          29,
-          11
-        ],
-        [
-          44,
-          8
-        ],
-        [
-          78,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_4_stage_1:mote:1",
+          "tile_x": 29,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_4_stage_1:mote:2",
+          "tile_x": 44,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_4_stage_1:mote:3",
+          "tile_x": 78,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_4_stage_1.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         84,
         17
@@ -18332,7 +18861,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 1,
+      "name_key": "stage.world_4_stage_1.name",
+      "intro_key": "stage.world_4_stage_1.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_4_stage_2",
@@ -18365,65 +18898,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_4_stage_2.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_4_stage_2.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_4_stage_2.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_4_stage_2.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_4_stage_2.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_4_stage_2.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          32,
-          11
-        ],
-        [
-          48,
-          8
-        ],
-        [
-          86,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_4_stage_2:mote:1",
+          "tile_x": 32,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_4_stage_2:mote:2",
+          "tile_x": 48,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_4_stage_2:mote:3",
+          "tile_x": 86,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_4_stage_2.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         92,
         17
@@ -19385,7 +19944,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 2,
+      "name_key": "stage.world_4_stage_2.name",
+      "intro_key": "stage.world_4_stage_2.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_4_stage_3",
@@ -19418,65 +19981,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_4_stage_3.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_4_stage_3.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_4_stage_3.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_4_stage_3.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_4_stage_3.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_4_stage_3.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          34,
-          11
-        ],
-        [
-          52,
-          8
-        ],
-        [
-          94,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_4_stage_3:mote:1",
+          "tile_x": 34,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_4_stage_3:mote:2",
+          "tile_x": 52,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_4_stage_3:mote:3",
+          "tile_x": 94,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_4_stage_3.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         100,
         17
@@ -20510,7 +21099,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 3,
+      "name_key": "stage.world_4_stage_3.name",
+      "intro_key": "stage.world_4_stage_3.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_4_stage_4",
@@ -20543,73 +21136,101 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_4_stage_4.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_4_stage_4.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_4_stage_4.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_4_stage_4.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_4_stage_4.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_4_stage_4.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_4_stage_4.enemy.7",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          37,
-          11
-        ],
-        [
-          56,
-          8
-        ],
-        [
-          102,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_4_stage_4:mote:1",
+          "tile_x": 37,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_4_stage_4:mote:2",
+          "tile_x": 56,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_4_stage_4:mote:3",
+          "tile_x": 102,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_4_stage_4.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         108,
         17
@@ -21715,7 +22336,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 4,
+      "name_key": "stage.world_4_stage_4.name",
+      "intro_key": "stage.world_4_stage_4.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_4_stage_5",
@@ -21748,81 +22373,111 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_4_stage_5.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_4_stage_5.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "boss",
-          "copy_ability": "ultra_sword",
+          "ability_id": "tempest",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_4_stage_5.enemy.3",
+          "elite": true
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_4_stage_5.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_4_stage_5.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_4_stage_5.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_4_stage_5.enemy.7",
+          "elite": false
         },
         {
           "x": 3264.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 3104.0,
-          "patrol_right": 3424.0
+          "patrol_right": 3424.0,
+          "spawn_id": "world_4_stage_5.enemy.8",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          40,
-          11
-        ],
-        [
-          60,
-          8
-        ],
-        [
-          110,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_4_stage_5:mote:1",
+          "tile_x": 40,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_4_stage_5:mote:2",
+          "tile_x": 60,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_4_stage_5:mote:3",
+          "tile_x": 110,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_4_stage_5.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         116,
         17
@@ -22992,7 +23647,11 @@
           65,
           11
         ]
-      ]
+      ],
+      "order": 5,
+      "name_key": "stage.world_4_stage_5.name",
+      "intro_key": "stage.world_4_stage_5.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_5_stage_1",
@@ -23025,57 +23684,81 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_5_stage_1.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_5_stage_1.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_5_stage_1.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_5_stage_1.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_5_stage_1.enemy.5",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          29,
-          11
-        ],
-        [
-          44,
-          8
-        ],
-        [
-          78,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_5_stage_1:mote:1",
+          "tile_x": 29,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_5_stage_1:mote:2",
+          "tile_x": 44,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_5_stage_1:mote:3",
+          "tile_x": 78,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_5_stage_1.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         84,
         17
@@ -23973,7 +24656,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 1,
+      "name_key": "stage.world_5_stage_1.name",
+      "intro_key": "stage.world_5_stage_1.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_5_stage_2",
@@ -24006,65 +24693,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_5_stage_2.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_5_stage_2.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_5_stage_2.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_5_stage_2.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_5_stage_2.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_5_stage_2.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          32,
-          11
-        ],
-        [
-          48,
-          8
-        ],
-        [
-          86,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_5_stage_2:mote:1",
+          "tile_x": 32,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_5_stage_2:mote:2",
+          "tile_x": 48,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_5_stage_2:mote:3",
+          "tile_x": 86,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_5_stage_2.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         92,
         17
@@ -25026,7 +25739,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 2,
+      "name_key": "stage.world_5_stage_2.name",
+      "intro_key": "stage.world_5_stage_2.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_5_stage_3",
@@ -25059,65 +25776,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_5_stage_3.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_5_stage_3.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_5_stage_3.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_5_stage_3.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_5_stage_3.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_5_stage_3.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          34,
-          11
-        ],
-        [
-          52,
-          8
-        ],
-        [
-          94,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_5_stage_3:mote:1",
+          "tile_x": 34,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_5_stage_3:mote:2",
+          "tile_x": 52,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_5_stage_3:mote:3",
+          "tile_x": 94,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_5_stage_3.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         100,
         17
@@ -26151,7 +26894,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 3,
+      "name_key": "stage.world_5_stage_3.name",
+      "intro_key": "stage.world_5_stage_3.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_5_stage_4",
@@ -26184,73 +26931,101 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_5_stage_4.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_5_stage_4.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_5_stage_4.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_5_stage_4.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_5_stage_4.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_5_stage_4.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_5_stage_4.enemy.7",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          37,
-          11
-        ],
-        [
-          56,
-          8
-        ],
-        [
-          102,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_5_stage_4:mote:1",
+          "tile_x": 37,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_5_stage_4:mote:2",
+          "tile_x": 56,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_5_stage_4:mote:3",
+          "tile_x": 102,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_5_stage_4.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         108,
         17
@@ -27356,7 +28131,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 4,
+      "name_key": "stage.world_5_stage_4.name",
+      "intro_key": "stage.world_5_stage_4.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_5_stage_5",
@@ -27389,81 +28168,111 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_5_stage_5.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_5_stage_5.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "boss",
-          "copy_ability": "ultra_sword",
+          "ability_id": "tempest",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_5_stage_5.enemy.3",
+          "elite": true
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_5_stage_5.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_5_stage_5.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_5_stage_5.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_5_stage_5.enemy.7",
+          "elite": false
         },
         {
           "x": 3264.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 3104.0,
-          "patrol_right": 3424.0
+          "patrol_right": 3424.0,
+          "spawn_id": "world_5_stage_5.enemy.8",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          40,
-          11
-        ],
-        [
-          60,
-          8
-        ],
-        [
-          110,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_5_stage_5:mote:1",
+          "tile_x": 40,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_5_stage_5:mote:2",
+          "tile_x": 60,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_5_stage_5:mote:3",
+          "tile_x": 110,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_5_stage_5.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         116,
         17
@@ -28633,7 +29442,11 @@
           66,
           11
         ]
-      ]
+      ],
+      "order": 5,
+      "name_key": "stage.world_5_stage_5.name",
+      "intro_key": "stage.world_5_stage_5.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_6_stage_1",
@@ -28666,57 +29479,81 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "spear",
+          "ability_id": "bloomblade",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_6_stage_1.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_6_stage_1.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_6_stage_1.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_6_stage_1.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_6_stage_1.enemy.5",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          29,
-          11
-        ],
-        [
-          44,
-          8
-        ],
-        [
-          78,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_6_stage_1:mote:1",
+          "tile_x": 29,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_6_stage_1:mote:2",
+          "tile_x": 44,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_6_stage_1:mote:3",
+          "tile_x": 78,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_6_stage_1.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         84,
         17
@@ -29614,7 +30451,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 1,
+      "name_key": "stage.world_6_stage_1.name",
+      "intro_key": "stage.world_6_stage_1.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_6_stage_2",
@@ -29647,65 +30488,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "whip",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_6_stage_2.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_6_stage_2.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_6_stage_2.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_6_stage_2.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_6_stage_2.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_6_stage_2.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          32,
-          11
-        ],
-        [
-          48,
-          8
-        ],
-        [
-          86,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_6_stage_2:mote:1",
+          "tile_x": 32,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_6_stage_2:mote:2",
+          "tile_x": 48,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_6_stage_2:mote:3",
+          "tile_x": 86,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_6_stage_2.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         92,
         17
@@ -30667,7 +31534,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 2,
+      "name_key": "stage.world_6_stage_2.name",
+      "intro_key": "stage.world_6_stage_2.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_6_stage_3",
@@ -30700,65 +31571,91 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ninja",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_6_stage_3.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_6_stage_3.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_6_stage_3.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_6_stage_3.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_6_stage_3.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_6_stage_3.enemy.6",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          34,
-          11
-        ],
-        [
-          52,
-          8
-        ],
-        [
-          94,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_6_stage_3:mote:1",
+          "tile_x": 34,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_6_stage_3:mote:2",
+          "tile_x": 52,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_6_stage_3:mote:3",
+          "tile_x": 94,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_6_stage_3.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         100,
         17
@@ -31792,7 +32689,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 3,
+      "name_key": "stage.world_6_stage_3.name",
+      "intro_key": "stage.world_6_stage_3.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_6_stage_4",
@@ -31825,73 +32726,101 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "fighter",
+          "ability_id": "bloomblade",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_6_stage_4.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_6_stage_4.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_6_stage_4.enemy.3",
+          "elite": false
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "fire",
+          "ability_id": "cinder",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_6_stage_4.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_6_stage_4.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_6_stage_4.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_6_stage_4.enemy.7",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          37,
-          11
-        ],
-        [
-          56,
-          8
-        ],
-        [
-          102,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_6_stage_4:mote:1",
+          "tile_x": 37,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_6_stage_4:mote:2",
+          "tile_x": 56,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_6_stage_4:mote:3",
+          "tile_x": 102,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_6_stage_4.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         108,
         17
@@ -32997,7 +33926,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 4,
+      "name_key": "stage.world_6_stage_4.name",
+      "intro_key": "stage.world_6_stage_4.intro",
+      "target_time_ms": 120000
     },
     {
       "stage_id": "world_6_stage_5",
@@ -33030,81 +33963,111 @@
           "x": 576.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "parasol",
+          "ability_id": "galehook",
           "patrol_left": 416.0,
-          "patrol_right": 736.0
+          "patrol_right": 736.0,
+          "spawn_id": "world_6_stage_5.enemy.1",
+          "elite": false
         },
         {
           "x": 960.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "sword",
+          "ability_id": "bloomblade",
           "patrol_left": 800.0,
-          "patrol_right": 1120.0
+          "patrol_right": 1120.0,
+          "spawn_id": "world_6_stage_5.enemy.2",
+          "elite": false
         },
         {
           "x": 1344.0,
           "y": 520.0,
           "kind": "boss",
-          "copy_ability": "ultra_sword",
+          "ability_id": "tempest",
           "patrol_left": 1184.0,
-          "patrol_right": 1504.0
+          "patrol_right": 1504.0,
+          "spawn_id": "world_6_stage_5.enemy.3",
+          "elite": true
         },
         {
           "x": 1728.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "ice",
+          "ability_id": "stoneheart",
           "patrol_left": 1568.0,
-          "patrol_right": 1888.0
+          "patrol_right": 1888.0,
+          "spawn_id": "world_6_stage_5.enemy.4",
+          "elite": false
         },
         {
           "x": 2112.0,
           "y": 520.0,
           "kind": "brute",
-          "copy_ability": "beam",
+          "ability_id": "voltsong",
           "patrol_left": 1952.0,
-          "patrol_right": 2272.0
+          "patrol_right": 2272.0,
+          "spawn_id": "world_6_stage_5.enemy.5",
+          "elite": false
         },
         {
           "x": 2496.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "spark",
+          "ability_id": "voltsong",
           "patrol_left": 2336.0,
-          "patrol_right": 2656.0
+          "patrol_right": 2656.0,
+          "spawn_id": "world_6_stage_5.enemy.6",
+          "elite": false
         },
         {
           "x": 2880.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "cutter",
+          "ability_id": "galehook",
           "patrol_left": 2720.0,
-          "patrol_right": 3040.0
+          "patrol_right": 3040.0,
+          "spawn_id": "world_6_stage_5.enemy.7",
+          "elite": false
         },
         {
           "x": 3264.0,
           "y": 520.0,
           "kind": "grunt",
-          "copy_ability": "hammer",
+          "ability_id": "stoneheart",
           "patrol_left": 3104.0,
-          "patrol_right": 3424.0
+          "patrol_right": 3424.0,
+          "spawn_id": "world_6_stage_5.enemy.8",
+          "elite": false
         }
       ],
-      "energy_spheres": [
-        [
-          40,
-          11
-        ],
-        [
-          60,
-          8
-        ],
-        [
-          110,
-          10
-        ]
+      "motes": [
+        {
+          "mote_id": "world_6_stage_5:mote:1",
+          "tile_x": 40,
+          "tile_y": 11,
+          "route": "main"
+        },
+        {
+          "mote_id": "world_6_stage_5:mote:2",
+          "tile_x": 60,
+          "tile_y": 8,
+          "route": "optional"
+        },
+        {
+          "mote_id": "world_6_stage_5:mote:3",
+          "tile_x": 110,
+          "tile_y": 10,
+          "route": "mastery"
+        }
       ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "world_6_stage_5.start",
+          "tile_x": 2,
+          "tile_y": 16
+        }
+      ],
+      "interactions": [],
       "goal_tile": [
         116,
         17
@@ -34274,7 +35237,11 @@
           64,
           11
         ]
-      ]
+      ],
+      "order": 5,
+      "name_key": "stage.world_6_stage_5.name",
+      "intro_key": "stage.world_6_stage_5.intro",
+      "target_time_ms": 120000
     }
   ]
 }
