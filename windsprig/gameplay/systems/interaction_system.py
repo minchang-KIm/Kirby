@@ -63,10 +63,4 @@ def _owner_is_living_and_grounded(world: World, owner_entity_id: int) -> bool:
         return False
     health = world.try_component(owner_entity_id, Health)
     collider = world.try_component(owner_entity_id, Collider)
-    return (
-        health is not None
-        and collider is not None
-        and health.current > 0
-        and not health.dead
-        and collider.on_ground
-    )
+    return health is not None and collider is not None and health.current > 0 and not health.dead and collider.on_ground

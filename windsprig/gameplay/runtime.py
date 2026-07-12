@@ -275,10 +275,7 @@ class StageRuntime:
 
     def _current_players_for_reset(self) -> tuple[ActivePlayer, ...]:
         resources = self._validate_gameplay_resources(self.world)
-        metadata = {
-            player.slot: player
-            for player in resources.active_players
-        }
+        metadata = {player.slot: player for player in resources.active_players}
         players: list[ActivePlayer] = []
         for slot in sorted(self.player_entities):
             entity_id = self.player_entities[slot]
@@ -294,9 +291,7 @@ class StageRuntime:
             "run_energy_spheres": resources.run_energy_spheres,
             "collected_mote_ids": resources.collected_mote_ids,
             "discovered_ability_ids": resources.discovered_ability_ids,
-            "attack_requests": tuple(
-                astuple(request) for request in resources.attack_requests
-            ),
+            "attack_requests": tuple(astuple(request) for request in resources.attack_requests),
         }
 
     def _validate_gameplay_resources(
@@ -305,15 +300,11 @@ class StageRuntime:
     ) -> _ValidatedGameplayResources:
         raw_players = world.resources.get("active_players")
         if not isinstance(raw_players, tuple):
-            raise TypeError(
-                "active_players must be a sorted tuple of ActivePlayer values"
-            )
+            raise TypeError("active_players must be a sorted tuple of ActivePlayer values")
         players: list[ActivePlayer] = []
         for player in raw_players:
             if not isinstance(player, ActivePlayer):
-                raise TypeError(
-                    "active_players must be a sorted tuple of ActivePlayer values"
-                )
+                raise TypeError("active_players must be a sorted tuple of ActivePlayer values")
             players.append(player)
         active_players = tuple(players)
         sorted_players = self._validate_active_players(active_players)
@@ -329,13 +320,9 @@ class StageRuntime:
             try:
                 player_slot = world.get_component(self.player_entities[slot], PlayerSlot)
             except KeyError:
-                raise ValueError(
-                    "player_entities must reference matching PlayerSlot components"
-                ) from None
+                raise ValueError("player_entities must reference matching PlayerSlot components") from None
             if player_slot.slot != slot:
-                raise ValueError(
-                    "player_entities must reference matching PlayerSlot components"
-                )
+                raise ValueError("player_entities must reference matching PlayerSlot components")
             active_authority.append((slot, player_slot.is_leader))
 
         outcome = world.resources.get("stage_outcome")
@@ -383,9 +370,7 @@ class StageRuntime:
         seen_slots: set[int] = set()
         for player in players:
             if type(player.slot) is not int or not 1 <= player.slot <= self.config.max_local_players:
-                raise ValueError(
-                    f"active player slot must be between 1 and {self.config.max_local_players}"
-                )
+                raise ValueError(f"active player slot must be between 1 and {self.config.max_local_players}")
             if player.slot in seen_slots:
                 raise ValueError(f"duplicate active player slot: {player.slot}")
             seen_slots.add(player.slot)
@@ -421,11 +406,7 @@ class StageRuntime:
         leader_slots = sorted(
             slot.slot
             for entity_id, slot in self.world.query(PlayerSlot)
-            if (
-                slot.slot in active_slots
-                and self.player_entities.get(slot.slot) == entity_id
-                and slot.is_leader
-            )
+            if (slot.slot in active_slots and self.player_entities.get(slot.slot) == entity_id and slot.is_leader)
         )
         leader_slot = leader_slots[0] if leader_slots else None
         return StageSnapshot(
@@ -539,8 +520,7 @@ class StageRuntime:
                     ability_id=None if drop.ability == "none" else drop.ability,
                     captured_by=(
                         captured.player_entity_id
-                        if (captured := self.world.try_component(entity_id, CapturedBy))
-                        is not None
+                        if (captured := self.world.try_component(entity_id, CapturedBy)) is not None
                         else None
                     ),
                 )
@@ -636,8 +616,5 @@ class StageRuntime:
     ) -> tuple[str, ...]:
         ids = set(resources.collected_mote_ids)
         if resources.run_energy_spheres > 0:
-            ids.update(
-                mote.mote_id
-                for mote in self.stage.motes[: resources.run_energy_spheres]
-            )
+            ids.update(mote.mote_id for mote in self.stage.motes[: resources.run_energy_spheres])
         return tuple(sorted(ids))

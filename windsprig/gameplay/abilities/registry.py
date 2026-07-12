@@ -38,10 +38,7 @@ def _reject_duplicate_members(value: object, path: str = "") -> object:
             decoded[name] = _reject_duplicate_members(member, member_path)
         return decoded
     if isinstance(value, list):
-        return [
-            _reject_duplicate_members(member, f"{path}[{index}]")
-            for index, member in enumerate(value)
-        ]
+        return [_reject_duplicate_members(member, f"{path}[{index}]") for index, member in enumerate(value)]
     return value
 
 

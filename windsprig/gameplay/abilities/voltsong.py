@@ -31,9 +31,7 @@ def select_chain_targets(
         for entity_id, candidate_x, candidate_y in candidates
     )
     ordered = sorted(
-        (distance_squared, entity_id)
-        for distance_squared, entity_id in eligible
-        if distance_squared <= radius_squared
+        (distance_squared, entity_id) for distance_squared, entity_id in eligible if distance_squared <= radius_squared
     )
     return tuple(entity_id for _, entity_id in ordered[:limit])
 

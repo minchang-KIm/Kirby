@@ -117,12 +117,7 @@ def _can_activate(health: Health, state: ActorState, ability: AbilityState) -> b
 
 
 def _has_effect(execution: AbilityExecution) -> bool:
-    return bool(
-        execution.attacks
-        or execution.armor_ms
-        or execution.meter_cost
-        or execution.restore_previous
-    )
+    return bool(execution.attacks or execution.armor_ms or execution.meter_cost or execution.restore_previous)
 
 
 def _fit_stage_bound_attacks(

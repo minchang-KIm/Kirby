@@ -73,8 +73,7 @@ class ComponentStore:
 
 
 class System(Protocol):
-    def update(self, world: World, dt_ms: int) -> None:
-        ...
+    def update(self, world: World, dt_ms: int) -> None: ...
 
 
 class SystemScheduler:
@@ -208,4 +207,4 @@ def _serialize_value(value: object) -> object:
         return _serialize_value(asdict(cast(Any, value)))
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
-    return repr(value)
+    raise TypeError(f"unsupported deterministic hash value: {type(value).__name__}")
