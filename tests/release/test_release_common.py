@@ -5,14 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
+import stat
 import subprocess
 import zipfile
+import zlib
 from dataclasses import FrozenInstanceError
 from pathlib import Path
-from typing import cast
+from typing import BinaryIO, NoReturn, cast
 
 import pytest
 
+import tools.release_common as release_common
 from tools.release_common import (
     BuildIdentity,
     Target,
@@ -71,7 +75,19 @@ def test_build_identity_is_frozen_slotted_and_accepts_semantic_versions() -> Non
 
 @pytest.mark.parametrize(
     "version",
-    ["", "1", "1.0", "01.0.0", "1.0.0.0", "v1.0.0", "1.0.0-"],
+    [
+        "",
+        "1",
+        "1.0",
+        "01.0.0",
+        "1.0.0.0",
+        "v1.0.0",
+        "1.0.0-",
+        "1\u0660.0.0",
+        "1.0.0-1\u0660",
+        "1\uff11.0.0",
+        "1.0.0-1\uff11",
+    ],
 )
 def test_build_identity_rejects_invalid_semantic_version(version: str) -> None:
     with pytest.raises(ValueError, match="version"):
@@ -226,6 +242,56 @@ def test_manifest_rejects_nonstring_and_control_character_paths(tmp_path: Path) 
         write_build_manifest(tmp_path / "build-info.json", identity, ["bad\x00name"])
 
 
+@pytest.mark.parametrize(
+    "unsafe_path",
+    [
+        "bad<name.txt",
+        "bad>name.txt",
+        'bad"name.txt',
+        "bad:name.txt",
+        "bad|name.txt",
+        "bad?name.txt",
+        "bad*name.txt",
+        "CON",
+        "con.txt",
+        "dir/AuX.json",
+        "COM1.log",
+        "lpt9",
+        "NUL.tar.gz",
+        "trailing-dot.",
+        "trailing-space ",
+        "directory./file.txt",
+        "directory /file.txt",
+    ],
+)
+def test_manifest_rejects_windows_invalid_portable_components(
+    tmp_path: Path,
+    unsafe_path: str,
+) -> None:
+    identity = BuildIdentity(version="1.0.0", commit_sha="d" * 40, target="source")
+
+    with pytest.raises(ValueError, match="manifest file path"):
+        write_build_manifest(tmp_path / "build-info.json", identity, [unsafe_path])
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        ["A.txt", "a.txt"],
+        ["Assets/one.txt", "assets/two.txt"],
+        ["caf\u00e9.txt", "cafe\u0301.txt"],
+    ],
+)
+def test_manifest_rejects_portable_case_and_unicode_collisions(
+    tmp_path: Path,
+    files: list[str],
+) -> None:
+    identity = BuildIdentity(version="1.0.0", commit_sha="d" * 40, target="source")
+
+    with pytest.raises(ValueError, match="portable path collision"):
+        write_build_manifest(tmp_path / "build-info.json", identity, files)
+
+
 def test_read_build_identity_rejects_nonpath_root() -> None:
     with pytest.raises(TypeError, match="root"):
         read_build_identity(cast(Path, "not-a-path"), "web")
@@ -274,6 +340,74 @@ def test_sha256_file_rejects_missing_directory_and_symlink_inputs(tmp_path: Path
         pytest.skip("this host does not permit test symlinks")
     with pytest.raises(ValueError, match="link or reparse"):
         sha256_file(link)
+
+
+def test_sha256_file_rejects_same_size_path_replacement_after_link_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "payload.bin"
+    replacement = tmp_path / "replacement.bin"
+    source.write_bytes(b"trusted!")
+    replacement.write_bytes(b"outside!")
+    original_link_check = release_common._is_link_or_reparse
+    swapped = False
+
+    def replace_after_link_check(path: Path) -> bool:
+        nonlocal swapped
+        result = original_link_check(path)
+        if path == source and not swapped:
+            os.replace(replacement, source)
+            swapped = True
+        return result
+
+    monkeypatch.setattr(release_common, "_is_link_or_reparse", replace_after_link_check)
+
+    with pytest.raises(ValueError, match="changed while reading|identity changed"):
+        sha256_file(source)
+
+    assert swapped
+
+
+def test_sha256_file_rejects_same_size_mid_read_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "payload.bin"
+    source.write_bytes(b"A" * (release_common._COPY_BUFFER_BYTES * 2 + 17))
+    original_sha256 = hashlib.sha256
+    mutated = False
+
+    with source.open("r+b") as writer:
+
+        class MutatingDigest:
+            def __init__(self) -> None:
+                self._digest = original_sha256()
+
+            def update(self, chunk: bytes) -> None:
+                nonlocal mutated
+                self._digest.update(chunk)
+                if not mutated:
+                    details = os.fstat(writer.fileno())
+                    writer.seek(0)
+                    writer.write(b"B" * details.st_size)
+                    writer.flush()
+                    os.fsync(writer.fileno())
+                    os.utime(
+                        source,
+                        ns=(details.st_atime_ns, details.st_mtime_ns + 2_000_000_000),
+                    )
+                    mutated = True
+
+            def hexdigest(self) -> str:
+                return self._digest.hexdigest()
+
+        monkeypatch.setattr(hashlib, "sha256", MutatingDigest)
+
+        with pytest.raises(ValueError, match="changed while reading"):
+            sha256_file(source)
+
+    assert mutated
 
 
 def test_reproducible_zip_is_recursive_sorted_and_metadata_normalized(
@@ -376,6 +510,84 @@ def test_reproducible_zip_rejects_symlinked_source_members(tmp_path: Path) -> No
         write_reproducible_zip(source, tmp_path / "unsafe.zip")
 
 
+def test_reproducible_zip_rejects_member_replaced_after_link_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    member = source / "payload.bin"
+    replacement = tmp_path / "replacement.bin"
+    member.write_bytes(b"trusted!")
+    replacement.write_bytes(b"outside!")
+    original_link_check = release_common._is_link_or_reparse
+    swapped = False
+
+    def replace_after_link_check(path: Path) -> bool:
+        nonlocal swapped
+        result = original_link_check(path)
+        if path == member and not swapped:
+            os.replace(replacement, member)
+            swapped = True
+        return result
+
+    monkeypatch.setattr(release_common, "_is_link_or_reparse", replace_after_link_check)
+    destination = tmp_path / "release.zip"
+
+    with pytest.raises(ValueError, match="changed while reading|identity changed"):
+        write_reproducible_zip(source, destination)
+
+    assert swapped
+    assert not destination.exists()
+
+
+def test_reproducible_zip_rejects_child_directory_swapped_to_junction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows junction regression")
+    source = tmp_path / "source"
+    child = source / "nested"
+    child.mkdir(parents=True)
+    (child / "trusted.txt").write_text("trusted", encoding="utf-8")
+    held_child = tmp_path / "held-nested"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("outside", encoding="utf-8")
+    original_link_check = release_common._is_link_or_reparse
+    swapped = False
+
+    def replace_after_link_check(path: Path) -> bool:
+        nonlocal swapped
+        result = original_link_check(path)
+        if path == child and not swapped:
+            child.rename(held_child)
+            completed = subprocess.run(
+                ["cmd.exe", "/d", "/c", "mklink", "/J", str(child), str(outside)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode != 0:
+                held_child.rename(child)
+                pytest.skip("this host does not permit test junctions")
+            swapped = True
+        return result
+
+    monkeypatch.setattr(release_common, "_is_link_or_reparse", replace_after_link_check)
+    destination = tmp_path / "release.zip"
+    try:
+        with pytest.raises(ValueError, match="link or reparse|changed while reading|identity changed"):
+            write_reproducible_zip(source, destination)
+        assert swapped
+        assert not destination.exists()
+    finally:
+        if swapped:
+            os.rmdir(child)
+            held_child.rename(child)
+
+
 def test_reproducible_zip_rejects_existing_directory_destination(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -384,3 +596,218 @@ def test_reproducible_zip_rejects_existing_directory_destination(tmp_path: Path)
 
     with pytest.raises(IsADirectoryError, match="ZIP destination"):
         write_reproducible_zip(source, destination)
+
+
+def test_reproducible_zip_rejects_unicode_normalized_member_collision(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "caf\u00e9.txt").write_text("composed", encoding="utf-8")
+    (source / "cafe\u0301.txt").write_text("decomposed", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="portable path collision"):
+        write_reproducible_zip(source, tmp_path / "collision.zip")
+
+
+def test_reproducible_zip_rejects_unicode_normalized_directory_collision(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    (source / "Caf\u00e9").mkdir(parents=True)
+    (source / "cafe\u0301").mkdir()
+    (source / "Caf\u00e9" / "one.txt").write_text("one", encoding="utf-8")
+    (source / "cafe\u0301" / "two.txt").write_text("two", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="portable path collision"):
+        write_reproducible_zip(source, tmp_path / "collision.zip")
+
+
+def test_reproducible_zip_rejects_nfkc_windows_reserved_component(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "\uff23\uff2f\uff2e.txt").write_text("reserved", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="portable across supported hosts"):
+        write_reproducible_zip(source, tmp_path / "reserved.zip")
+
+
+@pytest.mark.parametrize("file_type", [stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFCHR])
+def test_reproducible_zip_rejects_existing_nonregular_destination_from_lstat(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    file_type: int,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "content.txt").write_text("content", encoding="utf-8")
+    destination = tmp_path / "release.zip"
+    destination.write_bytes(b"existing archive")
+    original_lstat = Path.lstat
+
+    def special_lstat(path: Path) -> os.stat_result:
+        details = original_lstat(path)
+        if path == destination:
+            values = list(details)
+            values[0] = file_type | 0o600
+            return os.stat_result(values)
+        return details
+
+    monkeypatch.setattr(Path, "lstat", special_lstat)
+
+    with pytest.raises(ValueError, match="regular file"):
+        write_reproducible_zip(source, destination)
+
+    assert destination.read_bytes() == b"existing archive"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX FIFO destination")
+def test_reproducible_zip_rejects_existing_fifo_destination(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    destination = tmp_path / "release.zip"
+    os.mkfifo(destination)  # type: ignore[attr-defined]
+
+    with pytest.raises(ValueError, match="regular file"):
+        write_reproducible_zip(source, destination)
+
+    assert stat.S_ISFIFO(destination.lstat().st_mode)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Unix-socket destination")
+def test_reproducible_zip_rejects_existing_socket_destination(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    destination = tmp_path / "release.zip"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:  # type: ignore[attr-defined]
+        listener.bind(str(destination))
+
+        with pytest.raises(ValueError, match="regular file"):
+            write_reproducible_zip(source, destination)
+
+        assert stat.S_ISSOCK(destination.lstat().st_mode)
+
+
+def test_manifest_preserves_existing_output_and_cleans_temp_after_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "build-info.json"
+    destination.write_bytes(b"existing manifest")
+    identity = BuildIdentity(version="1.0.0", commit_sha="e" * 40, target="source")
+    original_fdopen = os.fdopen
+
+    class FailingWrite:
+        def __init__(self, stream: BinaryIO) -> None:
+            self._stream = stream
+
+        def __enter__(self) -> FailingWrite:
+            return self
+
+        def __exit__(
+            self,
+            exception_type: type[BaseException] | None,
+            exception: BaseException | None,
+            traceback: object | None,
+        ) -> None:
+            self._stream.close()
+
+        def write(self, payload: bytes) -> NoReturn:
+            _ = payload
+            raise OSError("injected temporary write failure")
+
+    def failing_fdopen(descriptor: int, mode: str) -> FailingWrite:
+        return FailingWrite(cast(BinaryIO, original_fdopen(descriptor, mode)))
+
+    monkeypatch.setattr(os, "fdopen", failing_fdopen)
+
+    with pytest.raises(OSError, match="temporary write failure"):
+        write_build_manifest(destination, identity, ["content.txt"])
+
+    assert destination.read_bytes() == b"existing manifest"
+    assert list(tmp_path.glob(".build-info.json.*.tmp")) == []
+
+
+@pytest.mark.parametrize("failure_point", ["fsync", "replace"])
+def test_manifest_preserves_existing_output_and_cleans_temp_after_commit_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    destination = tmp_path / "build-info.json"
+    destination.write_bytes(b"existing manifest")
+    identity = BuildIdentity(version="1.0.0", commit_sha="e" * 40, target="source")
+
+    def fail(*_args: object, **_kwargs: object) -> NoReturn:
+        raise OSError(f"injected {failure_point} failure")
+
+    monkeypatch.setattr(os, failure_point, fail)
+
+    with pytest.raises(OSError, match=rf"{failure_point} failure"):
+        write_build_manifest(destination, identity, ["content.txt"])
+
+    assert destination.read_bytes() == b"existing manifest"
+    assert list(tmp_path.glob(".build-info.json.*.tmp")) == []
+
+
+@pytest.mark.parametrize("failure_point", ["compression", "fsync", "replace"])
+def test_archive_preserves_existing_output_and_cleans_temp_after_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "content.txt").write_text("content" * 1_000, encoding="utf-8")
+    destination = tmp_path / "release.zip"
+    destination.write_bytes(b"existing archive")
+
+    def fail(*_args: object, **_kwargs: object) -> NoReturn:
+        raise OSError(f"injected {failure_point} failure")
+
+    if failure_point == "compression":
+        monkeypatch.setattr(zlib, "compressobj", fail)
+    else:
+        monkeypatch.setattr(os, failure_point, fail)
+
+    with pytest.raises(OSError, match=rf"{failure_point} failure"):
+        write_reproducible_zip(source, destination)
+
+    assert destination.read_bytes() == b"existing archive"
+    assert list(tmp_path.glob(".release.zip.*.tmp")) == []
+
+
+def test_archive_preserves_existing_output_after_midstream_compression_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "content.txt").write_text("content" * 1_000, encoding="utf-8")
+    destination = tmp_path / "release.zip"
+    destination.write_bytes(b"existing archive")
+    original_compressobj = zlib.compressobj
+
+    class FailingCompressor:
+        def __init__(self, level: int, method: int, wbits: int) -> None:
+            self._compressor = original_compressobj(level, method, wbits)
+
+        def compress(self, payload: bytes) -> NoReturn:
+            _ = payload
+            raise OSError("injected midstream compression failure")
+
+        def flush(self, mode: int = zlib.Z_FINISH) -> bytes:
+            return self._compressor.flush(mode)
+
+    def failing_compressobj(
+        level: int = -1,
+        method: int = zlib.DEFLATED,
+        wbits: int = zlib.MAX_WBITS,
+    ) -> FailingCompressor:
+        return FailingCompressor(level, method, wbits)
+
+    monkeypatch.setattr(zlib, "compressobj", failing_compressobj)
+
+    with pytest.raises(OSError, match="midstream compression failure"):
+        write_reproducible_zip(source, destination)
+
+    assert destination.read_bytes() == b"existing archive"
+    assert list(tmp_path.glob(".release.zip.*.tmp")) == []
