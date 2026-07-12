@@ -40,7 +40,9 @@ def _committed_runtime(tmp_path: Path) -> Path:
     (root / "web" / "main.py").write_text("print('web')\n", encoding="utf-8")
     (root / "web" / "template.tmpl").write_text("<html></html>\n", encoding="utf-8")
     (root / "web" / "runtime-manifest.json").write_text("{}\n", encoding="utf-8")
-    (root / "web" / "favicon.png").write_bytes(b"png")
+    (root / "web" / "index-shell.html").write_text("<!-- shell -->\n", encoding="utf-8")
+    (root / "web" / "manifest.webmanifest").write_text("{}\n", encoding="utf-8")
+    (root / "web" / "service-worker.js").write_text("// worker\n", encoding="utf-8")
     (root / "windsprig" / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
     (root / "levels" / "stage.json").write_text("{}\n", encoding="utf-8")
     (root / "assets" / "generated" / "ui" / "icons.png").write_bytes(b"png")
@@ -91,9 +93,11 @@ def test_runtime_manifest_is_stable_and_bound_to_clean_head(tmp_path: Path) -> N
         "assets/generated/audio/music/title.wav",
         "assets/generated/ui/icons.png",
         "levels/stage.json",
-        "web/favicon.png",
+        "web/index-shell.html",
         "web/main.py",
+        "web/manifest.webmanifest",
         "web/runtime-manifest.json",
+        "web/service-worker.js",
         "web/template.tmpl",
         "windsprig/app.py",
     )
@@ -217,3 +221,20 @@ def test_browser_runtime_never_imports_resolver_ambiguous_stdlib_modules() -> No
             relative = path.relative_to(root).as_posix()
             offenders.append(f"{relative}: {', '.join(ambiguous)}")
     assert offenders == []
+
+
+def test_pwa_shell_and_canonical_release_art_are_bound_to_runtime_provenance() -> None:
+    root = Path(__file__).resolve().parents[3]
+    relative = {
+        path.relative_to(root).as_posix()
+        for path in runtime_source_files(root)
+    }
+
+    assert {
+        "web/index-shell.html",
+        "web/manifest.webmanifest",
+        "web/service-worker.js",
+        "assets/generated/ui/favicon.png",
+        "assets/generated/ui/social-card.png",
+    } <= relative
+    assert "web/favicon.png" not in relative

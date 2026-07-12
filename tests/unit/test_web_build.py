@@ -95,7 +95,14 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
     levels.mkdir()
     (assets / "generated" / "ui").mkdir(parents=True)
     (assets / "fonts").mkdir()
-    for name in ("main.py", "runtime-manifest.json", "template.tmpl", "favicon.png"):
+    for name in (
+        "index-shell.html",
+        "main.py",
+        "manifest.webmanifest",
+        "runtime-manifest.json",
+        "service-worker.js",
+        "template.tmpl",
+    ):
         (web / name).write_bytes(name.encode())
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "feasibility.py").write_text("PROBE = True\n", encoding="utf-8")
@@ -106,6 +113,8 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
     (package / "__pycache__" / "cached.pyc").write_bytes(b"cache")
     (levels / "level.json").write_text("{}", encoding="utf-8")
     (assets / "generated" / "ui" / "icons.png").write_bytes(b"icons")
+    (assets / "generated" / "ui" / "favicon.png").write_bytes(b"favicon")
+    (assets / "generated" / "ui" / "social-card.png").write_bytes(b"social")
     (assets / "fonts" / "font.ttf").write_bytes(b"font")
     (assets / "LICENSES.md").write_text("# Licenses\n", encoding="utf-8")
     (root / "tests").mkdir()
@@ -118,11 +127,15 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
     assert staged == {
         "assets/LICENSES.md",
         "assets/fonts/font.ttf",
+        "assets/generated/ui/favicon.png",
         "assets/generated/ui/icons.png",
-        "favicon.png",
+        "assets/generated/ui/social-card.png",
+        "index-shell.html",
         "levels/level.json",
         "main.py",
+        "manifest.webmanifest",
         "runtime-manifest.json",
+        "service-worker.js",
         "template.tmpl",
         "windsprig/__init__.py",
         "windsprig/_build_flags.py",
@@ -144,7 +157,14 @@ def test_non_probe_staging_overrides_source_capability_to_false(tmp_path: Path) 
     package.mkdir()
     levels.mkdir()
     assets.mkdir()
-    for name in ("main.py", "runtime-manifest.json", "template.tmpl", "favicon.png"):
+    for name in (
+        "index-shell.html",
+        "main.py",
+        "manifest.webmanifest",
+        "runtime-manifest.json",
+        "service-worker.js",
+        "template.tmpl",
+    ):
         (web / name).write_bytes(name.encode())
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "_build_flags.py").write_text(
@@ -382,18 +402,14 @@ def test_version_drift_is_rejected_by_the_pinned_build(monkeypatch: pytest.Monke
         build_web.verify_toolchain_versions()
 
 
-def test_favicon_generation_is_byte_deterministic_and_original(tmp_path: Path) -> None:
-    first = tmp_path / "first.png"
-    second = tmp_path / "second.png"
+def test_pwa_favicon_has_one_canonical_original_source() -> None:
+    root = Path(__file__).resolve().parents[2]
+    canonical = root / "assets/generated/ui/favicon.png"
 
-    build_web.generate_favicon(first)
-    build_web.generate_favicon(second)
-
-    assert first.read_bytes() == second.read_bytes()
-    image = pygame.image.load(first)
-    assert image.get_size() == (64, 64)
-    assert image.get_at((32, 32))[:3] == (121, 224, 180)
-    assert image.get_at((45, 17))[:3] == (246, 201, 93)
+    assert canonical.is_file()
+    assert not (root / "web/favicon.png").exists()
+    image = pygame.image.load(canonical)
+    assert image.get_size() == (192, 192)
 
 
 def test_compressed_transfer_measurement_is_stable_and_sorted(tmp_path: Path) -> None:

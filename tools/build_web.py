@@ -21,6 +21,7 @@ import shutil
 import stat
 import subprocess
 import tarfile
+import tempfile
 import tokenize
 import types
 import zipfile
@@ -28,7 +29,6 @@ from collections.abc import Callable
 from importlib.metadata import version
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Final, TypedDict
-
 
 def _normalized_tool_code(code: types.CodeType) -> types.CodeType:
     """Erase path variance while retaining every executable code field."""
@@ -133,8 +133,6 @@ if __name__ == "__main__" and not {"-h", "--help"}.intersection(sys.argv[1:]):
     _preflight_build_recipe(Path(__file__).resolve().parents[1])
 
 
-import pygame  # noqa: E402 - project imports follow the release provenance preflight
-
 # Direct script execution places ``tools/`` on sys.path, while CI invokes this file by path.
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -167,6 +165,13 @@ _NORMALIZED_MTIME: Final = 946_684_800
 _PROBE_CAPABILITY_MEMBER: Final = "assets/windsprig/_build_flags.py"
 _DEFAULT_OUTPUT: Final = Path("dist/web")
 _ALLOWED_BUILD_TARGETS: Final = frozenset({Path("build/web-stage"), Path("dist/web")})
+_SHELL_HEAD_MARKER: Final = "<!-- windsprig-pwa:head -->"
+_SHELL_BODY_MARKER: Final = "<!-- windsprig-pwa:body -->"
+_SHELL_COPY_NAMES: Final = ("manifest.webmanifest", "service-worker.js")
+_CANONICAL_SHELL_ART: Final = {
+    "favicon.png": Path("assets/generated/ui/favicon.png"),
+    "social-card.png": Path("assets/generated/ui/social-card.png"),
+}
 
 
 class _OutputMeasurements(TypedDict):
@@ -189,19 +194,108 @@ def verify_toolchain_versions() -> None:
         raise SystemExit(f"pygame-ce version drift: expected {PYGAME_CE_VERSION}, found {installed_pygame}")
 
 
-def generate_favicon(path: Path) -> None:
-    """Generate Windsprig's original mint-and-gold leaf icon without external assets."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    surface = pygame.Surface((64, 64), flags=pygame.SRCALPHA)
-    surface.fill((16, 35, 30, 255))
-    mint = (121, 224, 180, 255)
-    gold = (246, 201, 93, 255)
-    pygame.draw.ellipse(surface, mint, pygame.Rect(13, 8, 38, 48))
-    pygame.draw.polygon(surface, (76, 176, 142, 255), ((32, 9), (32, 55), (15, 42)))
-    pygame.draw.line(surface, gold, (20, 53), (44, 16), width=4)
-    pygame.draw.circle(surface, mint, (32, 32), 3)
-    pygame.draw.circle(surface, gold, (45, 17), 5)
-    pygame.image.save(surface, path)
+def _read_regular_source(path: Path) -> bytes:
+    """Read one stable source file without following a redirected path."""
+
+    absolute = Path(os.path.abspath(path))
+    try:
+        expected = absolute.lstat()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"web shell source is missing: {absolute}") from None
+    if _is_link_or_reparse(absolute) or not stat.S_ISREG(expected.st_mode):
+        raise ValueError(f"web shell source must be a regular file: {absolute}")
+    with _protected_directory_chain(absolute.parent) as parent:
+        with _verified_regular_file(parent, absolute.name, absolute, expected) as (stream, _):
+            return stream.read()
+
+
+def _write_atomic_bytes(path: Path, payload: bytes) -> None:
+    """Replace one unpublished artifact file without exposing partial bytes."""
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        os.utime(path, (_NORMALIZED_MTIME, _NORMALIZED_MTIME))
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _preflight_shell_destinations(output: Path, names: tuple[str, ...]) -> None:
+    """Reject redirected or non-file collisions before changing the index."""
+
+    for name in names:
+        destination = output / name
+        try:
+            state = destination.lstat()
+        except FileNotFoundError:
+            continue
+        if _is_link_or_reparse(destination) or not stat.S_ISREG(state.st_mode):
+            raise ValueError(
+                f"web shell destination must be a regular file: {destination}"
+            )
+
+
+def apply_web_shell(output: Path, source: Path) -> None:
+    """Inject one branded shell and copy its canonical tracked release assets.
+
+    All source bytes and insertion points are validated before the unpublished
+    Pygbag artifact is mutated. A second application is rejected so shell markup
+    cannot silently drift through duplicate metadata or event registrations.
+    """
+
+    if not isinstance(output, Path) or not isinstance(source, Path):
+        raise TypeError("output and source must be pathlib.Path values")
+    output = Path(os.path.abspath(output))
+    source = Path(os.path.abspath(source))
+    if _is_link_or_reparse(output) or not output.is_dir():
+        raise ValueError(f"web shell output must be a regular directory: {output}")
+    if _is_link_or_reparse(source) or not source.is_dir():
+        raise ValueError(f"web shell source must be a regular directory: {source}")
+
+    index_path = output / "index.html"
+    html = _read_regular_source(index_path).decode("utf-8")
+    shell = _read_regular_source(source / "index-shell.html").decode("utf-8")
+    copied_payloads = {
+        name: _read_regular_source(source / name)
+        for name in _SHELL_COPY_NAMES
+    }
+    repository_root = source.parent
+    copied_payloads.update(
+        {
+            name: _read_regular_source(repository_root / relative)
+            for name, relative in _CANONICAL_SHELL_ART.items()
+        }
+    )
+    try:
+        manifest = json.loads(copied_payloads["manifest.webmanifest"])
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("web app manifest must be valid UTF-8 JSON") from error
+    if not isinstance(manifest, dict):
+        raise ValueError("web app manifest must be a JSON object")
+
+    if _SHELL_HEAD_MARKER in html or _SHELL_BODY_MARKER in html:
+        raise ValueError("Pygbag index already contains the Windsprig web shell")
+    if shell.count(_SHELL_HEAD_MARKER) != 1 or shell.count(_SHELL_BODY_MARKER) != 1:
+        raise ValueError("web shell source must contain each insertion marker exactly once")
+    if html.count("</head>") != 1 or html.count("<body>") != 1:
+        raise ValueError("Pygbag index is missing unique head/body insertion points")
+    head, body = shell.split(_SHELL_BODY_MARKER, maxsplit=1)
+    injected = html.replace("</head>", f"{head}\n</head>", 1)
+    injected = injected.replace("<body>", f"<body>\n{_SHELL_BODY_MARKER}{body}", 1)
+
+    _preflight_shell_destinations(output, tuple(copied_payloads))
+    _write_atomic_bytes(index_path, injected.encode("utf-8"))
+    for name, payload in copied_payloads.items():
+        _write_atomic_bytes(output / name, payload)
 
 
 def _probe_capability_source(probe: bool) -> bytes:
@@ -675,7 +769,6 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
     stage = root / "build" / "web-stage"
     output_path = _resolve_web_output(root, output)
     verify_toolchain_versions()
-    generate_favicon(source / "favicon.png")
     runtime_manifest = inspect_runtime_source(root)
     browser_runtime_manifest = load_runtime_manifest(source / "runtime-manifest.json")
     _remove_build_target(root, Path("build/web-stage"))
@@ -709,7 +802,7 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
         "--template",
         str(stage / "template.tmpl"),
         "--icon",
-        str(stage / "favicon.png"),
+        str(stage / "assets/generated/ui/favicon.png"),
         str(stage),
     ]
     subprocess.run(command, cwd=root, check=True)
@@ -721,6 +814,7 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
         root / "build" / "web-runtime-cache",
         built,
     )
+    apply_web_shell(built, source)
     verify_same_origin_runtime_index(built / "index.html")
     _normalize_archives(built)
     verify_probe_artifacts(built, probe=probe)

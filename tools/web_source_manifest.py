@@ -24,9 +24,11 @@ _ALLOWED_SUFFIXES: Final = frozenset(
 )
 _SECRET_SUFFIXES: Final = frozenset({".key", ".p12", ".pem", ".pfx"})
 _WEB_ENTRY_FILES: Final = (
-    "favicon.png",
+    "index-shell.html",
     "main.py",
+    "manifest.webmanifest",
     "runtime-manifest.json",
+    "service-worker.js",
     "template.tmpl",
 )
 _BUILD_RECIPE_ROOT_FILES: Final = (
