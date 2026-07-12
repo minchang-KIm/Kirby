@@ -578,6 +578,7 @@ def _protected_directory_chain(
     path: Path,
     *,
     expected_final: os.stat_result | None = None,
+    create: bool = False,
 ) -> Iterator[_DirectoryHandle]:
     absolute_path = Path(os.path.abspath(path))
     anchor = Path(absolute_path.anchor)
@@ -600,11 +601,22 @@ def _protected_directory_chain(
 
         for component in absolute_path.parts[1:]:
             component_path = current.path / component
-            expected = (
-                expected_final
-                if component_path == absolute_path and expected_final is not None
-                else _entry_lstat(current, component)
-            )
+            if component_path == absolute_path and expected_final is not None:
+                expected = expected_final
+            else:
+                try:
+                    expected = _entry_lstat(current, component)
+                except FileNotFoundError:
+                    if not create:
+                        raise
+                    try:
+                        if os.name == "nt":
+                            component_path.mkdir()
+                        else:
+                            os.mkdir(component, dir_fd=current.descriptor)
+                    except FileExistsError:
+                        pass
+                    expected = _entry_lstat(current, component)
             if _is_link_or_reparse(component_path) or _stat_is_link_or_reparse(expected):
                 raise ValueError(
                     f"release source must not contain a link or reparse point: {component_path}"

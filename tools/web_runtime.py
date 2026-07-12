@@ -8,12 +8,15 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Final, cast
 from urllib.parse import urlsplit
 from urllib.request import urlopen
+
+from tools.release_common import _DirectoryHandle, _protected_directory_chain, _verify_directory
 
 RUNTIME_MANIFEST_NAME: Final = "runtime-manifest.json"
 RUNTIME_CDN_PATH: Final = "runtime/0.9.3/"
@@ -207,46 +210,60 @@ def _verify_file(path: Path, asset: RuntimeAsset, context: str) -> None:
     _verify_payload(payload, asset, context)
 
 
+@contextmanager
+def _protected_runtime_directory(path: Path, context: str) -> Iterator[_DirectoryHandle]:
+    try:
+        with _protected_directory_chain(path, create=True) as directory:
+            yield directory
+    except RuntimeIntegrityError:
+        raise
+    except (OSError, ValueError) as error:
+        raise _fail(f"{context}_path", f"{path}: {error}") from error
+
+
 def cache_runtime_asset(
     asset: RuntimeAsset,
     cache_dir: Path,
     fetcher: RuntimeFetcher = fetch_https,
 ) -> Path:
     """Return one verified cache entry, publishing a fetch with atomic replacement."""
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    target = cache_dir / asset.sha256
-    if target.exists():
+    with _protected_runtime_directory(cache_dir, "runtime_cache") as cache_directory:
+        target = cache_dir / asset.sha256
+        _verify_directory(cache_directory)
+        if target.exists():
+            _verify_file(target, asset, "runtime_cache")
+            return target
+
+        try:
+            payload = fetcher(asset.source_url)
+        except Exception as error:
+            raise _fail("runtime_fetch_failed", f"{asset.source_url}: {error}") from error
+        if type(payload) is not bytes:
+            raise _fail("runtime_fetch_type", f"{asset.artifact_path}: expected bytes")
+        _verify_payload(payload, asset, "runtime_fetch")
+        _verify_directory(cache_directory)
+
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=cache_dir,
+                prefix=f".{asset.sha256}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary:
+                temporary.write(payload)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+                temporary_path = Path(temporary.name)
+            _verify_file(temporary_path, asset, "runtime_fetch")
+            _verify_directory(cache_directory)
+            os.replace(temporary_path, target)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
         _verify_file(target, asset, "runtime_cache")
         return target
-
-    try:
-        payload = fetcher(asset.source_url)
-    except Exception as error:
-        raise _fail("runtime_fetch_failed", f"{asset.source_url}: {error}") from error
-    if type(payload) is not bytes:
-        raise _fail("runtime_fetch_type", f"{asset.artifact_path}: expected bytes")
-    _verify_payload(payload, asset, "runtime_fetch")
-
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            dir=cache_dir,
-            prefix=f".{asset.sha256}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary:
-            temporary.write(payload)
-            temporary.flush()
-            os.fsync(temporary.fileno())
-            temporary_path = Path(temporary.name)
-        _verify_file(temporary_path, asset, "runtime_fetch")
-        os.replace(temporary_path, target)
-        temporary_path = None
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
-    _verify_file(target, asset, "runtime_cache")
-    return target
 
 
 def _manifest_payload(manifest: RuntimeManifest) -> Mapping[str, object]:
@@ -274,18 +291,18 @@ def stage_runtime_assets(
     """Stage every verified cache entry and an auditable manifest into the artifact."""
     total = 0
     for asset in manifest.assets:
-        cached = cache_runtime_asset(asset, cache_dir, fetcher)
         destination = output / Path(*PurePosixPath(asset.artifact_path).parts)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(cached, destination)
-        _verify_file(destination, asset, "runtime_stage")
+        with _protected_runtime_directory(destination.parent, "runtime_stage"):
+            cached = cache_runtime_asset(asset, cache_dir, fetcher)
+            shutil.copyfile(cached, destination)
+            _verify_file(destination, asset, "runtime_stage")
         total += asset.size_bytes
     staged_manifest = output / "runtime" / RUNTIME_MANIFEST_NAME
-    staged_manifest.parent.mkdir(parents=True, exist_ok=True)
-    staged_manifest.write_text(
-        json.dumps(_manifest_payload(manifest), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    with _protected_runtime_directory(staged_manifest.parent, "runtime_stage"):
+        staged_manifest.write_text(
+            json.dumps(_manifest_payload(manifest), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     return total
 
 

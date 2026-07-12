@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -21,6 +23,7 @@ from tools.web_runtime import (
 )
 
 _ROOT = Path(__file__).resolve().parents[3]
+_REAL_SUBPROCESS_RUN = subprocess.run
 
 _PINNED_GRAPH = (
     (
@@ -72,6 +75,30 @@ _PINNED_GRAPH = (
         "ef5d853b3dd27ebcb62b5d88f92b51606a0a6f11c75f9af10426b8e93781c2c3",
     ),
 )
+
+
+def _make_directory_link(link: Path, target: Path) -> None:
+    """Create a real directory symlink, falling back to a Windows junction."""
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except (NotImplementedError, OSError) as error:
+        if os.name != "nt":
+            pytest.skip(f"directory links unavailable: {error}")
+        junction = _REAL_SUBPROCESS_RUN(
+            ["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if junction.returncode != 0:
+            pytest.skip(f"directory links unavailable: {error}; {junction.stderr}")
+
+
+def _remove_directory_link(link: Path) -> None:
+    if link.is_symlink():
+        link.unlink()
+    else:
+        os.rmdir(link)
 
 
 def _asset(payload: bytes = b"runtime") -> RuntimeAsset:
@@ -164,6 +191,41 @@ def test_cache_rejects_corruption_without_refetching_or_overwriting(tmp_path: Pa
     assert cache_path.read_bytes() == b"bad"
 
 
+def test_cache_rejects_linked_directory_before_any_outside_write(tmp_path: Path) -> None:
+    payload = b"runtime"
+    asset = _asset(payload)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    cache = tmp_path / "cache"
+    _make_directory_link(cache, outside)
+
+    try:
+        with pytest.raises(RuntimeIntegrityError, match="runtime_cache_path"):
+            cache_runtime_asset(asset, cache, lambda _url: payload)
+        assert list(outside.iterdir()) == []
+    finally:
+        _remove_directory_link(cache)
+
+
+def test_stage_rejects_linked_runtime_directory_before_any_outside_write(tmp_path: Path) -> None:
+    payload = b"runtime"
+    asset = _asset(payload)
+    manifest = RuntimeManifest(1, "test-runtime", (asset,), "a" * 64)
+    output = tmp_path / "artifact"
+    outside = tmp_path / "outside"
+    output.mkdir()
+    outside.mkdir()
+    runtime = output / "runtime"
+    _make_directory_link(runtime, outside)
+
+    try:
+        with pytest.raises(RuntimeIntegrityError, match="runtime_stage_path"):
+            stage_runtime_assets(manifest, tmp_path / "cache", output, lambda _url: payload)
+        assert list(outside.iterdir()) == []
+    finally:
+        _remove_directory_link(runtime)
+
+
 def test_cache_rejects_remote_drift_without_publishing_a_partial(tmp_path: Path) -> None:
     asset = _asset()
 
@@ -206,6 +268,115 @@ def test_cache_atomically_replaces_only_a_verified_temporary(
     assert cached == tmp_path / asset.sha256
     assert len(replacements) == 1
     assert not replacements[0][0].exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows handles enforce the swap exclusion contract")
+def test_cache_blocks_directory_swap_before_publishing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"runtime"
+    asset = _asset(payload)
+    cache = tmp_path / "cache"
+    displaced = tmp_path / "cache-displaced"
+    outside = tmp_path / "outside"
+    cache.mkdir()
+    outside.mkdir()
+    real_verify = web_runtime._verify_payload
+    swap_attempted = False
+    swap_blocked = False
+    link_created = False
+
+    def race_after_fetch(
+        candidate: bytes,
+        runtime_asset: RuntimeAsset,
+        context: str,
+    ) -> None:
+        nonlocal swap_attempted, swap_blocked, link_created
+        real_verify(candidate, runtime_asset, context)
+        if context != "runtime_fetch" or swap_attempted:
+            return
+        swap_attempted = True
+        try:
+            cache.rename(displaced)
+        except OSError:
+            swap_blocked = True
+            return
+        _make_directory_link(cache, outside)
+        link_created = True
+
+    monkeypatch.setattr(web_runtime, "_verify_payload", race_after_fetch)
+    caught: RuntimeIntegrityError | None = None
+    try:
+        try:
+            cache_runtime_asset(asset, cache, lambda _url: payload)
+        except RuntimeIntegrityError as error:
+            caught = error
+        outside_entries = list(outside.iterdir())
+    finally:
+        if link_created:
+            _remove_directory_link(cache)
+        if displaced.exists():
+            displaced.rename(cache)
+
+    assert swap_attempted
+    assert outside_entries == []
+    assert swap_blocked or caught is not None
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows handles enforce the swap exclusion contract")
+def test_stage_blocks_runtime_directory_swap_before_copying(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"runtime"
+    asset = _asset(payload)
+    manifest = RuntimeManifest(1, "test-runtime", (asset,), "a" * 64)
+    output = tmp_path / "artifact"
+    runtime = output / "runtime"
+    displaced = output / "runtime-displaced"
+    outside = tmp_path / "outside"
+    runtime.mkdir(parents=True)
+    outside.mkdir()
+    real_cache = web_runtime.cache_runtime_asset
+    swap_attempted = False
+    swap_blocked = False
+    link_created = False
+
+    def race_after_cache(
+        runtime_asset: RuntimeAsset,
+        cache_dir: Path,
+        fetcher: web_runtime.RuntimeFetcher = web_runtime.fetch_https,
+    ) -> Path:
+        nonlocal swap_attempted, swap_blocked, link_created
+        cached = real_cache(runtime_asset, cache_dir, fetcher)
+        swap_attempted = True
+        try:
+            runtime.rename(displaced)
+        except OSError:
+            swap_blocked = True
+            return cached
+        _make_directory_link(runtime, outside)
+        link_created = True
+        return cached
+
+    monkeypatch.setattr(web_runtime, "cache_runtime_asset", race_after_cache)
+    caught: RuntimeIntegrityError | None = None
+    try:
+        try:
+            stage_runtime_assets(manifest, tmp_path / "cache", output, lambda _url: payload)
+        except RuntimeIntegrityError as error:
+            caught = error
+        outside_entries = list(outside.rglob("*"))
+    finally:
+        if link_created:
+            _remove_directory_link(runtime)
+        if displaced.exists():
+            displaced.rename(runtime)
+
+    assert swap_attempted
+    assert outside_entries == []
+    assert swap_blocked or caught is not None
 
 
 def test_default_fetcher_rejects_a_redirect_from_the_exact_manifest_source(
