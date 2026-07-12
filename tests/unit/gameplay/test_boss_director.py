@@ -7,8 +7,16 @@ from dataclasses import FrozenInstanceError, fields
 import pytest
 
 from windsprig.content.models import BossAttackSpec, BossPhaseSpec, BossSpec
+from windsprig.core.ecs import World
 from windsprig.core.rng import DeterministicRng
-from windsprig.gameplay.bosses import BossCommand, BossDirector, BossState, BossStep
+from windsprig.gameplay.bosses import (
+    BossCommand,
+    BossDirector,
+    BossState,
+    BossStep,
+    BossSystem,
+)
+from windsprig.gameplay.components import Health
 
 
 def _boss() -> BossSpec:
@@ -184,6 +192,28 @@ def test_invalid_negative_delta_does_not_mutate_state_or_rng() -> None:
         director.step(state, hp=100, dt_ms=-1, rng=rng)
 
     assert rng.state_hash() == before
+
+
+@pytest.mark.parametrize("invalid", ([], (object(),)))
+def test_boss_system_rejects_invalid_retained_commands_before_mutation(
+    invalid: object,
+) -> None:
+    director = _director()
+    world = World(seed=29)
+    entity_id = world.create_entity()
+    initial = director.start("test_boss", entity_id)
+    world.add_component(entity_id, initial)
+    world.add_component(entity_id, Health(100, 100))
+    world.resources["boss_commands"] = invalid
+    before_rng = world.rng.state_hash()
+
+    with pytest.raises(TypeError, match="boss_commands"):
+        BossSystem(director).update(world, 16)
+
+    assert world.get_component(entity_id, BossState) is initial
+    assert world.resources["boss_commands"] is invalid
+    assert world.rng.state_hash() == before_rng
+    assert world.events.peek() == []
 
 
 def test_states_and_payloads_are_independent_and_immutable() -> None:
