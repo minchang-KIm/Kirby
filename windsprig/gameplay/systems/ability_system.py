@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import cast
 
+from windsprig.content.loader import StageSpec
 from windsprig.core.ecs import World
 from windsprig.gameplay.abilities import AbilityContext, AbilityExecution, AbilityRegistry
 from windsprig.gameplay.abilities.cinder import MAX_CHARGE_MS
@@ -95,14 +97,16 @@ class AbilitySystem:
             if not _has_effect(execution):
                 continue
 
-            requests.extend(execution.attacks)
+            requests.extend(_fit_stage_bound_attacks(world, execution.attacks))
             ability.cooldown_remaining_ms = max(0, execution.cooldown_ms)
             ability.combo_step = execution.next_combo_step
             ability.combo_window_remaining_ms = max(0, execution.combo_window_ms)
             ability.armor_remaining_ms = max(ability.armor_remaining_ms, execution.armor_ms)
             ability.meter = max(0, ability.meter - execution.meter_cost)
             if execution.restore_previous:
-                ability.current_id, ability.previous_id = ability.previous_id, ability.current_id
+                restored_id = ability.previous_id
+                ability.current_id = "none" if restored_id == "tempest" else restored_id
+                ability.previous_id = "none"
             state.name = transition(state.name, "Attack")
 
 
@@ -118,6 +122,29 @@ def _has_effect(execution: AbilityExecution) -> bool:
         or execution.armor_ms
         or execution.meter_cost
         or execution.restore_previous
+    )
+
+
+def _fit_stage_bound_attacks(
+    world: World,
+    attacks: tuple[AttackRequest, ...],
+) -> tuple[AttackRequest, ...]:
+    if not any(attack.attack_kind == "screen_tempest" for attack in attacks):
+        return attacks
+    stage = world.resources.get("stage_spec")
+    if not isinstance(stage, StageSpec):
+        raise TypeError("stage_spec must be a StageSpec for screen_tempest")
+    return tuple(
+        replace(
+            attack,
+            x=0.0,
+            y=0.0,
+            width=stage.pixel_width,
+            height=stage.pixel_height,
+        )
+        if attack.attack_kind == "screen_tempest"
+        else attack
+        for attack in attacks
     )
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import cast
 
 from windsprig.config import GameConfig
-from windsprig.content.loader import StageSpec
+from windsprig.content.loader import InteractionSpec, StageSpec
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     AbilityState,
@@ -21,6 +21,7 @@ from windsprig.gameplay.components import (
     EnemyDropAbility,
     Facing,
     Health,
+    Interaction,
     MovementState,
     PlayerSlot,
     Respawn,
@@ -113,6 +114,27 @@ class EntityFactory:
         self.world.add_component(entity_id, Transform(tx * tile_size + 6, ty * tile_size + 6))
         self.world.add_component(entity_id, Collider(width=20, height=20, solid=False))
         self.world.add_component(entity_id, Collectible(kind="energy_sphere", value=1))
+        return entity_id
+
+    def spawn_interaction(self, spec: InteractionSpec, tile_size: int) -> int:
+        """Create one non-solid authored interaction using exact tile geometry."""
+        entity_id = self.world.create_entity()
+        self.world.add_component(
+            entity_id,
+            Transform(float(spec.tile_x * tile_size), float(spec.tile_y * tile_size)),
+        )
+        self.world.add_component(
+            entity_id,
+            Collider(
+                width=spec.width_tiles * tile_size,
+                height=spec.height_tiles * tile_size,
+                solid=False,
+            ),
+        )
+        self.world.add_component(
+            entity_id,
+            Interaction(interaction_id=spec.interaction_id, kind=spec.kind),
+        )
         return entity_id
 
     def spawn_stage_goal(self, stage: StageSpec) -> int:

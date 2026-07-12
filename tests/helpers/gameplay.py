@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from windsprig.config import GameConfig
-from windsprig.content.loader import CheckpointSpec, EnemySpawn, MoteSpec, StageSpec
+from windsprig.content.loader import (
+    CheckpointSpec,
+    EnemySpawn,
+    InteractionSpec,
+    MoteSpec,
+    StageSpec,
+)
 from windsprig.core.events import GameEvent
 from windsprig.gameplay.abilities import AbilityContext, create_default_registry
 from windsprig.gameplay.runtime import StageRuntime
@@ -71,6 +77,7 @@ def make_stage(
     enemy_spawns: tuple[EnemySpawn, ...] = (),
     motes: tuple[MoteSpec, ...] = (),
     checkpoints: tuple[CheckpointSpec, ...] = (),
+    interactions: tuple[InteractionSpec, ...] = (),
 ) -> StageSpec:
     """Build a compact flat stage without coupling tests to campaign content."""
     return StageSpec(
@@ -85,7 +92,7 @@ def make_stage(
         enemy_spawns=enemy_spawns,
         motes=motes,
         checkpoints=checkpoints,
-        interactions=(),
+        interactions=interactions,
         goal_tile=(18, 7),
         hazards=(),
         one_way_tiles=(),

@@ -11,6 +11,10 @@ from windsprig.content.loader import PUBLIC_ABILITY_IDS
 from .base import AbilityStrategy, NoneAbilityStrategy
 from .bloomblade import BloombladeStrategy
 from .cinder import CinderStrategy
+from .galehook import GalehookStrategy
+from .stoneheart import StoneheartStrategy
+from .tempest import TempestStrategy
+from .voltsong import VoltsongStrategy
 
 METADATA_FIELDS = frozenset({"strategy", "icon_id", "palette_token", "enemy_source_tag"})
 
@@ -88,7 +92,15 @@ class AbilityRegistry:
 def create_default_registry(content_dir: Path) -> AbilityRegistry:
     """Build the current typed strategies after validating shared presentation metadata."""
     registry = AbilityRegistry()
-    for strategy in (NoneAbilityStrategy(), BloombladeStrategy(), CinderStrategy()):
+    for strategy in (
+        NoneAbilityStrategy(),
+        BloombladeStrategy(),
+        CinderStrategy(),
+        VoltsongStrategy(),
+        GalehookStrategy(),
+        StoneheartStrategy(),
+        TempestStrategy(),
+    ):
         registry.register(strategy)
     registry.validate_metadata(content_dir / "abilities.json")
     return registry

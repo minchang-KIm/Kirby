@@ -10,6 +10,7 @@ from .damage_system import DamageSystem
 from .defense_system import DefenseSystem
 from .enemy_ai_system import EnemyAISystem
 from .input_command_system import InputCommandSystem
+from .interaction_system import InteractionSystem
 from .movement_system import MovementSystem
 from .pickup_system import PickupSystem
 from .stage_goal_system import StageGoalSystem
@@ -25,6 +26,7 @@ __all__ = [
     "DefenseSystem",
     "EnemyAISystem",
     "InputCommandSystem",
+    "InteractionSystem",
     "MovementSystem",
     "PickupSystem",
     "StageGoalSystem",

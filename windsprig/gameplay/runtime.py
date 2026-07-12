@@ -24,6 +24,7 @@ from windsprig.gameplay.components import (
     EnemyDropAbility,
     Facing,
     Health,
+    Interaction,
     MovementState,
     PlayerSlot,
     Projectile,
@@ -40,6 +41,7 @@ from windsprig.gameplay.snapshot import (
     EchoPickupView,
     EnemyView,
     GoalGatherView,
+    InteractionView,
     PlayerView,
     StageFrame,
     StageOutcome,
@@ -57,6 +59,7 @@ from windsprig.gameplay.systems import (
     DefenseSystem,
     EnemyAISystem,
     InputCommandSystem,
+    InteractionSystem,
     MovementSystem,
     PickupSystem,
     StageGoalSystem,
@@ -122,6 +125,7 @@ class StageRuntime:
             AbilitySystem(),
             CombatSystem(),
             DamageSystem(),
+            InteractionSystem(),
             PickupSystem(),
             CoopRespawnSystem(),
             StageGoalSystem(),
@@ -265,6 +269,8 @@ class StageRuntime:
             )
         for mote in self.stage.motes:
             self.factory.spawn_energy_sphere(mote.tile_x, mote.tile_y, self.stage.tile_size)
+        for interaction in self.stage.interactions:
+            self.factory.spawn_interaction(interaction, self.stage.tile_size)
         self.factory.spawn_stage_goal(self.stage)
 
     def _current_players_for_reset(self) -> tuple[ActivePlayer, ...]:
@@ -393,6 +399,7 @@ class StageRuntime:
         enemies = self._enemy_views()
         attacks = self._attack_views()
         echo_pickups = self._echo_pickup_views()
+        interactions = self._interaction_views()
         camera_targets = self._camera_target_views(active_slots)
         checkpoints = tuple(
             sorted(
@@ -432,7 +439,7 @@ class StageRuntime:
             enemies=enemies,
             attacks=attacks,
             echo_pickups=echo_pickups,
-            interactions=(),
+            interactions=interactions,
             checkpoints=checkpoints,
             goal_gather=GoalGatherView(
                 goal_x=goal_x,
@@ -572,6 +579,26 @@ class StageRuntime:
                 y=transform.y,
             )
             for entity_id, echo, transform in self.world.query(EchoPickup, Transform)
+        ]
+        return tuple(sorted(views, key=lambda view: view.entity_id))
+
+    def _interaction_views(self) -> tuple[InteractionView, ...]:
+        views = [
+            InteractionView(
+                entity_id=entity_id,
+                interaction_id=interaction.interaction_id,
+                interaction_kind=interaction.kind,
+                interaction_state=interaction.state,
+                x=transform.x,
+                y=transform.y,
+                width=collider.width,
+                height=collider.height,
+            )
+            for entity_id, interaction, transform, collider in self.world.query(
+                Interaction,
+                Transform,
+                Collider,
+            )
         ]
         return tuple(sorted(views, key=lambda view: view.entity_id))
 

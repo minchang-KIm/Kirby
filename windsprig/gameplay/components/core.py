@@ -144,6 +144,26 @@ class AttackRequest:
 
 
 @dataclass
+class Attack:
+    owner_entity_id: int
+    team: str
+    attack_kind: str
+    visual_id: str
+    damage: int
+    knockback_x: float
+    knockback_y: float
+    ttl_ms: int
+    pierce_remaining: int
+    cuts_projectiles: bool
+    guard_break: bool
+    pull_strength: float
+    interaction_kind: str | None
+    born_frame: int
+    last_advanced_frame: int = -1
+    hit_entity_ids: set[int] = field(default_factory=set)
+
+
+@dataclass
 class EnemyAI:
     kind: str
     patrol_left: float
@@ -175,6 +195,13 @@ class Collectible:
 @dataclass
 class EchoPickup:
     ability_id: str
+
+
+@dataclass
+class Interaction:
+    interaction_id: str
+    kind: str
+    state: str = "idle"
 
 
 @dataclass

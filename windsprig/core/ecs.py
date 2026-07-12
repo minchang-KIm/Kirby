@@ -186,7 +186,26 @@ class World:
 
 def _serialize_component(component: object) -> object:
     if is_dataclass(component):
-        return asdict(cast(Any, component))
+        return _serialize_value(asdict(cast(Any, component)))
     if hasattr(component, "__dict__"):
-        return dict(vars(component))
+        return _serialize_value(dict(vars(component)))
     return repr(component)
+
+
+def _serialize_value(value: object) -> object:
+    """Recursively produce strict JSON values with canonical unordered collections."""
+    if isinstance(value, dict):
+        return {key: _serialize_value(member) for key, member in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_value(member) for member in value]
+    if isinstance(value, (set, frozenset)):
+        serialized = [_serialize_value(member) for member in value]
+        return sorted(
+            serialized,
+            key=lambda member: json.dumps(member, sort_keys=True, separators=(",", ":")),
+        )
+    if is_dataclass(value):
+        return _serialize_value(asdict(cast(Any, value)))
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return repr(value)
