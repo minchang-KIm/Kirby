@@ -311,3 +311,51 @@ def test_release_workflows_pin_third_party_actions(relative: str) -> None:
 
     assert uses
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", action) for action in uses)
+
+
+def test_live_verifier_reports_version_shell_commit_and_target_mismatch() -> None:
+    from tools.verify_release import verify_live_web
+
+    def fake_fetch(url: str) -> tuple[int, str]:
+        if url.endswith("build-info.json"):
+            return 200, json.dumps({"version": "0.9.0", "commit_sha": "x" * 40, "target": "windows"})
+        return 200, "<title>Wrong</title>"
+
+    errors = verify_live_web("https://example.invalid", "1.0.0", "d" * 40, fetcher=fake_fetch)
+
+    assert errors == [
+        "production commit mismatch",
+        "production shell title missing",
+        "production target mismatch",
+        "production version mismatch",
+    ]
+
+
+def test_live_verifier_reports_network_and_malformed_metadata_without_raising() -> None:
+    from tools.verify_release import verify_live_web
+
+    def fake_fetch(url: str) -> tuple[int, str]:
+        if url.endswith("build-info.json"):
+            return 200, "{broken"
+        raise OSError("offline")
+
+    assert verify_live_web("https://example.invalid/", "1.0.0", "d" * 40, fetcher=fake_fetch) == [
+        "production build info is invalid JSON",
+        "production shell request failed: OSError",
+    ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://windsprig.invalid",
+        "https://user@windsprig.invalid",
+        "https://windsprig.invalid/path",
+        "https://windsprig.invalid?preview=1",
+    ],
+)
+def test_live_verifier_rejects_noncanonical_production_origins(url: str) -> None:
+    from tools.verify_release import verify_live_web
+
+    with pytest.raises(ValueError, match="canonical HTTPS origin"):
+        verify_live_web(url, "1.0.0", "d" * 40, fetcher=lambda _url: (200, ""))

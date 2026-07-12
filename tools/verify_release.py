@@ -5,9 +5,14 @@ from __future__ import annotations
 import json
 import re
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from urllib.error import HTTPError
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
+
+from tools.release_common import BuildIdentity
 
 CANONICAL_SUMMARY = (
     "Ride the living wind, harmonize enemy echoes, and restore six hand-crafted sky worlds in a "
@@ -57,6 +62,9 @@ _TEXT_SUFFIXES = {
 }
 _PROTECTED_IDENTIFIER = re.compile(r"\b(?:kirby|nintendo)\b|return\s+to\s+dream\s+land", re.IGNORECASE)
 _PLACEHOLDER = re.compile(r"\b(?:TODO|TBD|FIXME)\b|example\.com", re.IGNORECASE)
+_MAX_LIVE_RESPONSE_BYTES = 2 * 1024 * 1024
+
+LiveFetcher = Callable[[str], tuple[int, str]]
 
 
 def _public_text_files(root: Path) -> Iterable[Path]:
@@ -167,4 +175,149 @@ def verify_local_release(root: Path) -> list[str]:
             if manifest.get("target") != target:
                 errors.append(f"{target} manifest target mismatch")
 
+    return sorted(set(errors))
+
+
+def fetch_url(url: str) -> tuple[int, str]:
+    """Fetch one bounded UTF-8 production resource without accepting compression ambiguity."""
+
+    request = Request(
+        url,
+        headers={"Accept": "text/html,application/json;q=0.9", "User-Agent": "Windsprig-Release-Verifier/1.0"},
+        method="GET",
+    )
+    try:
+        response = urlopen(request, timeout=20)
+    except HTTPError as error:
+        with error:
+            payload = error.read(_MAX_LIVE_RESPONSE_BYTES + 1)
+        if len(payload) > _MAX_LIVE_RESPONSE_BYTES:
+            raise ValueError("production response exceeds verifier limit") from error
+        return int(error.code), payload.decode("utf-8")
+    with response:
+        payload = response.read(_MAX_LIVE_RESPONSE_BYTES + 1)
+        if len(payload) > _MAX_LIVE_RESPONSE_BYTES:
+            raise ValueError("production response exceeds verifier limit")
+        return int(response.status), payload.decode("utf-8")
+
+
+def _canonical_production_origin(url: str) -> str:
+    if type(url) is not str:
+        raise TypeError("url must be a string")
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("production URL must be a canonical HTTPS origin")
+    try:
+        port = parsed.port
+    except ValueError:
+        raise ValueError("production URL must be a canonical HTTPS origin") from None
+    if port not in {None, 443}:
+        raise ValueError("production URL must be a canonical HTTPS origin")
+    try:
+        host = parsed.hostname.encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        raise ValueError("production URL must be a canonical HTTPS origin") from None
+    return f"https://{host}"
+
+
+def _live_response(
+    fetcher: LiveFetcher,
+    url: str,
+    label: str,
+    errors: list[str],
+) -> tuple[int, str] | None:
+    try:
+        response = fetcher(url)
+        if not isinstance(response, tuple) or len(response) != 2:
+            raise TypeError("fetcher result must be a status/text tuple")
+        status, text = response
+        if type(status) is not int or type(text) is not str:
+            raise TypeError("fetcher result must contain an integer status and string text")
+        return status, text
+    except Exception as exc:
+        errors.append(f"production {label} request failed: {type(exc).__name__}")
+        return None
+
+
+def _live_build_info(text: str) -> dict[str, object] | None:
+    try:
+        payload = json.loads(
+            text,
+            object_pairs_hook=_unique_live_object,
+            parse_constant=_reject_live_constant,
+        )
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict) or any(type(key) is not str for key in payload):
+        return None
+    return cast(dict[str, object], payload)
+
+
+def _reject_live_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON constant: {value}")
+
+
+def _unique_live_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate live JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def verify_live_web(
+    url: str,
+    version: str,
+    sha: str,
+    *,
+    fetcher: LiveFetcher = fetch_url,
+) -> list[str]:
+    """Verify that one canonical production origin serves the exact release identity."""
+
+    origin = _canonical_production_origin(url)
+    try:
+        BuildIdentity(version, "0" * 40, "web")
+    except (TypeError, ValueError):
+        raise ValueError("version must be a semantic version") from None
+    try:
+        BuildIdentity("1.0.0", sha, "web")
+    except (TypeError, ValueError):
+        raise ValueError("sha must be exactly 40 lowercase hexadecimal characters") from None
+    if not callable(fetcher):
+        raise TypeError("fetcher must be callable")
+
+    errors: list[str] = []
+    shell = _live_response(fetcher, f"{origin}/", "shell", errors)
+    if shell is not None:
+        shell_status, shell_text = shell
+        if shell_status != 200:
+            errors.append(f"production shell returned {shell_status}")
+        if "Windsprig: Echoes of the Gale" not in shell_text:
+            errors.append("production shell title missing")
+
+    info_response = _live_response(fetcher, f"{origin}/build-info.json", "build info", errors)
+    if info_response is not None:
+        info_status, info_text = info_response
+        if info_status != 200:
+            errors.append(f"production build info returned {info_status}")
+        else:
+            info = _live_build_info(info_text)
+            if info is None:
+                errors.append("production build info is invalid JSON")
+            else:
+                if info.get("version") != version:
+                    errors.append("production version mismatch")
+                if info.get("commit_sha") != sha:
+                    errors.append("production commit mismatch")
+                if info.get("target") != "web":
+                    errors.append("production target mismatch")
     return sorted(set(errors))
