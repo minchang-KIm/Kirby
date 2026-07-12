@@ -43,6 +43,112 @@ def _runtime(stage_id: str = "world_1_stage_5") -> StageRuntime:
     )
 
 
+def _complete_boss_parameters(
+    **overrides: bool | int | float | str,
+) -> tuple[tuple[str, bool | int | float | str], ...]:
+    parameters: dict[str, bool | int | float | str] = {
+        "damage": 1,
+        "height": 16,
+        "knockback_x": 0.0,
+        "knockback_y": 0.0,
+        "ttl_ms": 100,
+        "vx": 0.0,
+        "vy": 0.0,
+        "width": 16,
+        "x": 200.0,
+        "y": 100.0,
+    }
+    parameters.update(overrides)
+    return tuple(parameters.items())
+
+
+@pytest.mark.parametrize(
+    ("case", "error", "match"),
+    (
+        ("derived", TypeError, "boss_commands"),
+        ("empty_command", ValueError, "BossCommand.command"),
+        ("empty_attack_id", ValueError, "BossCommand.attack_id"),
+        ("nonfinite_parameter", ValueError, "BossCommand.parameters.speed"),
+        ("zero_damage", ValueError, "AttackRequest.damage"),
+        ("negative_width", ValueError, "AttackRequest.width"),
+        ("negative_height", ValueError, "AttackRequest.height"),
+        ("negative_ttl", ValueError, "AttackRequest.ttl_ms"),
+        ("negative_pierce", ValueError, "AttackRequest.pierce"),
+    ),
+)
+def test_adversarial_boss_commands_are_rejected_atomically_before_the_step(
+    case: str,
+    error: type[Exception],
+    match: str,
+) -> None:
+    runtime = _runtime()
+    original_commands = runtime.world.resources["boss_commands"]
+    baseline_snapshot = runtime.snapshot()
+    baseline_hash = runtime.world.world_hash()
+    baseline_rng = runtime.world.rng.state_hash()
+    baseline_alive = set(runtime.world.alive_entities)
+    baseline_events = runtime.world.events.peek()
+    baseline_input = runtime.world.frame_input
+    baseline_next_entity_id = runtime.world._next_entity_id
+    boss_entity, boss_state = runtime.world.query(BossState)[0]
+
+    if case == "derived":
+
+        class DerivedBossCommand(BossCommand):
+            pass
+
+        command = DerivedBossCommand(
+            "execute",
+            "rootjaw.adversarial",
+            _complete_boss_parameters(),
+        )
+    elif case == "empty_command":
+        command = BossCommand(
+            "",
+            "rootjaw.adversarial",
+            _complete_boss_parameters(),
+        )
+    elif case == "empty_attack_id":
+        command = BossCommand("execute", "", _complete_boss_parameters())
+    elif case == "nonfinite_parameter":
+        command = BossCommand(
+            "execute",
+            "rootjaw.future",
+            (("speed", float("inf")),),
+        )
+    else:
+        field_name, value = {
+            "zero_damage": ("damage", 0),
+            "negative_width": ("width", -1),
+            "negative_height": ("height", -1),
+            "negative_ttl": ("ttl_ms", -1),
+            "negative_pierce": ("pierce", -1),
+        }[case]
+        command = BossCommand(
+            "execute",
+            "rootjaw.adversarial",
+            _complete_boss_parameters(**{field_name: value}),
+        )
+    injected = (command,)
+    runtime.world.resources["boss_commands"] = injected
+
+    with pytest.raises(error, match=match):
+        runtime.step(InputFrame.empty())
+
+    assert runtime.world.resources["boss_commands"] is injected
+    assert runtime.world.frame_index == 0
+    assert runtime.world.frame_input is baseline_input
+    assert runtime.world.rng.state_hash() == baseline_rng
+    assert runtime.world.alive_entities == baseline_alive
+    assert runtime.world._next_entity_id == baseline_next_entity_id
+    assert runtime.world.events.peek() == baseline_events
+    assert runtime.world.get_component(boss_entity, BossState) is boss_state
+
+    runtime.world.resources["boss_commands"] = original_commands
+    assert runtime.snapshot() == baseline_snapshot
+    assert runtime.world.world_hash() == baseline_hash
+
+
 def test_release_rootjaw_changes_phase_once_and_telegraphs_before_attack() -> None:
     bosses = load_boss_catalog(CONTENT_DIR)
     runtime = _runtime()

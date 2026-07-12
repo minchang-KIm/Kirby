@@ -15,6 +15,7 @@ from windsprig.gameplay.bosses import (
     BossState,
     BossStep,
     BossSystem,
+    validate_boss_commands,
 )
 from windsprig.gameplay.components import Health
 
@@ -214,6 +215,47 @@ def test_boss_system_rejects_invalid_retained_commands_before_mutation(
     assert world.resources["boss_commands"] is invalid
     assert world.rng.state_hash() == before_rng
     assert world.events.peek() == []
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid", "error", "match"),
+    (
+        ("command", 7, TypeError, "BossCommand.command"),
+        ("attack_id", 7, TypeError, "BossCommand.attack_id"),
+        ("parameters", [], TypeError, "BossCommand.parameters"),
+        ("parameters", (object(),), TypeError, "key-value tuples"),
+        ("parameters", ((7, 1),), TypeError, "parameter keys"),
+        ("parameters", (("", 1),), ValueError, "parameter keys"),
+        (
+            "parameters",
+            (("same", 1), ("same", 2)),
+            ValueError,
+            "duplicate key",
+        ),
+        ("parameters", (("bad", object()),), TypeError, "JSON scalar"),
+        (
+            "parameters",
+            (("z", 1), ("a", 2)),
+            ValueError,
+            "sorted canonically",
+        ),
+    ),
+)
+def test_boss_command_deep_field_validation_is_strict(
+    field_name: str,
+    invalid: object,
+    error: type[Exception],
+    match: str,
+) -> None:
+    command = BossCommand(
+        "execute",
+        "test.attack",
+        (("count", 2), ("speed", 180)),
+    )
+    object.__setattr__(command, field_name, invalid)
+
+    with pytest.raises(error, match=match):
+        validate_boss_commands((command,))
 
 
 def test_states_and_payloads_are_independent_and_immutable() -> None:

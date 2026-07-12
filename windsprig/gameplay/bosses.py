@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from types import MappingProxyType
+from typing import cast
 
 from windsprig.content.models import BossAttackSpec, BossSpec, ParameterValue
 from windsprig.core.ecs import World
@@ -67,6 +69,59 @@ def boss_command_sort_key(command: BossCommand) -> str:
     """Return a cross-type-safe canonical key for gameplay resource ordering."""
 
     return json.dumps(asdict(command), sort_keys=True, separators=(",", ":"))
+
+
+def validate_boss_commands(value: object) -> tuple[BossCommand, ...]:
+    """Validate exact command DTOs, deep parameters, and canonical ordering."""
+
+    if type(value) is not tuple:
+        raise TypeError("boss_commands must be a tuple of BossCommand values")
+    raw_commands = cast(tuple[object, ...], value)
+    commands: list[BossCommand] = []
+    for member in raw_commands:
+        if type(member) is not BossCommand:
+            raise TypeError("boss_commands must be a tuple of BossCommand values")
+        command = member
+        if type(command.command) is not str:
+            raise TypeError("BossCommand.command must be a string")
+        if not command.command:
+            raise ValueError("BossCommand.command must be non-empty")
+        if type(command.attack_id) is not str:
+            raise TypeError("BossCommand.attack_id must be a string")
+        if not command.attack_id:
+            raise ValueError("BossCommand.attack_id must be non-empty")
+
+        raw_parameters = cast(object, command.parameters)
+        if type(raw_parameters) is not tuple:
+            raise TypeError("BossCommand.parameters must be a tuple")
+        parameters = cast(tuple[object, ...], raw_parameters)
+        validated_parameters: list[tuple[str, ParameterValue]] = []
+        seen: set[str] = set()
+        for raw_pair in parameters:
+            if type(raw_pair) is not tuple or len(raw_pair) != 2:
+                raise TypeError("BossCommand.parameters must contain key-value tuples")
+            key, parameter = cast(tuple[object, object], raw_pair)
+            if type(key) is not str:
+                raise TypeError("BossCommand parameter keys must be strings")
+            if not key:
+                raise ValueError("BossCommand parameter keys must be non-empty")
+            if key in seen:
+                raise ValueError(f"BossCommand.parameters has duplicate key: {key}")
+            if type(parameter) not in {bool, int, float, str}:
+                raise TypeError(f"BossCommand.parameters.{key} must be a JSON scalar")
+            if type(parameter) is float and not math.isfinite(parameter):
+                raise ValueError(f"BossCommand.parameters.{key} must be finite")
+            seen.add(key)
+            validated_parameters.append((key, cast(ParameterValue, parameter)))
+        canonical_parameters = tuple(sorted(validated_parameters))
+        if tuple(validated_parameters) != canonical_parameters:
+            raise ValueError("BossCommand.parameters must be sorted canonically")
+        commands.append(command)
+
+    validated = tuple(commands)
+    if validated != tuple(sorted(validated, key=boss_command_sort_key)):
+        raise ValueError("boss_commands must be sorted canonically")
+    return validated
 
 
 class BossDirector:
@@ -248,15 +303,14 @@ class BossSystem:
         if state.entity_id != entity_id:
             raise ValueError("BossState.entity_id must match its ECS owner")
 
-        raw_retained = world.resources.get("boss_commands", ())
-        if not isinstance(raw_retained, tuple) or any(type(command) is not BossCommand for command in raw_retained):
-            raise TypeError("boss_commands must be a tuple of BossCommand values")
+        retained = validate_boss_commands(world.resources.get("boss_commands"))
 
         result = self._director.step(state, health.current, dt_ms, world.rng)
+        result_commands = validate_boss_commands(result.commands)
         world.add_component(entity_id, result.state)
         commands = tuple(
             sorted(
-                set(raw_retained).union(result.commands),
+                set(retained).union(result_commands),
                 key=boss_command_sort_key,
             )
         )
@@ -265,4 +319,10 @@ class BossSystem:
             world.events.publish(event.topic, event.payload)
 
 
-__all__ = ["BossCommand", "BossDirector", "BossState", "BossStep"]
+__all__ = [
+    "BossCommand",
+    "BossDirector",
+    "BossState",
+    "BossStep",
+    "validate_boss_commands",
+]

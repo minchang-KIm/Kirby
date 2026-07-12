@@ -15,7 +15,7 @@ from windsprig.gameplay.bosses import (
     BossDirector,
     BossState,
     BossSystem,
-    boss_command_sort_key,
+    validate_boss_commands,
 )
 from windsprig.gameplay.components import (
     AbilityState,
@@ -78,7 +78,9 @@ from windsprig.gameplay.systems import (
     PickupSystem,
     StageGoalSystem,
 )
+from windsprig.gameplay.systems.attack_spawn_system import boss_attack_request
 from windsprig.gameplay.validation import (
+    validate_attack_request,
     validate_attack_requests,
     validate_damage_queue,
     validate_pending_enemy_launches,
@@ -420,14 +422,14 @@ class StageRuntime:
         damage_queue = validate_damage_queue(world.resources.get("damage_queue"))
         attack_requests = validate_attack_requests(world.resources.get("attack_requests"))
         pending_launches = validate_pending_enemy_launches(world.resources.get("pending_enemy_launches"))
-        raw_boss_commands = world.resources.get("boss_commands")
-        if not isinstance(raw_boss_commands, tuple) or any(
-            type(command) is not BossCommand for command in raw_boss_commands
-        ):
-            raise TypeError("boss_commands must be a tuple of BossCommand values")
-        boss_commands = tuple(raw_boss_commands)
-        if boss_commands != tuple(sorted(boss_commands, key=boss_command_sort_key)):
-            raise ValueError("boss_commands must be sorted canonically")
+        boss_commands = validate_boss_commands(world.resources.get("boss_commands"))
+        boss_rows = world.query(BossState)
+        if boss_commands and len(boss_rows) == 1:
+            owner_id = boss_rows[0][0]
+            for command in boss_commands:
+                request = boss_attack_request(owner_id, command)
+                if request is not None:
+                    validate_attack_request(request)
         return _ValidatedGameplayResources(
             active_players=active_players,
             active_authority=tuple(active_authority),

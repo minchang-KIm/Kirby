@@ -22,8 +22,7 @@ def validate_attack_requests(value: object) -> tuple[AttackRequest, ...]:
     for request in requests:
         if type(request) is not AttackRequest:
             raise TypeError("attack_requests must be a list of AttackRequest values")
-        _validate_attack_request(request)
-        validated.append(request)
+        validated.append(validate_attack_request(request))
     return tuple(validated)
 
 
@@ -58,7 +57,12 @@ def validate_pending_enemy_launches(value: object) -> tuple[PendingEnemyLaunch, 
     return tuple(validated)
 
 
-def _validate_attack_request(request: AttackRequest) -> None:
+def validate_attack_request(value: object) -> AttackRequest:
+    """Validate one exact canonical request, including every field invariant."""
+
+    if type(value) is not AttackRequest:
+        raise TypeError("boss-derived attack must be an AttackRequest")
+    request = value
     _positive_int(request.owner_entity_id, "AttackRequest.owner_entity_id")
     _team(request.team)
     _non_empty_string(request.ability_id, "AttackRequest.ability_id")
@@ -83,6 +87,7 @@ def _validate_attack_request(request: AttackRequest) -> None:
             request.interaction_kind,
             "AttackRequest.interaction_kind",
         )
+    return request
 
 
 def _validate_damage_record(record: DamageRecord) -> None:
@@ -145,6 +150,7 @@ def _exact_bool(value: object, field: str) -> None:
 
 
 __all__ = [
+    "validate_attack_request",
     "validate_attack_requests",
     "validate_damage_queue",
     "validate_pending_enemy_launches",

@@ -9,7 +9,7 @@ import pytest
 from tests.helpers.gameplay import frame, make_runtime, make_stage
 from windsprig.config import GameConfig
 from windsprig.core.ecs import World
-from windsprig.gameplay.bosses import BossCommand, BossState
+from windsprig.gameplay.bosses import BossCommand, BossState, boss_command_sort_key
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
@@ -681,15 +681,20 @@ def test_spawn_retains_every_malformed_or_non_execute_boss_command() -> None:
         parameters = {**base, key: value}
         return BossCommand("execute", attack_id, tuple(parameters.items()))
 
-    commands = (
-        BossCommand("telegraph", "bad.command", ()),
-        malformed("bad.width", "width", 16.0),
-        malformed("bad.x", "x", "two"),
-        malformed("bad.pierce", "pierce", True),
-        malformed("bad.cuts", "cuts_projectiles", 1),
-        malformed("bad.guard", "guard_break", 1),
-        malformed("bad.pull", "pull_strength", "forty"),
-        malformed("bad.interaction", "interaction_kind", 1),
+    commands = tuple(
+        sorted(
+            (
+                BossCommand("telegraph", "bad.command", ()),
+                malformed("bad.width", "width", 16.0),
+                malformed("bad.x", "x", "two"),
+                malformed("bad.pierce", "pierce", True),
+                malformed("bad.cuts", "cuts_projectiles", 1),
+                malformed("bad.guard", "guard_break", 1),
+                malformed("bad.pull", "pull_strength", "forty"),
+                malformed("bad.interaction", "interaction_kind", 1),
+            ),
+            key=boss_command_sort_key,
+        )
     )
     world = _motion_world()
     boss = _add(
@@ -708,6 +713,48 @@ def test_spawn_retains_every_malformed_or_non_execute_boss_command() -> None:
     retained = world.resources["boss_commands"]
     assert isinstance(retained, tuple)
     assert set(retained) == set(commands)
+
+
+def test_spawn_validates_converted_boss_request_before_any_mutation() -> None:
+    world = _motion_world()
+    boss = _add(
+        world,
+        BossState("rootjaw", 1, 0, "phase", 0, "active", 1, "attack"),
+        Transform(0.0, 0.0),
+    )
+    assert boss == 1
+    invalid = BossCommand(
+        "execute",
+        "rootjaw.invalid",
+        (
+            ("damage", 0),
+            ("height", 12),
+            ("knockback_x", 20.0),
+            ("knockback_y", -10.0),
+            ("ttl_ms", 100),
+            ("vx", 40.0),
+            ("vy", 0.0),
+            ("width", 16),
+            ("x", 2.0),
+            ("y", 3.0),
+        ),
+    )
+    injected = (invalid,)
+    world.resources["attack_requests"] = []
+    world.resources["pending_enemy_launches"] = []
+    world.resources["boss_commands"] = injected
+    baseline_alive = set(world.alive_entities)
+    baseline_next_entity_id = world._next_entity_id
+
+    with pytest.raises(ValueError, match="AttackRequest.damage"):
+        AttackSpawnSystem().update(world, 16)
+
+    assert world.resources["boss_commands"] is injected
+    assert world.resources["attack_requests"] == []
+    assert world.resources["pending_enemy_launches"] == []
+    assert world.alive_entities == baseline_alive
+    assert world._next_entity_id == baseline_next_entity_id
+    assert world.events.peek() == []
 
 
 def test_attack_snapshot_is_frozen_sorted_and_reset_matches_fresh_runtime() -> None:

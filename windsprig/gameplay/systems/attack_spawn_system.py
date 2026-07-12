@@ -9,6 +9,7 @@ from windsprig.gameplay.bosses import (
     BossCommand,
     BossState,
     boss_command_sort_key,
+    validate_boss_commands,
 )
 from windsprig.gameplay.components import (
     Attack,
@@ -21,6 +22,7 @@ from windsprig.gameplay.components import (
 )
 from windsprig.gameplay.events import GameplayTopic, publish
 from windsprig.gameplay.validation import (
+    validate_attack_request,
     validate_attack_requests,
     validate_pending_enemy_launches,
 )
@@ -41,9 +43,10 @@ class AttackSpawnSystem:
             raw_pending_launches,
         )
         boss_requests, retained = _boss_requests(world)
+        validated_boss_requests = tuple(validate_attack_request(request) for request in boss_requests)
         world.resources["boss_commands"] = retained
 
-        queued = queued_requests + boss_requests
+        queued = queued_requests + validated_boss_requests
         requests.clear()
         for request in queued:
             attack_id = _spawn(world, request)
@@ -106,7 +109,7 @@ def _spawn(world: World, request: AttackRequest) -> int:
 
 
 def _boss_requests(world: World) -> tuple[tuple[AttackRequest, ...], tuple[BossCommand, ...]]:
-    commands = cast(tuple[BossCommand, ...], world.resources.get("boss_commands", ()))
+    commands = validate_boss_commands(world.resources.get("boss_commands"))
     boss_rows = world.query(BossState)
     if len(boss_rows) != 1:
         return (), commands
@@ -114,7 +117,7 @@ def _boss_requests(world: World) -> tuple[tuple[AttackRequest, ...], tuple[BossC
     requests: list[AttackRequest] = []
     retained: list[BossCommand] = []
     for command in commands:
-        request = _boss_request(owner_id, command)
+        request = boss_attack_request(owner_id, command)
         if request is None:
             retained.append(command)
         else:
@@ -122,7 +125,7 @@ def _boss_requests(world: World) -> tuple[tuple[AttackRequest, ...], tuple[BossC
     return tuple(requests), tuple(sorted(retained, key=boss_command_sort_key))
 
 
-def _boss_request(owner_id: int, command: BossCommand) -> AttackRequest | None:
+def boss_attack_request(owner_id: int, command: BossCommand) -> AttackRequest | None:
     if command.command != "execute":
         return None
     values = dict(command.parameters)
@@ -166,4 +169,4 @@ def _boss_request(owner_id: int, command: BossCommand) -> AttackRequest | None:
     )
 
 
-__all__ = ["AttackSpawnSystem"]
+__all__ = ["AttackSpawnSystem", "boss_attack_request"]
