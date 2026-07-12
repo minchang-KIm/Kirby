@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import windsprig.input as input_api
 from windsprig.input.bindings import KEYBOARD_BINDINGS
 from windsprig.input.commands import (
     AbilityUseCommand,
     DrawStartCommand,
+    GatherConfirmCommand,
     InputFrame,
     JumpCommand,
     MoveCommand,
@@ -17,6 +19,10 @@ class FakeKeys:
 
     def __getitem__(self, key: int) -> int:
         return 1 if key in self.pressed else 0
+
+
+def test_gather_confirmation_is_available_from_the_public_input_api() -> None:
+    assert input_api.GatherConfirmCommand is GatherConfirmCommand
 
 
 def test_keyboard_command_mapping() -> None:

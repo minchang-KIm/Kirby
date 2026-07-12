@@ -15,6 +15,7 @@ from windsprig.gameplay.abilities import AbilityContext, create_default_registry
 from windsprig.gameplay.components import DamageRecord, Health, StageGoal, Transform
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.gameplay.session import GameSession
+from windsprig.gameplay.snapshot import PlayerView, StageFrame
 from windsprig.input.commands import InputCommand, InputFrame
 from windsprig.input.roster import ActivePlayer, DeviceRef
 
@@ -118,6 +119,61 @@ def make_runtime(
     runtime.world.events.subscribe("*", recorded_events.append)
     runtime.test_events = recorded_events
     return runtime
+
+
+def make_coop_runtime(player_count: int = 2) -> _RecordingStageRuntime:
+    """Build a flat stage with canonical slots and distinct spawn anchors."""
+
+    if type(player_count) is not int or not 2 <= player_count <= 4:
+        raise ValueError("co-op player count must be an integer in [2, 4]")
+    players = tuple(make_active_player(slot, leader=slot == 1) for slot in range(1, player_count + 1))
+    spawns = tuple((64.0 + (slot - 1) * 48.0, 160.0) for slot in range(1, player_count + 1))
+    return make_runtime(players, make_stage(player_spawns=spawns))
+
+
+def player_view(runtime: StageRuntime, slot: int) -> PlayerView:
+    """Return the immutable view for one active test slot."""
+
+    return next(player for player in runtime.snapshot().players if player.slot == slot)
+
+
+def move_player_to_goal(runtime: StageRuntime, slot: int) -> None:
+    """Place one player inside the production goal collider."""
+
+    entity_id = runtime.player_entities[slot]
+    _, _, goal = runtime.world.query(StageGoal, Transform)[0]
+    transform = runtime.world.get_component(entity_id, Transform)
+    transform.x, transform.y = goal.x, goal.y
+
+
+def move_player_away_from_goal(runtime: StageRuntime, slot: int) -> None:
+    """Place one player at a stable non-goal floor position."""
+
+    transform = runtime.world.get_component(runtime.player_entities[slot], Transform)
+    transform.x, transform.y = 64.0 + (slot - 1) * 48.0, 160.0
+
+
+def defeat_player(runtime: StageRuntime, slot: int) -> StageFrame:
+    """Defeat one player through the typed production damage queue."""
+
+    entity_id = runtime.player_entities[slot]
+    health = runtime.world.get_component(entity_id, Health)
+    queue = runtime.world.resources["damage_queue"]
+    if not isinstance(queue, list):
+        raise TypeError("damage_queue must be a list")
+    queue.append(DamageRecord(0, entity_id, health.maximum, 0.0, -220.0, True))
+    return runtime.step(InputFrame.empty())
+
+
+def step_count(runtime: StageRuntime, count: int) -> StageFrame:
+    """Advance exactly ``count`` fixed steps and return the final frame."""
+
+    if type(count) is not int or count <= 0:
+        raise ValueError("step count must be a positive integer")
+    frame_result = runtime.step(InputFrame.empty())
+    for _ in range(count - 1):
+        frame_result = runtime.step(InputFrame.empty())
+    return frame_result
 
 
 def make_session() -> GameSession:

@@ -21,6 +21,7 @@ from windsprig.gameplay.components import (
     EnemyAI,
     EnemyDropAbility,
     Facing,
+    GatherState,
     Health,
     Interaction,
     MovementState,
@@ -186,4 +187,5 @@ class EntityFactory:
             entity_id,
             StageGoal(node_id=stage.node_id, world_id=stage.world_id, stage_id=stage.stage_id),
         )
+        self.world.add_component(entity_id, GatherState())
         return entity_id

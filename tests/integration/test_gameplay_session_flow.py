@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.helpers.gameplay import make_active_player, make_session
+from tests.helpers.gameplay import frame, make_active_player, make_session, make_stage, move_player_to_goal
 from windsprig.config import GameConfig
 from windsprig.content import load_catalog_bundle
 from windsprig.gameplay.abilities import create_default_registry
@@ -16,7 +16,7 @@ from windsprig.gameplay.session import (
     SessionNavigation,
     SessionPhase,
 )
-from windsprig.input.commands import InputFrame
+from windsprig.input.commands import GatherConfirmCommand, InputFrame
 
 
 def _start(session: GameSession) -> None:
@@ -149,3 +149,35 @@ def test_every_campaign_stage_spawns_its_exact_checkpoint_catalog() -> None:
         )
         assert len(runtime.world.query(Checkpoint)) == len(stage.checkpoints)
         assert runtime.world.resources["active_checkpoint_id"] == stage.checkpoints[0].checkpoint_id
+
+
+def test_coop_leader_gather_transitions_session_on_the_188th_followup_step() -> None:
+    config = GameConfig()
+    session = GameSession.create(
+        config,
+        make_stage(player_spawns=((64.0, 160.0), (112.0, 160.0))),
+        create_default_registry(config.content_dir),
+        (make_active_player(1, leader=True), make_active_player(2)),
+        seed=77,
+    )
+    _start(session)
+    move_player_to_goal(session.runtime, 1)
+
+    started = session.step(frame(1, GatherConfirmCommand(player_slot=1, pressed=True)))
+    assert started.phase is SessionPhase.PLAYING
+    assert started.stage.goal_gather.countdown_remaining_ms == 3_000
+    for _ in range(187):
+        penultimate = session.step(InputFrame.empty())
+    assert penultimate.phase is SessionPhase.PLAYING
+    assert penultimate.stage.goal_gather.countdown_remaining_ms == 8
+
+    victory = session.step(InputFrame.empty())
+
+    assert victory.phase is SessionPhase.VICTORY
+    assert victory.result is not None
+    assert victory.result.active_slots == (1, 2)
+    assert session.last_frame is not None
+    assert tuple(event.topic for event in session.last_frame.events)[-2:] == (
+        "GatherCompleted",
+        "StageCompleted",
+    )

@@ -35,6 +35,7 @@ from windsprig.gameplay.components import (
     EnemyAI,
     EnemyDropAbility,
     Facing,
+    GatherState,
     Health,
     Interaction,
     MovementState,
@@ -84,6 +85,7 @@ from windsprig.gameplay.systems import (
     StageGoalSystem,
 )
 from windsprig.gameplay.systems.attack_spawn_system import boss_attack_request
+from windsprig.gameplay.systems.stage_goal_system import goal_participation
 from windsprig.gameplay.validation import (
     build_stage_result,
     validate_attack_request,
@@ -91,6 +93,7 @@ from windsprig.gameplay.validation import (
     validate_checkpoint_state,
     validate_damage_queue,
     validate_deaths_by_slot,
+    validate_gather_state,
     validate_pending_enemy_launches,
     validate_result_ids,
 )
@@ -253,9 +256,16 @@ class StageRuntime:
             raise TypeError("stage_outcome must be a StageOutcome")
         if outcome is not StageOutcome.RUNNING:
             raise ValueError("active players cannot change after a stage outcome")
+        cancellation = self._cancel_gather_for_roster_change(requested_players)
+        if cancellation is not None:
+            # Pause-lobby consumers observe cancellation before the roster edge
+            # that invalidated the countdown is applied.
+            self.world.events.notify(cancellation)
+            emitted.append(cancellation)
         raw_deaths = self.world.resources.get("deaths_by_slot")
         current_deaths = dict(validate_deaths_by_slot(raw_deaths, tuple(sorted(self.player_entities))))
 
+        roster_events: list[GameEvent] = []
         for slot in sorted(set(self.player_entities) - set(requested)):
             entity_id = self.player_entities[slot]
             capture = self.world.try_component(entity_id, CaptureState)
@@ -264,7 +274,7 @@ class StageRuntime:
             del self.player_entities[slot]
             self.world.destroy_entity(entity_id)
             current_deaths.pop(slot)
-            emitted.append(
+            roster_events.append(
                 make_event(
                     GameplayTopic.PLAYER_LEFT,
                     self.world.frame_index,
@@ -278,7 +288,7 @@ class StageRuntime:
             entity_id = self.factory.spawn_player(requested[slot], x, y)
             self.player_entities[slot] = entity_id
             current_deaths[slot] = 0
-            emitted.append(
+            roster_events.append(
                 make_event(
                     GameplayTopic.PLAYER_JOINED,
                     self.world.frame_index,
@@ -293,9 +303,40 @@ class StageRuntime:
 
         self.world.resources["active_players"] = requested_players
         self.world.resources["deaths_by_slot"] = current_deaths
-        for event in emitted:
+        for event in roster_events:
             self.world.events.notify(event)
+        emitted.extend(roster_events)
         return tuple(emitted)
+
+    def _cancel_gather_for_roster_change(
+        self,
+        requested_players: tuple[ActivePlayer, ...],
+    ) -> GameEvent | None:
+        current_authority = tuple(
+            (slot, self.world.get_component(entity_id, PlayerSlot).is_leader)
+            for slot, entity_id in sorted(self.player_entities.items())
+        )
+        requested_authority = tuple((player.slot, player.is_leader) for player in requested_players)
+        if current_authority == requested_authority:
+            return None
+        gather_rows = self.world.query(GatherState)
+        if len(gather_rows) > 1:
+            raise RuntimeError("stages must retain at most one gather state")
+        if not gather_rows:
+            return None
+        _, gather = cast(tuple[int, GatherState], gather_rows[0])
+        validate_gather_state(gather)
+        if gather.countdown_remaining_ms == 0:
+            return None
+        leader_slot = gather.cancel()
+        if leader_slot is None:
+            raise ValueError("an active gather countdown must retain its leader")
+        return make_event(
+            GameplayTopic.GATHER_CANCELLED,
+            self.world.frame_index,
+            leader_slot=leader_slot,
+            reason="roster_changed",
+        )
 
     def snapshot(self) -> StageSnapshot:
         """Build a deterministic immutable view from the current ECS state."""
@@ -364,6 +405,10 @@ class StageRuntime:
         if any(y < 0.0 for _, y in targets):
             raise ValueError("checkpoint player offsets must stay inside the stage")
         self._validate_retry_capture_state(rows)
+        gather_rows = self.world.query(GatherState)
+        if len(gather_rows) != 1:
+            raise RuntimeError("stages must retain exactly one gather state")
+        _, gather = cast(tuple[int, GatherState], gather_rows[0])
         deferred = self.world.resources.get("deferred_echo_pickup_ids")
         if deferred is not None and type(deferred) is not set:
             raise TypeError("deferred_echo_pickup_ids must be a set")
@@ -379,6 +424,8 @@ class StageRuntime:
         cast(list[PendingEnemyLaunch], self.world.resources["pending_enemy_launches"]).clear()
         self.world.resources["boss_commands"] = ()
         self.world.resources.pop("deferred_echo_pickup_ids", None)
+        gather.cancel()
+        gather.at_goal_slots = ()
 
         for index, row in enumerate(rows):
             (
@@ -412,6 +459,7 @@ class StageRuntime:
             actor.timer_ms = 0
             respawn.x, respawn.y = targets[index]
             respawn.timer_ms = 0
+            respawn.started_frame = -1
             _reset_control_intent(intent)
             movement.coyote_remaining_ms = 0
             movement.jump_buffer_remaining_ms = 0
@@ -643,6 +691,12 @@ class StageRuntime:
                 raise ValueError("player_entities must reference matching PlayerSlot components")
             active_authority.append((slot, player_slot.is_leader))
 
+        gather_rows = world.query(GatherState)
+        goal_gather_rows = world.query(StageGoal, GatherState)
+        if len(gather_rows) != 1 or len(goal_gather_rows) != 1:
+            raise RuntimeError("stages must retain exactly one goal-owned gather state")
+        validate_gather_state(cast(tuple[int, GatherState], gather_rows[0])[1])
+
         deaths = validate_deaths_by_slot(
             world.resources.get("deaths_by_slot"),
             active_slots,
@@ -755,7 +809,8 @@ class StageRuntime:
     def _build_snapshot(self) -> StageSnapshot:
         resources = self._validate_gameplay_resources(self.world)
         active_players = resources.active_players
-        active_slots = {player.slot for player in active_players}
+        active_slot_order = tuple(player.slot for player in active_players)
+        active_slots = set(active_slot_order)
         players = self._player_views(active_slots)
         enemies = self._enemy_views()
         attacks = self._attack_views()
@@ -772,15 +827,25 @@ class StageRuntime:
             )
             for _, checkpoint, transform in self.world.query(Checkpoint, Transform)
         )
-        goal_rows = self.world.query(StageGoal, Transform)
-        goal_x = float(goal_rows[0][2].x) if goal_rows else 0.0
-        goal_y = float(goal_rows[0][2].y) if goal_rows else 0.0
-        leader_slots = sorted(
+        goal_rows = self.world.query(StageGoal, GatherState, Transform, Collider)
+        if len(goal_rows) != 1:
+            raise RuntimeError("stages must retain exactly one goal and gather state")
+        _, _, gather, goal_transform, goal_collider = cast(
+            tuple[int, StageGoal, GatherState, Transform, Collider],
+            goal_rows[0],
+        )
+        _, required_slots, at_goal_slots = goal_participation(
+            self.world,
+            active_slot_order,
+            goal_transform,
+            goal_collider,
+        )
+        roster_leaders = tuple(
             slot.slot
             for entity_id, slot in self.world.query(PlayerSlot)
-            if (slot.slot in active_slots and self.player_entities.get(slot.slot) == entity_id and slot.is_leader)
+            if slot.slot in active_slots and self.player_entities.get(slot.slot) == entity_id and slot.is_leader
         )
-        leader_slot = leader_slots[0] if leader_slots else None
+        visible_leader_slot = gather.leader_slot if gather.leader_slot is not None else next(iter(roster_leaders), None)
         return StageSnapshot(
             frame_index=self._snapshot_frame_index,
             elapsed_ms=self._elapsed_ms,
@@ -795,13 +860,13 @@ class StageRuntime:
             interactions=interactions,
             checkpoints=checkpoints,
             goal_gather=GoalGatherView(
-                goal_x=goal_x,
-                goal_y=goal_y,
-                at_goal_slots=(),
-                required_slots=tuple(sorted(active_slots)),
-                leader_slot=leader_slot,
-                leader_confirmed=False,
-                countdown_remaining_ms=0,
+                goal_x=float(goal_transform.x),
+                goal_y=float(goal_transform.y),
+                at_goal_slots=at_goal_slots,
+                required_slots=required_slots,
+                leader_slot=visible_leader_slot,
+                leader_confirmed=gather.leader_confirmed,
+                countdown_remaining_ms=gather.countdown_remaining_ms,
             ),
             camera_targets=camera_targets,
             bosses=bosses,
@@ -1061,3 +1126,4 @@ def _reset_control_intent(intent: ControlIntent) -> None:
     intent.guard_held = False
     intent.dodge_pressed = False
     intent.drop_pressed = False
+    intent.gather_confirmed = False

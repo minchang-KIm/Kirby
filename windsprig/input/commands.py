@@ -61,6 +61,13 @@ class DropAbilityCommand(InputCommand):
 
 
 @dataclass(frozen=True, slots=True)
+class GatherConfirmCommand(InputCommand):
+    """Request a leader-owned team gather on one gameplay action edge."""
+
+    pressed: bool
+
+
+@dataclass(frozen=True, slots=True)
 class NavigateCommand(InputCommand):
     x: int
     y: int

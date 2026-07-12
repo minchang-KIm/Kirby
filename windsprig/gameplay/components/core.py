@@ -71,6 +71,7 @@ class ControlIntent:
     guard_held: bool = False
     dodge_pressed: bool = False
     drop_pressed: bool = False
+    gather_confirmed: bool = False
 
 
 @dataclass
@@ -231,10 +232,30 @@ class StageGoal:
 
 
 @dataclass
+class GatherState:
+    """Hashed team-gather countdown and its current goal participation."""
+
+    leader_slot: int | None = None
+    leader_confirmed: bool = False
+    countdown_remaining_ms: int = 0
+    at_goal_slots: tuple[int, ...] = ()
+
+    def cancel(self) -> int | None:
+        """Reset an active countdown and return its prior leader slot."""
+
+        leader_slot = self.leader_slot
+        self.leader_slot = None
+        self.leader_confirmed = False
+        self.countdown_remaining_ms = 0
+        return leader_slot
+
+
+@dataclass
 class Respawn:
     x: float
     y: float
     timer_ms: int = 0
+    started_frame: int = -1
 
 
 @dataclass

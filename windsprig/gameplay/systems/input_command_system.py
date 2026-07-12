@@ -10,6 +10,7 @@ from windsprig.input.commands import (
     DrawReleaseCommand,
     DrawStartCommand,
     DropAbilityCommand,
+    GatherConfirmCommand,
     GuardCommand,
     HoverCommand,
     InputFrame,
@@ -31,6 +32,7 @@ class InputCommandSystem:
             intent.ability_consumed = False
             intent.dodge_pressed = False
             intent.drop_pressed = False
+            intent.gather_confirmed = False
         if not isinstance(input_frame, InputFrame):
             return
 
@@ -68,3 +70,5 @@ class InputCommandSystem:
                     intent.dodge_pressed = command.pressed
                 elif isinstance(command, DropAbilityCommand):
                     intent.drop_pressed = command.pressed
+                elif isinstance(command, GatherConfirmCommand):
+                    intent.gather_confirmed = intent.gather_confirmed or command.pressed

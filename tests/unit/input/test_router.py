@@ -10,6 +10,7 @@ from windsprig.input.commands import (
     DrawReleaseCommand,
     DrawStartCommand,
     DropAbilityCommand,
+    GatherConfirmCommand,
     GuardCommand,
     HoverCommand,
     JumpCommand,
@@ -157,6 +158,7 @@ def test_keyboard_routes_every_gameplay_edge_and_released_held_value() -> None:
     assert any(isinstance(command, DrawReleaseCommand) for command in pressed)
     assert AbilityUseCommand(1, held=False) in pressed
     assert AbilityUseCommand(1, pressed=True) in pressed
+    assert GatherConfirmCommand(1, pressed=True) in pressed
     assert AbilityUseCommand(1, released=True) in pressed
     assert any(isinstance(command, DodgeCommand) for command in pressed)
     assert any(isinstance(command, DropAbilityCommand) for command in pressed)
@@ -236,6 +238,7 @@ def test_assigned_gamepad_routes_primary_cancel_pause_and_hat_edges() -> None:
     assert any(isinstance(command, ConfirmCommand) for command in commands)
     assert AbilityUseCommand(player.slot, held=False) in commands
     assert AbilityUseCommand(player.slot, pressed=True) in commands
+    assert GatherConfirmCommand(player.slot, pressed=True) in commands
     assert AbilityUseCommand(player.slot, released=True) in commands
     gamepad_cancel = next(command for command in commands if isinstance(command, CancelCommand))
     assert getattr(gamepad_cancel, "origin", None) == "ability_button"

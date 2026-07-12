@@ -14,6 +14,7 @@ from windsprig.input.commands import (
     DrawReleaseCommand,
     DrawStartCommand,
     DropAbilityCommand,
+    GatherConfirmCommand,
     GuardCommand,
     HoverCommand,
     JumpCommand,
@@ -84,6 +85,7 @@ def test_keyboard_builder_emits_every_edge_and_continuous_command() -> None:
     assert DrawStartCommand(player_slot=1) in commands
     assert DrawReleaseCommand(player_slot=1) in commands
     assert AbilityUseCommand(player_slot=1, pressed=True) in commands
+    assert GatherConfirmCommand(player_slot=1, pressed=True) in commands
     assert AbilityUseCommand(player_slot=1, held=False) in commands
     assert DodgeCommand(player_slot=1, pressed=True) in commands
     assert DropAbilityCommand(player_slot=1, pressed=True) in commands
@@ -147,6 +149,7 @@ def test_gamepad_builder_emits_held_state_and_every_supported_edge(monkeypatch: 
     assert DrawStartCommand(player_slot=3) in commands
     assert DrawReleaseCommand(player_slot=3) in commands
     assert AbilityUseCommand(player_slot=3, pressed=True) in commands
+    assert GatherConfirmCommand(player_slot=3, pressed=True) in commands
     assert AbilityUseCommand(player_slot=3, held=True) in commands
     assert AbilityUseCommand(player_slot=3, released=True) in commands
     assert DodgeCommand(player_slot=3, pressed=True) in commands

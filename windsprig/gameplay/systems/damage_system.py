@@ -110,6 +110,7 @@ class DamageSystem:
                     respawn = world.try_component(target_id, Respawn)
                     if respawn is not None:
                         respawn.timer_ms = config.respawn_delay_ms
+                        respawn.started_frame = world.frame_index
                     publish(
                         world,
                         GameplayTopic.PLAYER_DEFEATED,

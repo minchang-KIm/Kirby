@@ -13,6 +13,7 @@ from windsprig.gameplay.components import (
     Checkpoint,
     Collider,
     DamageRecord,
+    GatherState,
     PendingEnemyLaunch,
     PlayerSlot,
     Transform,
@@ -21,6 +22,38 @@ from windsprig.gameplay.snapshot import StageResult
 from windsprig.input.roster import ActivePlayer
 
 type CheckpointRow = tuple[int, Checkpoint, Transform, Collider]
+
+
+def validate_gather_state(value: object) -> GatherState:
+    """Validate one hashed gather component and its active/idle lifecycle."""
+
+    if type(value) is not GatherState:
+        raise TypeError("gather state must be a GatherState")
+    gather = value
+    if gather.leader_slot is not None:
+        if type(gather.leader_slot) is not int:
+            raise TypeError("gather leader slot must be an integer")
+        if not 1 <= gather.leader_slot <= 4:
+            raise ValueError("gather leader slot must be in [1, 4]")
+    _exact_bool(gather.leader_confirmed, "gather leader confirmation")
+    if type(gather.countdown_remaining_ms) is not int:
+        raise TypeError("gather countdown must be an integer")
+    if gather.countdown_remaining_ms < 0:
+        raise ValueError("gather countdown must be non-negative")
+    if type(gather.at_goal_slots) is not tuple:
+        raise TypeError("gather at-goal slots must be a tuple")
+    if any(type(slot) is not int for slot in gather.at_goal_slots):
+        raise TypeError("gather at-goal slots must contain integer slots")
+    if any(not 1 <= slot <= 4 for slot in gather.at_goal_slots):
+        raise ValueError("gather at-goal slots must be in [1, 4]")
+    if gather.at_goal_slots != tuple(sorted(set(gather.at_goal_slots))):
+        raise ValueError("gather at-goal slots must be unique canonical order")
+    if gather.countdown_remaining_ms == 0:
+        if gather.leader_slot is not None or gather.leader_confirmed:
+            raise ValueError("idle gather must not retain leader state")
+    elif gather.leader_slot is None or not gather.leader_confirmed:
+        raise ValueError("active gather requires a confirmed leader")
+    return gather
 
 
 def validate_attack_requests(value: object) -> tuple[AttackRequest, ...]:
@@ -333,6 +366,7 @@ __all__ = [
     "validate_checkpoint_state",
     "validate_damage_queue",
     "validate_deaths_by_slot",
+    "validate_gather_state",
     "validate_pending_enemy_launches",
     "validate_result_ids",
 ]

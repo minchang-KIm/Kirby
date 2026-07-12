@@ -13,6 +13,7 @@ from .commands import (
     DrawReleaseCommand,
     DrawStartCommand,
     DropAbilityCommand,
+    GatherConfirmCommand,
     GuardCommand,
     HoverCommand,
     InputCommand,
@@ -113,6 +114,9 @@ class InputDeviceMux:
             commands.append(DrawReleaseCommand(player_slot=slot))
         if GAMEPAD_BINDING.ability_button in edge_down:
             commands.append(AbilityUseCommand(player_slot=slot, pressed=True))
+            # The same explicit action edge lets the goal system interpret a
+            # leader confirmation without teaching devices about stage state.
+            commands.append(GatherConfirmCommand(player_slot=slot, pressed=True))
         if GAMEPAD_BINDING.ability_button in edge_up:
             commands.append(AbilityUseCommand(player_slot=slot, released=True))
         if GAMEPAD_BINDING.dodge_button in edge_down:
@@ -144,6 +148,7 @@ def build_keyboard_commands(
         commands.append(DrawReleaseCommand(player_slot=slot))
     if profile.ability in edge_down:
         commands.append(AbilityUseCommand(player_slot=slot, pressed=True))
+        commands.append(GatherConfirmCommand(player_slot=slot, pressed=True))
     if profile.ability in edge_up:
         commands.append(AbilityUseCommand(player_slot=slot, released=True))
     if profile.dodge in edge_down:

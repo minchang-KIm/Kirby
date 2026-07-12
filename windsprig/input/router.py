@@ -17,6 +17,7 @@ from windsprig.input.commands import (
     DrawReleaseCommand,
     DrawStartCommand,
     DropAbilityCommand,
+    GatherConfirmCommand,
     GuardCommand,
     HoverCommand,
     InputCommand,
@@ -237,8 +238,11 @@ class InputRouter:
             if event.button == GAMEPAD_BINDING.draw_button:
                 return [DrawStartCommand(slot)]
             if event.button == GAMEPAD_BINDING.ability_button:
+                # Gameplay decides whether this shared action edge is an ability
+                # press, a leader gather confirmation, or both in the current state.
                 return [
                     AbilityUseCommand(slot, True),
+                    GatherConfirmCommand(slot, True),
                     CancelCommand(slot, origin="ability_button"),
                 ]
             if event.button == GAMEPAD_BINDING.dodge_button:
@@ -348,7 +352,7 @@ def _keyboard_event_commands(
     elif key == profile.draw:
         commands.append(DrawStartCommand(slot))
     elif key == profile.ability:
-        commands.append(AbilityUseCommand(slot, True))
+        commands.extend((AbilityUseCommand(slot, True), GatherConfirmCommand(slot, True)))
     elif key == profile.dodge:
         commands.append(DodgeCommand(slot, True))
     elif key == profile.drop_ability:

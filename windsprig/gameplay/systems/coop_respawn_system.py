@@ -1,7 +1,8 @@
-"""Own stage-boundary defeat and the pre-Task-10 teammate recovery seam."""
+"""Own stage-boundary defeat and active-team living-anchor recovery."""
 
 from __future__ import annotations
 
+import math
 from typing import cast
 
 from windsprig.config import GameConfig
@@ -12,6 +13,7 @@ from windsprig.gameplay.components import (
     ActorState,
     Collider,
     DamageRecord,
+    GatherState,
     Health,
     PlayerSlot,
     Respawn,
@@ -20,7 +22,7 @@ from windsprig.gameplay.components import (
 )
 from windsprig.gameplay.events import GameplayTopic, publish
 from windsprig.gameplay.snapshot import StageOutcome
-from windsprig.gameplay.validation import validate_damage_queue
+from windsprig.gameplay.validation import validate_damage_queue, validate_gather_state
 from windsprig.input.roster import ActivePlayer
 
 type PlayerRespawnRow = tuple[
@@ -34,6 +36,23 @@ type PlayerRespawnRow = tuple[
     ActorState,
 ]
 type PlayerBoundaryRow = tuple[int, PlayerSlot, Transform, Health]
+
+FORMATION_SPACING_PX = 18.0
+
+
+def formation_x_for_slot(anchor_x: float, slot: int) -> float:
+    """Map a one-based player slot to its zero-based team formation offset."""
+
+    if type(anchor_x) not in {int, float}:
+        raise TypeError("formation anchor x must be a number")
+    if not math.isfinite(anchor_x):
+        raise ValueError("formation anchor x must be finite")
+    if type(slot) is not int:
+        raise TypeError("formation slot must be an integer")
+    if not 1 <= slot <= 4:
+        raise ValueError("formation slot must be in [1, 4]")
+    # Slot one owns offset zero; later one-based slots advance by one spacing.
+    return float(anchor_x) + FORMATION_SPACING_PX * (slot - 1)
 
 
 class CoopRespawnSystem:
@@ -108,6 +127,20 @@ class CoopRespawnSystem:
 
         living = [row for row in active_boundary_rows if not row[3].dead]
         if not living:
+            gather_rows = world.query(GatherState)
+            if len(gather_rows) > 1:
+                raise RuntimeError("stages must retain at most one gather state")
+            if gather_rows:
+                _, gather = cast(tuple[int, GatherState], gather_rows[0])
+                validate_gather_state(gather)
+                leader_slot = gather.cancel()
+                if leader_slot is not None:
+                    publish(
+                        world,
+                        GameplayTopic.GATHER_CANCELLED,
+                        leader_slot=leader_slot,
+                        reason="leader_defeated",
+                    )
             world.resources["stage_result"] = None
             world.resources["stage_outcome"] = StageOutcome.FAILED
             publish(
@@ -119,8 +152,6 @@ class CoopRespawnSystem:
             )
             return
 
-        # Task 10 replaces this existing prototype recovery with the final gather
-        # and living-anchor contract; Task 9 only prevents it from defeating all-dead.
         anchor = (living[0][2].x, living[0][2].y)
         checkpoint_id = world.resources.get("active_checkpoint_id")
         if type(checkpoint_id) is not str or not checkpoint_id:
@@ -132,6 +163,8 @@ class CoopRespawnSystem:
         for entity_id, slot, respawn, transform, velocity, collider, health, state in active_rows:
             if not health.dead:
                 continue
+            if respawn.started_frame == world.frame_index:
+                continue
             respawn.timer_ms = max(0, respawn.timer_ms - dt_ms)
             if respawn.timer_ms > 0 or slot.lives <= 0:
                 continue
@@ -139,12 +172,13 @@ class CoopRespawnSystem:
             health.dead = False
             health.current = max(1, health.maximum // 2)
             health.invulnerable_ms = invulnerable_ms
-            transform.x = anchor[0] + 18 * (slot.slot - 1)
+            transform.x = formation_x_for_slot(anchor[0], slot.slot)
             transform.y = anchor[1] - 28
             velocity.vx = 0.0
             velocity.vy = -100.0
             collider.on_ground = False
             state.name = "Idle"
+            respawn.started_frame = -1
             publish(
                 world,
                 GameplayTopic.PLAYER_RESPAWNED,
@@ -169,4 +203,4 @@ class CoopRespawnSystem:
         return slots
 
 
-__all__ = ["CoopRespawnSystem"]
+__all__ = ["CoopRespawnSystem", "formation_x_for_slot"]

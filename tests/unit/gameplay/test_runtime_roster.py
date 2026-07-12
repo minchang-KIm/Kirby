@@ -18,6 +18,7 @@ from windsprig.gameplay.components import (
     Collider,
     ControlIntent,
     DefenseState,
+    GatherState,
     Health,
     MovementState,
     PlayerSlot,
@@ -225,6 +226,35 @@ def test_malformed_active_player_resource_is_rejected_by_view_and_hash(
         "mismatched": (p1,),
     }[case]
     runtime.world.resources["active_players"] = malformed
+
+    assert_view_and_hash_reject(runtime, error, match)
+
+
+@pytest.mark.parametrize(
+    ("mutations", "error", "match"),
+    (
+        ({"leader_slot": "1"}, TypeError, "gather leader slot must be an integer"),
+        ({"leader_slot": 5}, ValueError, r"gather leader slot must be in \[1, 4\]"),
+        ({"leader_confirmed": 1}, TypeError, "gather leader confirmation must be a boolean"),
+        ({"countdown_remaining_ms": "1"}, TypeError, "gather countdown must be an integer"),
+        ({"countdown_remaining_ms": -1}, ValueError, "gather countdown must be non-negative"),
+        ({"at_goal_slots": [1]}, TypeError, "gather at-goal slots must be a tuple"),
+        ({"at_goal_slots": (True,)}, TypeError, "gather at-goal slots must contain integer slots"),
+        ({"at_goal_slots": (5,)}, ValueError, r"gather at-goal slots must be in \[1, 4\]"),
+        ({"at_goal_slots": (2, 1)}, ValueError, "gather at-goal slots must be unique canonical order"),
+        ({"leader_slot": 1}, ValueError, "idle gather must not retain leader state"),
+        ({"countdown_remaining_ms": 1}, ValueError, "active gather requires a confirmed leader"),
+    ),
+)
+def test_malformed_gather_state_is_rejected_by_view_and_hash(
+    mutations: dict[str, object],
+    error: type[Exception],
+    match: str,
+) -> None:
+    runtime = make_runtime()
+    _, gather = runtime.world.query(GatherState)[0]
+    for field, value in mutations.items():
+        setattr(gather, field, value)
 
     assert_view_and_hash_reject(runtime, error, match)
 
