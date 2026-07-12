@@ -529,7 +529,9 @@ def test_font_license_ledger_records_only_present_task_5_asset_provenance() -> N
         PINNED_COMMIT,
         "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252",
         "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9",
-        "Noto Sans KR is redistributed unmodified under the SIL Open Font License 1.1.",
+        "The pinned Noto Sans KR source is redistributed unmodified.",
+        "WindsprigSansKR.ttf",
+        "4211e2545aa28f0a9e6c72d61a9996663b3160f7b6ce54d6563e065543743f58",
         "assets/generated/art-provenance.json",
         "assets/generated/audio-provenance.json",
     ):
@@ -539,6 +541,7 @@ def test_font_license_ledger_records_only_present_task_5_asset_provenance() -> N
 def test_bundled_font_and_license_match_pinned_release_files() -> None:
     attributes = set(Path(".gitattributes").read_text(encoding="utf-8").splitlines())
     assert "assets/fonts/NotoSansKR[[]wght].ttf binary" in attributes
+    assert "assets/fonts/WindsprigSansKR.ttf binary" in attributes
     assert "assets/fonts/OFL-NotoSansKR.txt binary" in attributes
     assert hashlib.sha256(FONT_PATH.read_bytes()).hexdigest() == (
         "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252"

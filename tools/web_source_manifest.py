@@ -24,6 +24,7 @@ _WEB_ENTRY_FILES: Final = (
     "template.tmpl",
 )
 _GENERATED_RUNTIME_FILES: Final = frozenset({"windsprig/_build_flags.py"})
+_SOURCE_ONLY_RUNTIME_FILES: Final = frozenset({"assets/fonts/NotoSansKR[wght].ttf"})
 
 
 class SourceProvenanceError(RuntimeError):
@@ -67,6 +68,8 @@ def runtime_source_files(root: Path) -> tuple[Path, ...]:
         for path in source.rglob("*"):
             relative = path.relative_to(lexical_root)
             if relative.as_posix() in _GENERATED_RUNTIME_FILES:
+                continue
+            if relative.as_posix() in _SOURCE_ONLY_RUNTIME_FILES:
                 continue
             if any(part.lower() in _IGNORED_DIRS for part in relative.parts):
                 continue

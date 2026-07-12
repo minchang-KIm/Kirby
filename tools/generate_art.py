@@ -24,6 +24,7 @@ import pygame
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from tools.generate_font_subset import RUNTIME_FONT, RUNTIME_FONT_SHA256
 from windsprig.content.loader import load_asset_manifest
 
 type Color = tuple[int, int, int]
@@ -32,7 +33,7 @@ type Point = tuple[int, int]
 DEFAULT_ROOT: Final = Path(__file__).resolve().parents[1]
 ALGORITHM: Final = "procedural-vector-v1"
 LICENSE_TEXT: Final = "Original project art distributed under the root MIT license"
-FONT_SHA256: Final = "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252"
+FONT_PATH: Final = RUNTIME_FONT.relative_to("assets").as_posix()
 OUTLINE: Final[Color] = (22, 32, 43)
 INK_LIGHT: Final[Color] = (245, 247, 226)
 SPRIG_MINT: Final[Color] = (119, 222, 153)
@@ -949,8 +950,8 @@ def _manifest_document(root: Path, entries: Sequence[ArtEntry]) -> dict[str, obj
         "font": {
             "license": "fonts/OFL-NotoSansKR.txt",
             "mandatory": True,
-            "path": "fonts/NotoSansKR[wght].ttf",
-            "sha256": FONT_SHA256,
+            "path": FONT_PATH,
+            "sha256": RUNTIME_FONT_SHA256,
         },
         "provenance_files": sorted(provenance_files),
     }

@@ -473,8 +473,8 @@
   "font": {
     "license": "fonts/OFL-NotoSansKR.txt",
     "mandatory": true,
-    "path": "fonts/NotoSansKR[wght].ttf",
-    "sha256": "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252"
+    "path": "fonts/WindsprigSansKR.ttf",
+    "sha256": "4211e2545aa28f0a9e6c72d61a9996663b3160f7b6ce54d6563e065543743f58"
   },
   "provenance_files": [
     "generated/art-provenance.json"
