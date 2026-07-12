@@ -6,8 +6,7 @@ import hashlib
 import json
 import os
 import re
-import shutil
-import tempfile
+import secrets
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -16,7 +15,13 @@ from typing import Final, cast
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
-from tools.release_common import _DirectoryHandle, _protected_directory_chain, _verify_directory
+from tools.release_common import (
+    _DirectoryHandle,
+    _entry_lstat,
+    _protected_directory_chain,
+    _verified_regular_file,
+    _verify_directory,
+)
 
 RUNTIME_MANIFEST_NAME: Final = "runtime-manifest.json"
 RUNTIME_CDN_PATH: Final = "runtime/0.9.3/"
@@ -202,14 +207,6 @@ def _verify_payload(payload: bytes, asset: RuntimeAsset, context: str) -> None:
         )
 
 
-def _verify_file(path: Path, asset: RuntimeAsset, context: str) -> None:
-    try:
-        payload = path.read_bytes()
-    except OSError as error:
-        raise _fail(f"{context}_read_failed", f"{asset.artifact_path}: {error}") from error
-    _verify_payload(payload, asset, context)
-
-
 @contextmanager
 def _protected_runtime_directory(path: Path, context: str) -> Iterator[_DirectoryHandle]:
     try:
@@ -221,6 +218,106 @@ def _protected_runtime_directory(path: Path, context: str) -> Iterator[_Director
         raise _fail(f"{context}_path", f"{path}: {error}") from error
 
 
+def _read_runtime_member(
+    directory: _DirectoryHandle,
+    name: str,
+    context: str,
+) -> bytes:
+    """Read one regular child through the already-verified directory handle."""
+
+    path = directory.path / name
+    try:
+        expected = _entry_lstat(directory, name)
+    except FileNotFoundError:
+        raise
+    except OSError as error:
+        raise _fail(f"{context}_read_failed", f"{path}: {error}") from error
+    try:
+        with _verified_regular_file(directory, name, path, expected) as (source, _opened):
+            return source.read()
+    except (OSError, ValueError) as error:
+        raise _fail(f"{context}_read_failed", f"{path}: {error}") from error
+
+
+def _write_runtime_member(
+    directory: _DirectoryHandle,
+    name: str,
+    payload: bytes,
+    context: str,
+) -> None:
+    """Atomically publish bytes without resolving the selected parent by path on POSIX."""
+
+    if not name or Path(name).name != name or name in {".", ".."}:
+        raise _fail(f"{context}_path", f"invalid runtime member name: {name!r}")
+    if type(payload) is not bytes:
+        raise TypeError("runtime member payload must be bytes")
+
+    _verify_directory(directory)
+    temporary_name = f".{name}.{secrets.token_hex(8)}.tmp"
+    temporary_path = directory.path / temporary_name
+    destination_path = directory.path / name
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+    if os.name == "nt":
+        flags |= getattr(os, "O_BINARY", 0)
+    else:
+        no_follow = getattr(os, "O_NOFOLLOW", None)
+        if no_follow is None:
+            raise _fail(f"{context}_path", "runtime publication requires O_NOFOLLOW")
+        flags |= no_follow
+
+    created = False
+    try:
+        if os.name == "nt":
+            descriptor = os.open(temporary_path, flags, 0o600)
+        else:
+            descriptor = os.open(
+                temporary_name,
+                flags,
+                0o600,
+                dir_fd=directory.descriptor,
+            )
+        created = True
+        try:
+            stream = os.fdopen(descriptor, "wb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        with stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+
+        if _read_runtime_member(directory, temporary_name, context) != payload:
+            raise _fail(f"{context}_write_failed", f"temporary verification failed: {temporary_path}")
+        _verify_directory(directory)
+        if os.name == "nt":
+            os.replace(temporary_path, destination_path)
+        else:
+            os.replace(
+                temporary_name,
+                name,
+                src_dir_fd=directory.descriptor,
+                dst_dir_fd=directory.descriptor,
+            )
+        created = False
+        if _read_runtime_member(directory, name, context) != payload:
+            raise _fail(f"{context}_write_failed", f"published verification failed: {destination_path}")
+        _verify_directory(directory)
+    except RuntimeIntegrityError:
+        raise
+    except (OSError, ValueError) as error:
+        raise _fail(f"{context}_write_failed", f"{destination_path}: {error}") from error
+    finally:
+        if created:
+            try:
+                if os.name == "nt":
+                    temporary_path.unlink(missing_ok=True)
+                else:
+                    os.unlink(temporary_name, dir_fd=directory.descriptor)
+            except FileNotFoundError:
+                pass
+
+
 def cache_runtime_asset(
     asset: RuntimeAsset,
     cache_dir: Path,
@@ -229,9 +326,16 @@ def cache_runtime_asset(
     """Return one verified cache entry, publishing a fetch with atomic replacement."""
     with _protected_runtime_directory(cache_dir, "runtime_cache") as cache_directory:
         target = cache_dir / asset.sha256
-        _verify_directory(cache_directory)
-        if target.exists():
-            _verify_file(target, asset, "runtime_cache")
+        try:
+            cached_payload = _read_runtime_member(
+                cache_directory,
+                asset.sha256,
+                "runtime_cache",
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            _verify_payload(cached_payload, asset, "runtime_cache")
             return target
 
         try:
@@ -241,28 +345,12 @@ def cache_runtime_asset(
         if type(payload) is not bytes:
             raise _fail("runtime_fetch_type", f"{asset.artifact_path}: expected bytes")
         _verify_payload(payload, asset, "runtime_fetch")
-        _verify_directory(cache_directory)
-
-        temporary_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                dir=cache_dir,
-                prefix=f".{asset.sha256}.",
-                suffix=".tmp",
-                delete=False,
-            ) as temporary:
-                temporary.write(payload)
-                temporary.flush()
-                os.fsync(temporary.fileno())
-                temporary_path = Path(temporary.name)
-            _verify_file(temporary_path, asset, "runtime_fetch")
-            _verify_directory(cache_directory)
-            os.replace(temporary_path, target)
-            temporary_path = None
-        finally:
-            if temporary_path is not None:
-                temporary_path.unlink(missing_ok=True)
-        _verify_file(target, asset, "runtime_cache")
+        _write_runtime_member(cache_directory, asset.sha256, payload, "runtime_cache")
+        _verify_payload(
+            _read_runtime_member(cache_directory, asset.sha256, "runtime_cache"),
+            asset,
+            "runtime_cache",
+        )
         return target
 
 
@@ -292,16 +380,31 @@ def stage_runtime_assets(
     total = 0
     for asset in manifest.assets:
         destination = output / Path(*PurePosixPath(asset.artifact_path).parts)
-        with _protected_runtime_directory(destination.parent, "runtime_stage"):
-            cached = cache_runtime_asset(asset, cache_dir, fetcher)
-            shutil.copyfile(cached, destination)
-            _verify_file(destination, asset, "runtime_stage")
+        with _protected_runtime_directory(destination.parent, "runtime_stage") as destination_directory:
+            cache_runtime_asset(asset, cache_dir, fetcher)
+            with _protected_runtime_directory(cache_dir, "runtime_cache") as cache_directory:
+                payload = _read_runtime_member(cache_directory, asset.sha256, "runtime_cache")
+                _verify_payload(payload, asset, "runtime_cache")
+            _write_runtime_member(
+                destination_directory,
+                destination.name,
+                payload,
+                "runtime_stage",
+            )
+            _verify_payload(
+                _read_runtime_member(destination_directory, destination.name, "runtime_stage"),
+                asset,
+                "runtime_stage",
+            )
         total += asset.size_bytes
     staged_manifest = output / "runtime" / RUNTIME_MANIFEST_NAME
-    with _protected_runtime_directory(staged_manifest.parent, "runtime_stage"):
-        staged_manifest.write_text(
-            json.dumps(_manifest_payload(manifest), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+    with _protected_runtime_directory(staged_manifest.parent, "runtime_stage") as manifest_directory:
+        manifest_payload = (json.dumps(_manifest_payload(manifest), indent=2, sort_keys=True) + "\n").encode("utf-8")
+        _write_runtime_member(
+            manifest_directory,
+            staged_manifest.name,
+            manifest_payload,
+            "runtime_stage",
         )
     return total
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -270,7 +271,6 @@ def test_cache_atomically_replaces_only_a_verified_temporary(
     assert not replacements[0][0].exists()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows handles enforce the swap exclusion contract")
 def test_cache_blocks_directory_swap_before_publishing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -324,7 +324,6 @@ def test_cache_blocks_directory_swap_before_publishing(
     assert swap_blocked or caught is not None
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows handles enforce the swap exclusion contract")
 def test_stage_blocks_runtime_directory_swap_before_copying(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -361,6 +360,105 @@ def test_stage_blocks_runtime_directory_swap_before_copying(
         return cached
 
     monkeypatch.setattr(web_runtime, "cache_runtime_asset", race_after_cache)
+    caught: RuntimeIntegrityError | None = None
+    try:
+        try:
+            stage_runtime_assets(manifest, tmp_path / "cache", output, lambda _url: payload)
+        except RuntimeIntegrityError as error:
+            caught = error
+        outside_entries = list(outside.rglob("*"))
+    finally:
+        if link_created:
+            _remove_directory_link(runtime)
+        if displaced.exists():
+            displaced.rename(runtime)
+
+    assert swap_attempted
+    assert outside_entries == []
+    assert swap_blocked or caught is not None
+
+
+def test_stage_publication_never_uses_path_following_copy_or_text_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"runtime"
+    asset = _asset(payload)
+    manifest = RuntimeManifest(1, "test-runtime", (asset,), "a" * 64)
+
+    def reject_path_publication(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("runtime publication must be descriptor-relative")
+
+    monkeypatch.setattr(shutil, "copyfile", reject_path_publication)
+    monkeypatch.setattr(Path, "write_text", reject_path_publication)
+
+    stage_runtime_assets(
+        manifest,
+        tmp_path / "cache",
+        tmp_path / "artifact",
+        lambda _url: payload,
+    )
+
+    assert (tmp_path / "artifact" / "runtime" / "test" / "runtime.bin").read_bytes() == payload
+    assert (tmp_path / "artifact" / "runtime" / "runtime-manifest.json").is_file()
+
+
+def test_runtime_publication_closes_descriptor_when_fdopen_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"runtime"
+    asset = _asset(payload)
+    captured: list[int] = []
+
+    def reject_fdopen(descriptor: int, *_args: object, **_kwargs: object) -> None:
+        captured.append(descriptor)
+        raise OSError("fdopen failed")
+
+    monkeypatch.setattr(web_runtime.os, "fdopen", reject_fdopen)
+
+    with pytest.raises(RuntimeIntegrityError, match="runtime_cache_write_failed"):
+        cache_runtime_asset(asset, tmp_path / "cache", lambda _url: payload)
+
+    assert len(captured) == 1
+    with pytest.raises(OSError):
+        os.fstat(captured[0])
+    assert list((tmp_path / "cache").iterdir()) == []
+
+
+def test_stage_contains_manifest_parent_swap_before_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"runtime"
+    asset = _asset(payload)
+    manifest = RuntimeManifest(1, "test-runtime", (asset,), "a" * 64)
+    output = tmp_path / "artifact"
+    runtime = output / "runtime"
+    displaced = output / "runtime-displaced"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real_dumps = web_runtime.json.dumps
+    swap_attempted = False
+    swap_blocked = False
+    link_created = False
+
+    def race_before_manifest(*args: object, **kwargs: object) -> str:
+        nonlocal swap_attempted, swap_blocked, link_created
+        result = real_dumps(*args, **kwargs)
+        if swap_attempted:
+            return result
+        swap_attempted = True
+        try:
+            runtime.rename(displaced)
+        except OSError:
+            swap_blocked = True
+            return result
+        _make_directory_link(runtime, outside)
+        link_created = True
+        return result
+
+    monkeypatch.setattr(web_runtime.json, "dumps", race_before_manifest)
     caught: RuntimeIntegrityError | None = None
     try:
         try:
