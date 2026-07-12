@@ -19,7 +19,8 @@ build
 dist
 /build.spec
 
-# Tests, reports, and local saves
+# Documentation, tests, reports, and local saves
+docs
 tests
 test-results
 playwright-report

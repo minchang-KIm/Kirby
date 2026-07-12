@@ -23,9 +23,7 @@ _ALLOWED_CONFIG_KEYS = {
     "trailingSlash",
 }
 _REVALIDATE = "public, max-age=0, must-revalidate"
-_IMMUTABLE = "public, max-age=31536000, immutable"
-_MUTABLE_SOURCE = r"/(index|index\.html|build-info\.json|service-worker\.js|manifest\.webmanifest)"
-_IMMUTABLE_SOURCE = r"/(.*)\.(wasm|apk|data|png|ogg|woff2|tar\.gz)"
+_CACHE_SOURCE = r"/(.*)"
 _SPA_SOURCE = r"/((?!.*\.).*)"
 
 
@@ -103,7 +101,7 @@ def test_vercel_security_headers_apply_to_every_response() -> None:
     }
 
 
-def test_vercel_cache_rules_are_ordered_and_non_overlapping() -> None:
+def test_vercel_cache_policy_revalidates_every_stable_artifact() -> None:
     config = _load_vercel_config()
     cache_rules = [
         (rule["source"], _header_map(rule)["Cache-Control"])
@@ -111,32 +109,29 @@ def test_vercel_cache_rules_are_ordered_and_non_overlapping() -> None:
         if "Cache-Control" in _header_map(rule)
     ]
 
-    assert cache_rules == [
-        ("/", _REVALIDATE),
-        (_MUTABLE_SOURCE, _REVALIDATE),
-        (_IMMUTABLE_SOURCE, _IMMUTABLE),
-    ]
+    assert cache_rules == [(_CACHE_SOURCE, _REVALIDATE)]
+    assert all("immutable" not in value for _source, value in cache_rules)
 
-    expected_matches = {
-        "/": ("/", _REVALIDATE),
-        "/index": (_MUTABLE_SOURCE, _REVALIDATE),
-        "/index.html": (_MUTABLE_SOURCE, _REVALIDATE),
-        "/build-info.json": (_MUTABLE_SOURCE, _REVALIDATE),
-        "/service-worker.js": (_MUTABLE_SOURCE, _REVALIDATE),
-        "/manifest.webmanifest": (_MUTABLE_SOURCE, _REVALIDATE),
-        "/favicon.png": (_IMMUTABLE_SOURCE, _IMMUTABLE),
-        "/web-stage.apk": (_IMMUTABLE_SOURCE, _IMMUTABLE),
-        "/web-stage.tar.gz": (_IMMUTABLE_SOURCE, _IMMUTABLE),
-        "/runtime/module.wasm": (_IMMUTABLE_SOURCE, _IMMUTABLE),
-    }
     compiled = [(re.compile(source), value) for source, value in cache_rules]
-    for path, expected in expected_matches.items():
+    stable_paths = (
+        "/",
+        "/index",
+        "/index.html",
+        "/build-info.json",
+        "/service-worker.js",
+        "/manifest.webmanifest",
+        "/favicon.png",
+        "/web-stage.apk",
+        "/web-stage.tar.gz",
+        "/runtime/module.wasm",
+        "/play",
+        "/campaign/stage-1",
+        "/robots.txt",
+        "/runtime.js.map",
+    )
+    for path in stable_paths:
         matches = [(source.pattern, value) for source, value in compiled if source.fullmatch(path)]
-        assert matches == [expected], f"unexpected cache policy for {path}"
-
-    for path in ("/play", "/campaign/stage-1", "/robots.txt", "/runtime.js.map"):
-        matches = [source.pattern for source, _value in compiled if source.fullmatch(path)]
-        assert matches == [], f"cache rules overlap an unclassified path: {path}"
+        assert matches == [(_CACHE_SOURCE, _REVALIDATE)], f"unsafe cache policy for {path}"
 
 
 def test_spa_rewrite_preserves_real_assets_and_uses_clean_url_destination() -> None:
@@ -194,6 +189,7 @@ def test_vercel_source_upload_excludes_generated_and_private_state() -> None:
         "artifacts",
         "build",
         "dist",
+        "docs",
         "env",
         "htmlcov",
         "node_modules",
@@ -213,6 +209,7 @@ def test_vercel_source_upload_excludes_generated_and_private_state() -> None:
         "build/Windsprig/Windsprig.exe",
         "build.spec",
         "dist/web/index.html",
+        "docs/superpowers/plans/distribution.md",
         "playwright-report/index.html",
         "save/profile.json",
         "test-results/browser/results.json",
