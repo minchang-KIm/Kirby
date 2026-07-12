@@ -127,6 +127,30 @@ def test_committed_release_catalog_loads_all_art_and_the_pinned_font() -> None:
     assert catalog.font(20, 500).get_height() > 0
 
 
+def test_catalog_slices_manifest_declared_frames_without_atlas_bleed() -> None:
+    manifest = load_asset_manifest(ROOT / "windsprig/content/assets.json")
+    catalog = AssetCatalog.load(ROOT / "assets", manifest)
+
+    assert catalog.frame_count("player.sprig") == 56
+    assert catalog.frame("player.sprig", 55).get_size() == (96, 96)
+    assert catalog.frame("enemy.breezeling", 3).get_size() == (96, 96)
+    assert catalog.frame("boss.rootjaw", 17).get_size() == (128, 128)
+    assert catalog.frame("world.world_1.background", 3).get_size() == (1280, 720)
+    assert catalog.frame("world.world_1.tiles", 7).get_size() == (64, 64)
+    assert catalog.frame("ui.icons", 31).get_size() == (64, 64)
+
+
+@pytest.mark.parametrize("frame_index", [-1, 56])
+def test_catalog_rejects_out_of_bounds_frame_indices(frame_index: int) -> None:
+    manifest = load_asset_manifest(ROOT / "windsprig/content/assets.json")
+    catalog = AssetCatalog.load(ROOT / "assets", manifest)
+
+    with pytest.raises(IndexError, match="frame"):
+        catalog.frame("player.sprig", frame_index)
+    with pytest.raises(TypeError, match="frame"):
+        catalog.frame("player.sprig", True)
+
+
 def test_sprite_cells_are_nonempty_unclipped_and_visually_distinct() -> None:
     manifest = load_asset_manifest(ROOT / "windsprig/content/assets.json")
     provenance = json.loads((ROOT / "assets/generated/art-provenance.json").read_text(encoding="utf-8"))

@@ -144,6 +144,7 @@ def _validate_lookup_id(asset_id: object) -> str:
 class AssetCatalog:
     """Own verified runtime assets and expose only typed deterministic lookups."""
 
+    _art_specs: MappingProxyType[str, ArtAssetSpec]
     _images: MappingProxyType[str, pygame.Surface]
     _sound_paths: MappingProxyType[str, Path]
     _font_payload: bytes | None
@@ -221,11 +222,51 @@ class AssetCatalog:
         if failures and not developer_mode:
             raise MissingAssetError("asset catalog release load failed: " + "; ".join(sorted(failures)))
         return cls(
+            MappingProxyType(dict(sorted(manifest.art.items()))),
             MappingProxyType(dict(sorted(images.items()))),
             MappingProxyType(dict(sorted(sounds.items()))),
             font_payload,
             developer_mode,
         )
+
+    def frame_count(self, asset_id: str) -> int:
+        """Return the manifest-declared frame count for one verified atlas."""
+
+        stable_id = _validate_lookup_id(asset_id)
+        try:
+            return self._art_specs[stable_id].frames
+        except KeyError:
+            raise MissingAssetError(f"unknown art asset ID: {stable_id}") from None
+
+    def frame(self, asset_id: str, frame_index: int) -> pygame.Surface:
+        """Return one in-bounds atlas cell using the declared release layout."""
+
+        stable_id = _validate_lookup_id(asset_id)
+        if type(frame_index) is not int:
+            raise TypeError("frame index must be an integer")
+        try:
+            spec = self._art_specs[stable_id]
+            surface = self._images[stable_id]
+        except KeyError:
+            raise MissingAssetError(f"unknown art asset ID: {stable_id}") from None
+        if not 0 <= frame_index < spec.frames:
+            raise IndexError(f"frame index {frame_index} is outside {stable_id} [0, {spec.frames})")
+
+        if stable_id == "player.sprig":
+            columns, rows = 8, 7
+        elif stable_id.startswith("boss."):
+            columns, rows = 6, 3
+        elif stable_id.endswith(".background"):
+            columns, rows = 1, spec.frames
+        else:
+            columns, rows = spec.frames, 1
+        if columns * rows != spec.frames or spec.width % columns or spec.height % rows:
+            raise MissingAssetError(f"invalid manifest frame grid for {stable_id}")
+        cell_width = spec.width // columns
+        cell_height = spec.height // rows
+        column = frame_index % columns
+        row = frame_index // columns
+        return surface.subsurface(pygame.Rect(column * cell_width, row * cell_height, cell_width, cell_height))
 
     def image(self, asset_id: str) -> pygame.Surface:
         """Return one verified image or a deterministic missing-ID error."""
