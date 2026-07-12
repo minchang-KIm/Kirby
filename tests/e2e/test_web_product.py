@@ -15,6 +15,9 @@ _ROOT = Path(__file__).resolve().parents[2]
 _COLD_BOOT_BUDGET_MS = 12_000
 _CACHED_BOOT_BUDGET_MS = 5_000
 _STAGE_CLEAR_BUDGET_MS = 30_000
+_JUMPING_TRAVERSAL_MS = 8_000
+_GROUNDED_GOAL_SWEEP_MS = 3_000
+_GROUNDED_BACKTRACK_MS = 2_000
 _COMPRESSED_TRANSFER_LIMIT = 30 * 1024 * 1024
 _STATUS_KEYS = ["activePlayers", "clearedStages", "saveStatus", "saveVersion", "state"]
 
@@ -93,24 +96,54 @@ def _drive_first_stage_to_clear(page: Page) -> dict[str, object]:
     """Reach the first goal through bounded visible keyboard input only."""
     deadline = time.perf_counter() + _STAGE_CLEAR_BUDGET_MS / 1_000
     last_status: dict[str, object] = {}
-    page.keyboard.down("KeyD")
+
+    def observe_clear() -> dict[str, object] | None:
+        nonlocal last_status
+        last_status = cast(
+            dict[str, object],
+            page.evaluate("() => ({...window.__WINSPRIG_TEST__})"),
+        )
+        if (
+            last_status.get("state") == "world_map"
+            and last_status.get("clearedStages") == 1
+            and last_status.get("saveStatus") == "saved"
+        ):
+            return last_status
+        return None
+
+    def poll_grounded_phase(duration_ms: int) -> dict[str, object] | None:
+        phase_deadline = min(deadline, time.perf_counter() + duration_ms / 1_000)
+        while time.perf_counter() < phase_deadline:
+            if completed := observe_clear():
+                return completed
+            page.wait_for_timeout(100)
+        return None
+
     try:
         while time.perf_counter() < deadline:
-            last_status = cast(
-                dict[str, object],
-                page.evaluate("() => ({...window.__WINSPRIG_TEST__})"),
+            page.keyboard.down("KeyD")
+            traversal_deadline = min(
+                deadline,
+                time.perf_counter() + _JUMPING_TRAVERSAL_MS / 1_000,
             )
-            if (
-                last_status.get("state") == "world_map"
-                and last_status.get("clearedStages") == 1
-                and last_status.get("saveStatus") == "saved"
-            ):
-                return last_status
-            # A regular pulse clears the four ground hazards without controlling simulation state.
-            page.keyboard.press("KeyW")
-            page.wait_for_timeout(350)
+            while time.perf_counter() < traversal_deadline:
+                if completed := observe_clear():
+                    return completed
+                # Pulsed product input clears the four hazards without controlling state.
+                page.keyboard.press("KeyW")
+                page.wait_for_timeout(350)
+
+            # Landing before the goal prevents a continuous hop from passing above it.
+            if completed := poll_grounded_phase(_GROUNDED_GOAL_SWEEP_MS):
+                return completed
+            page.keyboard.up("KeyD")
+            page.keyboard.down("KeyA")
+            if completed := poll_grounded_phase(_GROUNDED_BACKTRACK_MS):
+                return completed
+            page.keyboard.up("KeyA")
     finally:
         page.keyboard.up("KeyD")
+        page.keyboard.up("KeyA")
     raise AssertionError(
         f"first stage did not produce a saved clear within {_STAGE_CLEAR_BUDGET_MS} ms; last status={last_status!r}"
     )
@@ -166,7 +199,8 @@ def test_web_boot_input_canvas_and_save_reload(page: Page, web_url: str) -> None
         "window.__WINSPRIG_TEST__?.activePlayers === 1",
         timeout=5_000,
     )
-    page.keyboard.press("Enter")
+    # Enter joins the WASD device; its owned jump key is the product confirm action.
+    page.keyboard.press("KeyW")
     _wait_for_state(page, "playing", timeout=5_000)
 
     completed = _drive_first_stage_to_clear(page)
