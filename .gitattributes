@@ -1,3 +1,7 @@
 windsprig/content/campaign.json text eol=lf
 windsprig/content/rewards.json text eol=lf
 windsprig/content/bosses.json text eol=lf
+windsprig/content/strings.en.json text eol=lf
+windsprig/content/strings.ko.json text eol=lf
+assets/fonts/NotoSansKR[[]wght].ttf binary
+assets/fonts/OFL-NotoSansKR.txt binary
