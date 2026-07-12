@@ -119,6 +119,23 @@ def make_foundation_screen(
     )
 
 
+def test_visible_nodes_preserves_the_map_service_authored_world_order() -> None:
+    screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+    world_2_node = screen.catalog.worlds["world_2"][0]
+    world_1_node = screen.catalog.worlds["world_1"][0]
+    screen.world_map_service = SimpleNamespace(
+        unlocked_nodes=lambda _tracker, _worlds: {
+            "world_2": [world_2_node],
+            "world_1": [world_1_node],
+        }
+    )
+
+    assert tuple(node.world_id for node in screen._visible_nodes()) == (
+        "world_2",
+        "world_1",
+    )
+
+
 def test_disabled_probe_completion_cannot_position_the_real_player_at_the_goal() -> None:
     storage = ProbeStorage()
     probe = FoundationProbe(storage, enabled=False)

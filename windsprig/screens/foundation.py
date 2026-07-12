@@ -307,7 +307,8 @@ class FoundationScreen(Screen):
 
     def _visible_nodes(self) -> list[WorldNode]:
         visible = self.world_map_service.unlocked_nodes(self.tracker, self.unlocked_worlds)
-        return [node for world_id in sorted(visible) for node in visible[world_id]]
+        # WorldMapService already emits authored order; sorting IDs would redefine progression.
+        return [node for world_nodes in visible.values() for node in world_nodes]
 
     def _start_selected_stage(self) -> bool:
         nodes = self._visible_nodes()
