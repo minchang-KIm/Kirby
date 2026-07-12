@@ -58,7 +58,7 @@ def test_current_catalog_adapts_to_stable_public_gameplay_fields() -> None:
         "world_1_stage_1:mote:2",
         "world_1_stage_1:mote:3",
     )
-    assert stage.checkpoints[0].checkpoint_id == "world_1_stage_1.start"
+    assert stage.checkpoints[0].checkpoint_id == "world_1_stage_1:checkpoint:1"
     assert all(enemy.ability_id in PUBLIC_ABILITY_IDS for enemy in stage.enemy_spawns if enemy.ability_id is not None)
     assert not hasattr(stage, "energy_spheres")
     assert not hasattr(stage.enemy_spawns[0], "copy_ability")

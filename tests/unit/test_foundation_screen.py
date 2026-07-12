@@ -162,8 +162,17 @@ def test_stage_hud_and_camera_ignore_contradictory_legacy_resources() -> None:
             ),
         )
     )
+    expected_y = int(
+        max(
+            0,
+            min(
+                snapshot_target.y - screen.config.resolution[1] / 2,
+                runtime.stage.pixel_height - screen.config.resolution[1],
+            ),
+        )
+    )
 
-    assert screen._camera_offset(runtime) == (expected_x, 0)
+    assert screen._camera_offset(runtime) == (expected_x, expected_y)
     assert expected_x > 0
 
     title_font = RecordingFont()

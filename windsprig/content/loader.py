@@ -817,6 +817,14 @@ def load_campaign_catalog(content_dir: Path) -> CampaignCatalog:
     return _load_campaign(content_dir)
 
 
+def load_reward_catalog(content_dir: Path) -> RewardCatalog:
+    """Load the strict reward projection without requiring Task 3 boss content."""
+
+    if not isinstance(content_dir, Path):
+        raise TypeError("content_dir must be a pathlib.Path")
+    return _load_rewards(content_dir)
+
+
 __all__ = [
     "ATTACK_MARKERS",
     "INTERACTION_KINDS",
@@ -854,4 +862,5 @@ __all__ = [
     "load_catalog_bundle",
     "load_asset_manifest",
     "load_locales",
+    "load_reward_catalog",
 ]

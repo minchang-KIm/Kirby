@@ -1,0 +1,112 @@
+{
+  "mote_thresholds": [
+    {
+      "kind": "gallery",
+      "name_key": "reward.gallery.sunleaf.name",
+      "reward_id": "gallery.sunleaf",
+      "threshold": 6
+    },
+    {
+      "kind": "palette",
+      "name_key": "reward.palette.mint.name",
+      "reward_id": "palette.mint",
+      "threshold": 12
+    },
+    {
+      "kind": "challenge",
+      "name_key": "reward.challenge.sunleaf.name",
+      "reward_id": "challenge.sunleaf",
+      "threshold": 18
+    },
+    {
+      "kind": "gallery",
+      "name_key": "reward.gallery.emberglass.name",
+      "reward_id": "gallery.emberglass",
+      "threshold": 24
+    },
+    {
+      "kind": "palette",
+      "name_key": "reward.palette.ember.name",
+      "reward_id": "palette.ember",
+      "threshold": 30
+    },
+    {
+      "kind": "challenge",
+      "name_key": "reward.challenge.emberglass.name",
+      "reward_id": "challenge.emberglass",
+      "threshold": 36
+    },
+    {
+      "kind": "gallery",
+      "name_key": "reward.gallery.tidemoon.name",
+      "reward_id": "gallery.tidemoon",
+      "threshold": 42
+    },
+    {
+      "kind": "palette",
+      "name_key": "reward.palette.moon.name",
+      "reward_id": "palette.moon",
+      "threshold": 48
+    },
+    {
+      "kind": "challenge",
+      "name_key": "reward.challenge.tidemoon.name",
+      "reward_id": "challenge.tidemoon",
+      "threshold": 54
+    },
+    {
+      "kind": "gallery",
+      "name_key": "reward.gallery.thunderrail.name",
+      "reward_id": "gallery.thunderrail",
+      "threshold": 60
+    },
+    {
+      "kind": "palette",
+      "name_key": "reward.palette.storm.name",
+      "reward_id": "palette.storm",
+      "threshold": 66
+    },
+    {
+      "kind": "challenge",
+      "name_key": "reward.challenge.thunderrail.name",
+      "reward_id": "challenge.thunderrail",
+      "threshold": 72
+    },
+    {
+      "kind": "gallery",
+      "name_key": "reward.gallery.prismbloom.name",
+      "reward_id": "gallery.prismbloom",
+      "threshold": 78
+    },
+    {
+      "kind": "palette",
+      "name_key": "reward.palette.prism.name",
+      "reward_id": "palette.prism",
+      "threshold": 82
+    },
+    {
+      "kind": "challenge",
+      "name_key": "reward.challenge.prismbloom.name",
+      "reward_id": "challenge.prismbloom",
+      "threshold": 84
+    },
+    {
+      "kind": "gallery",
+      "name_key": "reward.gallery.stillstar.name",
+      "reward_id": "gallery.stillstar",
+      "threshold": 86
+    },
+    {
+      "kind": "palette",
+      "name_key": "reward.palette.stillstar.name",
+      "reward_id": "palette.stillstar",
+      "threshold": 88
+    },
+    {
+      "kind": "challenge",
+      "name_key": "reward.challenge.stillstar.name",
+      "reward_id": "challenge.stillstar",
+      "threshold": 90
+    }
+  ]
+}

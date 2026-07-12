@@ -6,6 +6,7 @@ from .loader import (
     load_campaign_catalog,
     load_catalog_bundle,
     load_locales,
+    load_reward_catalog,
 )
 from .models import (
     ArtAssetSpec,
@@ -60,4 +61,5 @@ __all__ = [
     "load_catalog_bundle",
     "load_asset_manifest",
     "load_locales",
+    "load_reward_catalog",
 ]
