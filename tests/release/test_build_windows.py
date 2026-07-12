@@ -12,7 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from tools.build_windows import require_clean_release_source, stage_windows_release
+from tools.build_windows import (
+    release_build_environment,
+    require_clean_release_source,
+    stage_windows_release,
+)
 from tools.release_common import BuildIdentity, sha256_file
 from windsprig.config import GameConfig
 from windsprig.platform.native import NativeStorage, create_native_services
@@ -94,6 +98,21 @@ def test_windows_builder_rejects_modified_and_untracked_source(tmp_path: Path) -
     tracked.write_text("dirty\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="clean Git worktree"):
         require_clean_release_source(tmp_path)
+
+
+def test_windows_builder_pins_hash_order_timestamp_and_local_cache() -> None:
+    environment = release_build_environment(ROOT)
+    commit_time = subprocess.run(
+        ["git", "show", "-s", "--format=%ct", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert environment["PYTHONHASHSEED"] == "0"
+    assert environment["SOURCE_DATE_EPOCH"] == commit_time
+    assert environment["PYINSTALLER_CONFIG_DIR"] == str(ROOT / "build/pyinstaller-config")
 
 
 def test_native_module_help_lists_isolated_smoke_arguments() -> None:

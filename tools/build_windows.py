@@ -70,6 +70,32 @@ def require_clean_release_source(root: Path) -> None:
         raise RuntimeError("Windows release builds require a clean Git worktree")
 
 
+def release_build_environment(root: Path) -> dict[str, str]:
+    """Pin process entropy and PE timestamps to the source commit."""
+
+    if not isinstance(root, Path):
+        raise TypeError("root must be a pathlib.Path")
+    completed = subprocess.run(
+        ["git", "show", "-s", "--format=%ct", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    source_date_epoch = completed.stdout.strip()
+    if not source_date_epoch.isascii() or not source_date_epoch.isdecimal():
+        raise RuntimeError("Git returned an invalid source commit timestamp")
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PYINSTALLER_CONFIG_DIR": str(root / "build/pyinstaller-config"),
+            "PYTHONHASHSEED": "0",
+            "SOURCE_DATE_EPOCH": source_date_epoch,
+        }
+    )
+    return environment
+
+
 def stage_windows_release(
     bundle: Path,
     root: Path,
@@ -143,6 +169,7 @@ def build(output: Path) -> tuple[Path, Path]:
     generate_icon(ICON_SOURCE, ICON, check=True)
     smoke = _load_smoke_config(SMOKE_CONFIG)
     identity = read_build_identity(ROOT, "windows")
+    build_environment = release_build_environment(ROOT)
     subprocess.run(
         [
             sys.executable, "-m", "PyInstaller",
@@ -155,6 +182,7 @@ def build(output: Path) -> tuple[Path, Path]:
             str(SPEC),
         ],
         cwd=ROOT,
+        env=build_environment,
         check=True,
     )
     bundle = ROOT / "dist/Windsprig"
