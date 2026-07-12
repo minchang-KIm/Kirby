@@ -248,9 +248,18 @@ class BossSystem:
         if state.entity_id != entity_id:
             raise ValueError("BossState.entity_id must match its ECS owner")
 
+        raw_retained = world.resources.get("boss_commands", ())
+        if not isinstance(raw_retained, tuple) or any(type(command) is not BossCommand for command in raw_retained):
+            raise TypeError("boss_commands must be a tuple of BossCommand values")
+
         result = self._director.step(state, health.current, dt_ms, world.rng)
         world.add_component(entity_id, result.state)
-        commands = tuple(sorted(result.commands, key=boss_command_sort_key))
+        commands = tuple(
+            sorted(
+                set(raw_retained).union(result.commands),
+                key=boss_command_sort_key,
+            )
+        )
         world.resources["boss_commands"] = commands
         for event in result.events:
             world.events.publish(event.topic, event.payload)

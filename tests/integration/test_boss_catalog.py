@@ -11,7 +11,7 @@ from tests.helpers.gameplay import make_active_player, make_stage
 from windsprig.config import GameConfig
 from windsprig.content.loader import load_boss_catalog, load_campaign_catalog
 from windsprig.gameplay.abilities import create_default_registry
-from windsprig.gameplay.bosses import BossCommand, BossState
+from windsprig.gameplay.bosses import BossCommand, BossState, boss_command_sort_key
 from windsprig.gameplay.components import (
     ActorState,
     Collider,
@@ -100,7 +100,7 @@ def test_boss_runtime_spawns_one_canonical_entity_and_exposes_only_boss_view() -
     assert snapshot.bosses[0].vulnerability_state == "hidden"
 
 
-def test_boss_step_publishes_atomic_telegraph_and_retains_one_execute_command() -> None:
+def test_ordered_scheduler_preserves_unsupported_boss_commands_without_duplicates() -> None:
     runtime = _runtime()
 
     telegraph = runtime.step(InputFrame.empty())
@@ -125,7 +125,25 @@ def test_boss_step_publishes_atomic_telegraph_and_retains_one_execute_command() 
     )
 
     runtime.step(InputFrame.empty())
-    assert runtime.world.resources["boss_commands"] == ()
+    assert runtime.world.resources["boss_commands"] == (
+        BossCommand(
+            command="execute",
+            attack_id="rootjaw.burrow_line",
+            parameters=(("lanes", 1), ("speed", 180)),
+        ),
+    )
+
+    for _ in range(600):
+        runtime.step(InputFrame.empty())
+
+    retained = runtime.world.resources["boss_commands"]
+    assert isinstance(retained, tuple)
+    assert retained == tuple(sorted(retained, key=boss_command_sort_key))
+    assert len(retained) == len(set(retained))
+    assert {command.attack_id for command in retained} == {
+        "rootjaw.burrow_line",
+        "rootjaw.seed_spit",
+    }
 
 
 def test_undefeated_boss_gates_goal_and_defeat_releases_it_in_the_same_frame() -> None:
