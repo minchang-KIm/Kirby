@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import astuple, dataclass, replace
 
 from windsprig.config import GameConfig
 from windsprig.content.loader import StageSpec
@@ -13,6 +13,7 @@ from windsprig.gameplay.abilities import AbilityRegistry
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
+    AttackRequest,
     CameraFocus,
     CapturedBy,
     CaptureState,
@@ -74,6 +75,7 @@ class _ValidatedGameplayResources:
     run_energy_spheres: int
     collected_mote_ids: tuple[str, ...]
     discovered_ability_ids: tuple[str, ...]
+    attack_requests: tuple[AttackRequest, ...]
 
 
 class StageRuntime:
@@ -154,7 +156,11 @@ class StageRuntime:
         emitted: list[GameEvent] = []
 
         for slot in sorted(set(self.player_entities) - set(requested)):
-            entity_id = self.player_entities.pop(slot)
+            entity_id = self.player_entities[slot]
+            capture = self.world.try_component(entity_id, CaptureState)
+            if capture is not None:
+                CaptureSystem.release_player_capture(self.world, capture)
+            del self.player_entities[slot]
             self.world.destroy_entity(entity_id)
             emitted.append(
                 make_event(
@@ -282,6 +288,9 @@ class StageRuntime:
             "run_energy_spheres": resources.run_energy_spheres,
             "collected_mote_ids": resources.collected_mote_ids,
             "discovered_ability_ids": resources.discovered_ability_ids,
+            "attack_requests": tuple(
+                astuple(request) for request in resources.attack_requests
+            ),
         }
 
     def _validate_gameplay_resources(
@@ -341,6 +350,11 @@ class StageRuntime:
             not isinstance(ability_id, str) for ability_id in discovered
         ):
             raise TypeError("discovered_ability_ids must be a collection of strings")
+        raw_attack_requests = world.resources.get("attack_requests")
+        if not isinstance(raw_attack_requests, list) or any(
+            type(request) is not AttackRequest for request in raw_attack_requests
+        ):
+            raise TypeError("attack_requests must be a list of AttackRequest values")
         return _ValidatedGameplayResources(
             active_players=active_players,
             active_authority=tuple(active_authority),
@@ -348,6 +362,7 @@ class StageRuntime:
             run_energy_spheres=run_motes,
             collected_mote_ids=tuple(sorted(set(collected))),
             discovered_ability_ids=tuple(sorted(set(discovered))),
+            attack_requests=tuple(raw_attack_requests),
         )
 
     def _capture_step_event(self, event: GameEvent) -> None:

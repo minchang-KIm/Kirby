@@ -12,6 +12,7 @@ from windsprig.content.loader import CheckpointSpec, EnemySpawn
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     AbilityState,
+    AttackRequest,
     CameraFocus,
     CaptureState,
     Collider,
@@ -416,6 +417,47 @@ def test_invalid_discovered_ability_collection_is_rejected_by_view_and_hash(
         runtime,
         error,
         "discovered_ability_ids must be a collection of strings",
+    )
+
+
+def test_persisted_attack_requests_are_strictly_hashed() -> None:
+    runtime = make_runtime()
+    baseline = runtime.world.world_hash()
+    request = AttackRequest(
+        owner_entity_id=runtime.player_entities[1],
+        team="player",
+        ability_id="none",
+        attack_kind="launched_enemy",
+        visual_id="wind_launch",
+        x=12.0,
+        y=34.0,
+        width=26,
+        height=26,
+        vx=520.0,
+        vy=-40.0,
+        damage=4,
+        knockback_x=260.0,
+        knockback_y=-120.0,
+        ttl_ms=480,
+    )
+
+    runtime.world.resources["attack_requests"] = [request]
+    request_hash = runtime.world.world_hash()
+
+    assert request_hash != baseline
+    runtime.world.resources["attack_requests"] = [replace(request, damage=5)]
+    assert runtime.world.world_hash() != request_hash
+
+
+@pytest.mark.parametrize("value", (None, (), [object()]))
+def test_invalid_attack_request_queue_is_rejected_by_view_and_hash(value: object) -> None:
+    runtime = make_runtime()
+    runtime.world.resources["attack_requests"] = value
+
+    assert_view_and_hash_reject(
+        runtime,
+        TypeError,
+        "attack_requests must be a list of AttackRequest values",
     )
 
 

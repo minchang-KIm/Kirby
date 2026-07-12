@@ -30,11 +30,18 @@ class ComponentStore:
         self._data.setdefault(type(component), {})[entity_id] = component
 
     def remove(self, entity_id: EntityId, component_type: type[object]) -> None:
-        self._data.get(component_type, {}).pop(entity_id, None)
+        mapping = self._data.get(component_type)
+        if mapping is None:
+            return
+        mapping.pop(entity_id, None)
+        if not mapping:
+            self._data.pop(component_type, None)
 
     def purge_entity(self, entity_id: EntityId) -> None:
-        for mapping in self._data.values():
+        for component_type, mapping in list(self._data.items()):
             mapping.pop(entity_id, None)
+            if not mapping:
+                self._data.pop(component_type, None)
 
     def get(self, entity_id: EntityId, component_type: type[ComponentT]) -> ComponentT:
         return cast(ComponentT, self._data[component_type][entity_id])

@@ -70,7 +70,7 @@ class CaptureSystem:
         ):
             _ = slot
             if health.dead or state.name == "Dead":
-                self._release_player_capture(world, capture)
+                self.release_player_capture(world, capture)
                 intent.move_axis = 0
                 intent.jump_pressed = False
                 intent.hover_held = False
@@ -104,8 +104,8 @@ class CaptureSystem:
 
             held = self._held_enemy(world, player_id, capture)
             if capture.phase == "holding" and held is None:
-                self._release_player_capture(world, capture)
-                state.name = transition(state.name, _resting_state(collider, velocity))
+                self.release_player_capture(world, capture)
+                _leave_draw_state(state, collider, velocity)
             elif held is not None:
                 _, enemy_transform, enemy_velocity, enemy_collider, _, _, _ = held
                 enemy_transform.x = transform.x + (collider.width - 6) * _direction(facing.direction)
@@ -119,6 +119,7 @@ class CaptureSystem:
                 self._harmonize(world, player_id, intent, capture, ability, state)
 
             if intent.draw_released and not harmonize_attempted:
+                capture_owned_draw = capture.phase in {"drawing", "holding"}
                 held = self._held_enemy(world, player_id, capture)
                 if held is None:
                     publish(
@@ -130,7 +131,8 @@ class CaptureSystem:
                 else:
                     self._launch(world, player_id, _direction(facing.direction), capture, held, requests)
                 _reset_capture(capture)
-                state.name = transition(state.name, _resting_state(collider, velocity))
+                if capture_owned_draw:
+                    _leave_draw_state(state, collider, velocity)
             if intent.draw_released:
                 intent.draw_released = False
 
@@ -370,7 +372,9 @@ class CaptureSystem:
                 velocity.vx = 0.0
                 velocity.vy = 0.0
 
-    def _release_player_capture(self, world: World, capture: CaptureState) -> None:
+    @staticmethod
+    def release_player_capture(world: World, capture: CaptureState) -> None:
+        """Release one player's held entity before the owner leaves gameplay."""
         enemy_id = capture.captured_entity_id
         if enemy_id is not None and enemy_id in world.alive_entities:
             collider = world.try_component(enemy_id, Collider)
@@ -400,3 +404,12 @@ def _resting_state(collider: Collider, velocity: Velocity) -> str:
     if not collider.on_ground:
         return "Fall"
     return "Run" if abs(velocity.vx) > 40.0 else "Idle"
+
+
+def _leave_draw_state(
+    state: ActorState,
+    collider: Collider,
+    velocity: Velocity,
+) -> None:
+    if state.name == "Draw":
+        state.name = transition(state.name, _resting_state(collider, velocity))

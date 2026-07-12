@@ -16,6 +16,7 @@ from tests.helpers.gameplay import (
 from windsprig.core.events import GameEvent
 from windsprig.gameplay.components import (
     AbilityState,
+    AttackRequest,
     CaptureState,
     DefenseState,
     EchoPickup,
@@ -476,7 +477,25 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     runtime.world.get_component(mutated_player, AbilityState).current_id = "cinder"
     runtime.factory.spawn_echo_pickup("galehook", 90.0, 80.0)
     runtime.world.resources["discovered_ability_ids"] = {"cinder", "galehook"}
-    runtime.world.resources["attack_requests"] = [object()]
+    runtime.world.resources["attack_requests"] = [
+        AttackRequest(
+            owner_entity_id=mutated_player,
+            team="player",
+            ability_id="none",
+            attack_kind="launched_enemy",
+            visual_id="wind_launch",
+            x=10.0,
+            y=20.0,
+            width=26,
+            height=26,
+            vx=520.0,
+            vy=-40.0,
+            damage=4,
+            knockback_x=260.0,
+            knockback_y=-120.0,
+            ttl_ms=480,
+        )
+    ]
     runtime.world.events.publish("obsolete_pending", {"value": 1})
     observed.clear()
     event_bus = runtime.world.events

@@ -245,6 +245,20 @@ def test_empty_release_clears_stale_frame_request_and_is_idempotent() -> None:
     assert [event.topic for event in world.events.peek()] == ["CaptureReleased"]
 
 
+@pytest.mark.parametrize("actor_name", ["Hurt", "Guard", "Dodge", "Attack"])
+def test_idle_release_preserves_non_capture_actor_state(actor_name: str) -> None:
+    world, player = _capture_world()
+    state = world.get_component(player, ActorState)
+    state.name = actor_name
+    state.timer_ms = 100
+    world.get_component(player, ControlIntent).draw_released = True
+
+    CaptureSystem().update(world, 16)
+
+    assert (state.name, state.timer_ms) == (actor_name, 100)
+    assert [event.topic for event in world.events.peek()] == ["CaptureReleased"]
+
+
 def test_release_with_capture_queues_one_fully_populated_launch_and_one_event() -> None:
     world, player = _capture_world()
     enemy = _enemy(world, x=120.0)

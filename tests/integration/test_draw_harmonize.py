@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import cast
 
-from tests.helpers.gameplay import frame, make_runtime, make_stage
+from tests.helpers.gameplay import frame, make_active_player, make_runtime, make_stage
 from windsprig.content.loader import AbilityId, EnemySpawn
 from windsprig.gameplay.components import (
     AbilityState,
+    ActorState,
     AttackRequest,
+    CapturedBy,
     CaptureState,
+    Collider,
     ControlIntent,
     EchoPickup,
     EnemyAI,
@@ -138,6 +141,48 @@ def test_runtime_drop_remains_visible_for_one_frame_then_is_recoverable() -> Non
     assert ability.current_id == "galehook"
     assert recovered.view.echo_pickups == ()
     assert [event.topic for event in recovered.events] == ["AbilityEquipped"]
+
+
+def test_roster_removal_releases_capture_before_paused_snapshot() -> None:
+    stage = make_stage(
+        enemy_spawns=(
+            EnemySpawn(
+                x=82.0,
+                y=160.0,
+                kind="grunt",
+                ability_id="cinder",
+                patrol_left=70.0,
+                patrol_right=100.0,
+            ),
+        )
+    )
+    first = make_active_player(1, leader=True)
+    second = make_active_player(2)
+    runtime = make_runtime(stage=stage, players=(first, second))
+    owner = runtime.player_entities[1]
+    enemy = runtime.world.query(EnemyAI)[0][0]
+    runtime.step(frame(1, DrawStartCommand(1)))
+    assert runtime.world.get_component(enemy, CapturedBy) == CapturedBy(owner)
+
+    runtime.sync_active_players((second,))
+    snapshot = runtime.snapshot()
+
+    assert owner not in runtime.world.alive_entities
+    assert not runtime.world.has_component(enemy, CapturedBy)
+    assert runtime.world.get_component(enemy, Collider).solid is True
+    assert next(view for view in snapshot.enemies if view.entity_id == enemy).captured_by is None
+
+
+def test_idle_release_does_not_truncate_runtime_hurt_window() -> None:
+    runtime = make_runtime()
+    player = runtime.player_entities[1]
+    state = runtime.world.get_component(player, ActorState)
+    state.name = "Hurt"
+    state.timer_ms = 100
+
+    runtime.step(frame(1, DrawReleaseCommand(1)))
+
+    assert (state.name, state.timer_ms) == ("Hurt", 84)
 
 
 def test_empty_input_clears_transient_capture_and_consumption_edges() -> None:
