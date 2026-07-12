@@ -293,6 +293,11 @@ def test_browser_entry_and_template_keep_the_real_loader_and_runtime_boundaries(
     assert "{{cookiecutter.cdn}}pythons.js" in template
     assert "runtime/browserfs/2.0.0/browserfs.min.js" in template
     assert "async def custom_site()" in template
+    assert 'platform.fopen("{{cookiecutter.archive}}.apk", "rb")' in template
+    assert "PurePosixPath(member.filename)" in template
+    assert "member_path.is_absolute()" in template
+    assert '".." in member_path.parts' in template
+    assert 'platform.fopen("{{cookiecutter.archive}}.tar.gz", "rb")' not in template
     assert "function custom_onload" in template
     assert 'id="canvas"' in template
     assert 'id="audio-status"' in template

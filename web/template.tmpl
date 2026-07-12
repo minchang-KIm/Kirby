@@ -1,8 +1,9 @@
 <html lang="en"><script src="runtime/browserfs/2.0.0/browserfs.min.js"></script><script src="{{cookiecutter.cdn}}pythons.js" type="module" id="site" data-python="python{{cookiecutter.PYBUILD}}" data-LINES="42" data-COLUMNS="132" data-os="vt,snd,gui" async defer>#<!--
 
 import asyncio
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
+import stat
 import sys
 
 
@@ -17,19 +18,20 @@ async def custom_site():
     appdir = Path(f"/data/data/{bundle}")
     appdir.mkdir()
 
-    if platform.window.location.host.find(".itch.zone") > 0:
-        import zipfile
+    import zipfile
 
-        async with platform.fopen("{{cookiecutter.archive}}.apk", "rb") as archive:
-            with zipfile.ZipFile(archive) as zip_ref:
-                zip_ref.extractall(appdir.as_posix())
-    else:
-        import tarfile
-
-        async with platform.fopen("{{cookiecutter.archive}}.tar.gz", "rb") as archive:
-            tar = tarfile.open(fileobj=archive, mode="r:gz")
-            tar.extractall(path=appdir.as_posix(), filter="tar")
-            tar.close()
+    async with platform.fopen("{{cookiecutter.archive}}.apk", "rb") as archive:
+        with zipfile.ZipFile(archive) as zip_ref:
+            for member in zip_ref.infolist():
+                member_path = PurePosixPath(member.filename)
+                member_mode = member.external_attr >> 16
+                if (
+                    member_path.is_absolute()
+                    or ".." in member_path.parts
+                    or stat.S_ISLNK(member_mode)
+                ):
+                    raise RuntimeError(f"unsafe application archive member: {member.filename}")
+            zip_ref.extractall(appdir.as_posix())
 
     platform.run_main(PyConfig, loaderhome=appdir / "assets", loadermain=None)
     while embed.counter() < 0:
