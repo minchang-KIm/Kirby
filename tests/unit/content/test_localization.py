@@ -531,7 +531,7 @@ def test_font_license_ledger_records_only_present_task_5_asset_provenance() -> N
         "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9",
         "The pinned Noto Sans KR source is redistributed unmodified.",
         "WindsprigSansKR.ttf",
-        "12a7caf5a82170940ea1dd73112e70ea353edf0a0230621268593fb30ef98a53",
+        "4211e2545aa28f0a9e6c72d61a9996663b3160f7b6ce54d6563e065543743f58",
         "assets/generated/art-provenance.json",
         "assets/generated/audio-provenance.json",
     ):

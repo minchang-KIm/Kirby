@@ -28,9 +28,10 @@ from tools.fetch_font import FILES
 FONTTOOLS_VERSION: Final = "4.63.0"
 SOURCE_FONT: Final = Path("assets/fonts/NotoSansKR[wght].ttf")
 RUNTIME_FONT: Final = Path("assets/fonts/WindsprigSansKR.ttf")
-RUNTIME_FONT_SHA256: Final = "12a7caf5a82170940ea1dd73112e70ea353edf0a0230621268593fb30ef98a53"
+RUNTIME_FONT_SHA256: Final = "4211e2545aa28f0a9e6c72d61a9996663b3160f7b6ce54d6563e065543743f58"
 INSTANCE_WEIGHT: Final = 500
 ASCII_CODEPOINTS: Final = frozenset(range(0x20, 0x7F))
+MODERN_HANGUL_CODEPOINTS: Final = frozenset(range(0xAC00, 0xD7A4))
 LOCALE_PATHS: Final = (
     Path("windsprig/content/strings.en.json"),
     Path("windsprig/content/strings.ko.json"),
@@ -79,12 +80,15 @@ def _load_locale(path: Path) -> Mapping[str, str]:
 
 
 def required_codepoints(root: Path) -> set[int]:
-    """Return the stable glyph set for shipped bilingual copy and ASCII names."""
+    """Return release-copy glyphs plus every modern precomposed Hangul syllable."""
 
     if not isinstance(root, Path):
         raise TypeError("root must be a pathlib.Path")
     lexical_root = Path(os.path.abspath(root))
-    codepoints = set(ASCII_CODEPOINTS)
+    # WHY: player-entered Korean profile names are release content too. Keeping
+    # the complete modern syllable block avoids a catalog-dependent allowlist
+    # while remaining materially smaller than the pinned variable source font.
+    codepoints = set(ASCII_CODEPOINTS | MODERN_HANGUL_CODEPOINTS)
     for relative in LOCALE_PATHS:
         catalog = _load_locale(_regular_file(lexical_root, relative))
         codepoints.update(ord(character) for value in catalog.values() for character in value)
