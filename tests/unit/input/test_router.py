@@ -91,7 +91,12 @@ def test_only_joined_keyboard_profiles_contribute_continuous_commands() -> None:
     assert set(routed.frame.commands_by_slot) == {arrows.slot}
     assert any(command == MoveCommand(player_slot=arrows.slot, axis=1) for command in commands)
     assert not any(command == MoveCommand(player_slot=arrows.slot, axis=-1) for command in commands)
-    assert [type(command) for command in commands] == [MoveCommand, HoverCommand, GuardCommand]
+    assert [type(command) for command in commands] == [
+        MoveCommand,
+        HoverCommand,
+        GuardCommand,
+        AbilityUseCommand,
+    ]
 
 
 def test_keyboard_menu_edges_are_routed_in_event_order() -> None:
@@ -140,6 +145,7 @@ def test_keyboard_routes_every_gameplay_edge_and_released_held_value() -> None:
         key_event(pygame.KEYDOWN, pygame.K_s),
         key_event(pygame.KEYUP, pygame.K_s),
         key_event(pygame.KEYDOWN, pygame.K_f),
+        key_event(pygame.KEYUP, pygame.K_f),
         key_event(pygame.KEYDOWN, pygame.K_h),
         key_event(pygame.KEYDOWN, pygame.K_t),
     ]
@@ -149,7 +155,9 @@ def test_keyboard_routes_every_gameplay_edge_and_released_held_value() -> None:
 
     assert any(isinstance(command, DrawStartCommand) for command in pressed)
     assert any(isinstance(command, DrawReleaseCommand) for command in pressed)
-    assert any(isinstance(command, AbilityUseCommand) for command in pressed)
+    assert AbilityUseCommand(1, held=False) in pressed
+    assert AbilityUseCommand(1, pressed=True) in pressed
+    assert AbilityUseCommand(1, released=True) in pressed
     assert any(isinstance(command, DodgeCommand) for command in pressed)
     assert any(isinstance(command, DropAbilityCommand) for command in pressed)
     assert GuardCommand(player_slot=1, held=True) in pressed
@@ -171,6 +179,7 @@ def test_f9_routes_only_as_the_probe_completion_command_for_an_active_keyboard()
         MoveCommand(player_slot=1, axis=0),
         HoverCommand(player_slot=1, held=False),
         GuardCommand(player_slot=1, held=False),
+        AbilityUseCommand(player_slot=1, held=False),
         ProbeCompleteCommand(player_slot=1),
     ]
 
@@ -216,6 +225,7 @@ def test_assigned_gamepad_routes_primary_cancel_pause_and_hat_edges() -> None:
     events = [
         joy_button_event(pygame.JOYBUTTONDOWN, instance_id=42, button=0),
         joy_button_event(pygame.JOYBUTTONDOWN, instance_id=42, button=1),
+        joy_button_event(pygame.JOYBUTTONUP, instance_id=42, button=1),
         joy_button_event(pygame.JOYBUTTONDOWN, instance_id=42, button=7),
         pygame.event.Event(pygame.JOYHATMOTION, instance_id=42, joy=0, hat=0, value=(1, -1)),
     ]
@@ -224,7 +234,9 @@ def test_assigned_gamepad_routes_primary_cancel_pause_and_hat_edges() -> None:
 
     assert any(isinstance(command, JumpCommand) for command in commands)
     assert any(isinstance(command, ConfirmCommand) for command in commands)
-    assert any(isinstance(command, AbilityUseCommand) for command in commands)
+    assert AbilityUseCommand(player.slot, held=False) in commands
+    assert AbilityUseCommand(player.slot, pressed=True) in commands
+    assert AbilityUseCommand(player.slot, released=True) in commands
     gamepad_cancel = next(command for command in commands if isinstance(command, CancelCommand))
     assert getattr(gamepad_cancel, "origin", None) == "ability_button"
     assert any(isinstance(command, PauseCommand) for command in commands)
@@ -311,4 +323,22 @@ def test_removed_gamepad_publishes_neutral_held_values_in_the_removal_frame() ->
         MoveCommand(player_slot=player.slot, axis=0),
         HoverCommand(player_slot=player.slot, held=False),
         GuardCommand(player_slot=player.slot, held=False),
+        AbilityUseCommand(player_slot=player.slot, held=False),
+    ]
+
+
+def test_repeat_keyboard_ability_keydown_does_not_duplicate_the_press_edge() -> None:
+    router = InputRouter()
+    roster = ActiveRoster()
+    roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    events = [
+        pygame.event.Event(pygame.KEYDOWN, key=pygame.K_f, repeat=False),
+        pygame.event.Event(pygame.KEYDOWN, key=pygame.K_f, repeat=True),
+    ]
+
+    commands = router.collect(events, FakeKeys({pygame.K_f}), roster).frame.commands_for(1)
+
+    assert [command for command in commands if isinstance(command, AbilityUseCommand)] == [
+        AbilityUseCommand(1, held=True),
+        AbilityUseCommand(1, pressed=True),
     ]

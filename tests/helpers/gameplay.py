@@ -5,7 +5,7 @@ from __future__ import annotations
 from windsprig.config import GameConfig
 from windsprig.content.loader import CheckpointSpec, EnemySpawn, MoteSpec, StageSpec
 from windsprig.core.events import GameEvent
-from windsprig.gameplay.abilities import create_default_registry
+from windsprig.gameplay.abilities import AbilityContext, create_default_registry
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.gameplay.session import GameSession
 from windsprig.gameplay.snapshot import StageOutcome
@@ -22,6 +22,32 @@ class _RecordingStageRuntime(StageRuntime):
 def frame(slot: int, *commands: InputCommand) -> InputFrame:
     """Build one deterministic command frame without routing through devices."""
     return InputFrame(commands_by_slot={slot: list(commands)})
+
+
+def ability_context(
+    *,
+    actor_id: int = 1,
+    frame_index: int = 0,
+    x: float = 100.0,
+    y: float = 50.0,
+    facing: int = 1,
+    on_ground: bool = True,
+    charge_ms: int = 0,
+    combo_step: int = 0,
+    meter: int = 0,
+) -> AbilityContext:
+    """Build an exact immutable ability activation context."""
+    return AbilityContext(
+        actor_id=actor_id,
+        frame_index=frame_index,
+        x=x,
+        y=y,
+        facing=facing,
+        on_ground=on_ground,
+        charge_ms=charge_ms,
+        combo_step=combo_step,
+        meter=meter,
+    )
 
 
 def make_active_player(slot: int, leader: bool = False) -> ActivePlayer:

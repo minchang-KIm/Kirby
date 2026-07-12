@@ -1,49 +1,62 @@
+"""Strategy registry with strict public ability metadata validation."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from .base import AbilityStrategy, DataDrivenAbilityStrategy
+from windsprig.content.loader import PUBLIC_ABILITY_IDS
+
+from .base import AbilityStrategy, NoneAbilityStrategy
+from .bloomblade import BloombladeStrategy
+from .cinder import CinderStrategy
+
+METADATA_FIELDS = frozenset({"strategy", "icon_id", "palette_token", "enemy_source_tag"})
 
 
 class AbilityRegistry:
+    """Resolve registered strategies and fail unknown names to the ``none`` sentinel."""
+
     def __init__(self) -> None:
         self._strategies: dict[str, AbilityStrategy] = {}
 
     def register(self, strategy: AbilityStrategy) -> None:
+        """Register or replace the implementation owning one stable strategy name."""
         self._strategies[strategy.name] = strategy
 
     def get(self, name: str) -> AbilityStrategy:
-        return self._strategies.get(name, self._strategies["none"])
+        """Resolve ``name`` or return the safe empty strategy."""
+        fallback = self._strategies.get("none")
+        if fallback is None:
+            raise RuntimeError("ability registry has no 'none' strategy")
+        return self._strategies.get(name, fallback)
 
     def names(self) -> list[str]:
-        return sorted(self._strategies.keys())
+        """Return registered strategy names in deterministic order."""
+        return sorted(self._strategies)
 
-    def load_data_file(self, path: Path) -> None:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        for item in payload["abilities"]:
-            self.register(
-                DataDrivenAbilityStrategy(
-                    name=item["name"],
-                    damage=int(item["damage"]),
-                    cooldown_ms=int(item["cooldown_ms"]),
-                    range_px=int(item["range_px"]),
-                    projectile_speed=float(item["projectile_speed"]),
-                    is_super=bool(item.get("is_super", False)),
-                )
-            )
+    def validate_metadata(self, path: Path) -> None:
+        """Reject metadata that changes the six public IDs or embeds gameplay tuning."""
+        payload: object = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or set(payload) != {"abilities"}:
+            raise ValueError("abilities metadata must contain only the 'abilities' object")
+        raw_abilities = payload["abilities"]
+        if not isinstance(raw_abilities, dict) or set(raw_abilities) != PUBLIC_ABILITY_IDS:
+            raise ValueError("abilities metadata must define exactly the six public ability IDs")
+        for ability_id in sorted(PUBLIC_ABILITY_IDS):
+            metadata = raw_abilities[ability_id]
+            if not isinstance(metadata, dict) or set(metadata) != METADATA_FIELDS:
+                raise ValueError(f"ability metadata for {ability_id!r} has invalid fields")
+            if any(not isinstance(value, str) or not value for value in metadata.values()):
+                raise ValueError(f"ability metadata for {ability_id!r} must use non-empty strings")
+            if metadata["strategy"] != ability_id:
+                raise ValueError(f"ability metadata for {ability_id!r} has mismatched strategy")
 
 
 def create_default_registry(content_dir: Path) -> AbilityRegistry:
+    """Build the current typed strategies after validating shared presentation metadata."""
     registry = AbilityRegistry()
-    registry.register(
-        DataDrivenAbilityStrategy(
-            name="none",
-            damage=1,
-            cooldown_ms=260,
-            range_px=32,
-            projectile_speed=280.0,
-        )
-    )
-    registry.load_data_file(content_dir / "abilities.json")
+    for strategy in (NoneAbilityStrategy(), BloombladeStrategy(), CinderStrategy()):
+        registry.register(strategy)
+    registry.validate_metadata(content_dir / "abilities.json")
     return registry

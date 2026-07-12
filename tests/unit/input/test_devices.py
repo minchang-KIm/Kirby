@@ -84,6 +84,7 @@ def test_keyboard_builder_emits_every_edge_and_continuous_command() -> None:
     assert DrawStartCommand(player_slot=1) in commands
     assert DrawReleaseCommand(player_slot=1) in commands
     assert AbilityUseCommand(player_slot=1, pressed=True) in commands
+    assert AbilityUseCommand(player_slot=1, held=False) in commands
     assert DodgeCommand(player_slot=1, pressed=True) in commands
     assert DropAbilityCommand(player_slot=1, pressed=True) in commands
     assert _profile_keys(profile) == {
@@ -118,7 +119,11 @@ def test_gamepad_builder_emits_held_state_and_every_supported_edge(monkeypatch: 
     joystick = FakeJoystick(
         instance_id=70,
         axis=0.0,
-        held_buttons={GAMEPAD_BINDING.jump_button, GAMEPAD_BINDING.guard_button},
+        held_buttons={
+            GAMEPAD_BINDING.jump_button,
+            GAMEPAD_BINDING.guard_button,
+            GAMEPAD_BINDING.ability_button,
+        },
     )
     install_fake_joysticks(monkeypatch, [joystick])
     mux = InputDeviceMux()
@@ -130,7 +135,11 @@ def test_gamepad_builder_emits_held_state_and_every_supported_edge(monkeypatch: 
         GAMEPAD_BINDING.drop_button,
     }
 
-    commands = mux._build_gamepad_commands(3, edge_down, {GAMEPAD_BINDING.draw_button})
+    commands = mux._build_gamepad_commands(
+        3,
+        edge_down,
+        {GAMEPAD_BINDING.draw_button, GAMEPAD_BINDING.ability_button},
+    )
 
     assert HoverCommand(player_slot=3, held=True) in commands
     assert GuardCommand(player_slot=3, held=True) in commands
@@ -138,6 +147,8 @@ def test_gamepad_builder_emits_held_state_and_every_supported_edge(monkeypatch: 
     assert DrawStartCommand(player_slot=3) in commands
     assert DrawReleaseCommand(player_slot=3) in commands
     assert AbilityUseCommand(player_slot=3, pressed=True) in commands
+    assert AbilityUseCommand(player_slot=3, held=True) in commands
+    assert AbilityUseCommand(player_slot=3, released=True) in commands
     assert DodgeCommand(player_slot=3, pressed=True) in commands
     assert DropAbilityCommand(player_slot=3, pressed=True) in commands
 
@@ -193,3 +204,37 @@ def test_mux_refreshes_two_gamepads_and_routes_keyboard_and_gamepad_edges(
     assert AbilityUseCommand(player_slot=3, pressed=True) in frame.commands_for(3)
     assert DrawReleaseCommand(player_slot=3) in frame.commands_for(3)
     assert MoveCommand(player_slot=4, axis=-1) in frame.commands_for(4)
+
+
+def test_keyboard_repeat_does_not_create_a_second_ability_press(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_fake_joysticks(monkeypatch, [])
+    mux = InputDeviceMux()
+    profile = KEYBOARD_BINDINGS[1]
+    pressed = mux.collect_frame(
+        [pygame.event.Event(pygame.KEYDOWN, key=profile.ability, repeat=False)],
+        FakeKeys({profile.ability}),
+    )
+    repeated = mux.collect_frame(
+        [pygame.event.Event(pygame.KEYDOWN, key=profile.ability, repeat=True)],
+        FakeKeys({profile.ability}),
+    )
+    released = mux.collect_frame(
+        [pygame.event.Event(pygame.KEYUP, key=profile.ability)],
+        FakeKeys(set()),
+    )
+
+    assert [
+        command for command in pressed.commands_for(1) if isinstance(command, AbilityUseCommand)
+    ] == [
+        AbilityUseCommand(1, held=True),
+        AbilityUseCommand(1, pressed=True),
+    ]
+    assert [
+        command for command in repeated.commands_for(1) if isinstance(command, AbilityUseCommand)
+    ] == [AbilityUseCommand(1, held=True)]
+    assert [
+        command for command in released.commands_for(1) if isinstance(command, AbilityUseCommand)
+    ] == [
+        AbilityUseCommand(1, held=False),
+        AbilityUseCommand(1, released=True),
+    ]

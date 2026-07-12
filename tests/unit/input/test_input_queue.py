@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from windsprig.input.commands import (
+    AbilityUseCommand,
     DodgeCommand,
     GuardCommand,
     HoverCommand,
@@ -199,3 +200,34 @@ def test_focus_loss_clears_held_state_and_pending_edges() -> None:
     queue.clear_held()
 
     assert queue.consume_step().commands_for(1) == []
+
+
+def test_ability_held_sample_persists_but_press_and_release_edges_drain_once() -> None:
+    queue = InputQueue()
+    queue.push(
+        InputFrame(
+            commands_by_slot={
+                1: [
+                    AbilityUseCommand(1, held=True),
+                    AbilityUseCommand(1, pressed=True),
+                ]
+            }
+        )
+    )
+    queue.push(
+        InputFrame(
+            commands_by_slot={
+                1: [
+                    AbilityUseCommand(1, held=False),
+                    AbilityUseCommand(1, released=True),
+                ]
+            }
+        )
+    )
+
+    assert queue.consume_step().commands_for(1) == [
+        AbilityUseCommand(1, held=False),
+        AbilityUseCommand(1, pressed=True),
+        AbilityUseCommand(1, released=True),
+    ]
+    assert queue.consume_step().commands_for(1) == [AbilityUseCommand(1, held=False)]

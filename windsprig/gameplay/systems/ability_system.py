@@ -1,87 +1,127 @@
-"""Translate ability intent into deterministic projectile entities and events."""
+"""Translate phased ability intent into deterministic typed attack requests."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from windsprig.core.ecs import World
-from windsprig.gameplay.abilities import AbilityRegistry
+from windsprig.gameplay.abilities import AbilityContext, AbilityExecution, AbilityRegistry
+from windsprig.gameplay.abilities.cinder import MAX_CHARGE_MS
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
+    AttackRequest,
     Collider,
     ControlIntent,
     Facing,
-    Projectile,
+    Health,
     Team,
     Transform,
-    Velocity,
 )
-from windsprig.gameplay.state_machine import transition
+from windsprig.gameplay.state_machine import can_transition, transition
 
 
 class AbilitySystem:
-    """Own legacy ability cooldowns, attacks, and projectile materialization."""
+    """Own ability timers and append accepted executions to the shared FIFO queue."""
 
     def update(self, world: World, dt_ms: int) -> None:
         registry = cast(AbilityRegistry, world.resources["ability_registry"])
         requests = cast(
-            list[dict[str, Any]],
-            world.resources.setdefault("projectile_requests", []),
+            list[AttackRequest],
+            world.resources.setdefault("attack_requests", []),
         )
 
-        for entity_id, team, transform, facing, intent, ability, state in world.query(
-            Team, Transform, Facing, ControlIntent, AbilityState, ActorState
+        for entity_id, team, transform, facing, collider, health, intent, ability, state in world.query(
+            Team,
+            Transform,
+            Facing,
+            Collider,
+            Health,
+            ControlIntent,
+            AbilityState,
+            ActorState,
         ):
             if team.name != "player":
                 continue
+            cooldown_was_active = ability.cooldown_remaining_ms > 0
+            # Timers tick before an edge, making the first fixed step at zero immediately eligible.
             ability.cooldown_remaining_ms = max(0, ability.cooldown_remaining_ms - dt_ms)
+            ability.combo_window_remaining_ms = max(0, ability.combo_window_remaining_ms - dt_ms)
+            ability.armor_remaining_ms = max(0, ability.armor_remaining_ms - dt_ms)
+            if ability.combo_window_remaining_ms == 0:
+                ability.combo_step = 0
+            if cooldown_was_active and ability.cooldown_remaining_ms == 0 and state.name == "Attack":
+                state.name = transition(state.name, _resting_state(collider, intent))
 
-            if (
-                intent.ability_pressed
-                and not intent.ability_consumed
-                and ability.cooldown_remaining_ms <= 0
-            ):
-                strategy = registry.get(ability.current_id)
-                for shape in strategy.get_attack_shapes(entity_id, world.frame_index):
-                    requests.append(
-                        {
-                            "owner": entity_id,
-                            "team": "player",
-                            "tag": shape.tag,
-                            "x": transform.x + (shape.dx if facing.direction > 0 else -shape.dx),
-                            "y": transform.y + shape.dy,
-                            "vx": shape.knockback_x if facing.direction > 0 else -shape.knockback_x,
-                            "vy": shape.knockback_y,
-                            "damage": shape.damage,
-                            "ttl_ms": shape.ttl_ms,
-                            "width": shape.width,
-                            "height": shape.height,
-                        }
-                    )
-                ability.cooldown_remaining_ms = getattr(strategy, "cooldown_ms", 260)
-                state.name = transition(state.name, "Attack")
-                world.events.publish(
-                    "ability_used",
-                    {"actor": entity_id, "ability": ability.current_id},
+            if ability.current_id != "cinder":
+                ability.charge_ms = 0
+            if intent.ability_consumed:
+                if ability.current_id == "cinder" and intent.ability_released:
+                    ability.charge_ms = 0
+                intent.ability_pressed = False
+                intent.ability_released = False
+                continue
+
+            charge_ms = ability.charge_ms
+            if ability.current_id == "cinder":
+                if not health.dead and state.name != "Dead" and intent.ability_held:
+                    ability.charge_ms = min(MAX_CHARGE_MS, ability.charge_ms + dt_ms)
+                charge_ms = ability.charge_ms
+                should_activate = intent.ability_released
+                intent.ability_pressed = False
+                intent.ability_released = False
+                if should_activate:
+                    ability.charge_ms = 0
+            else:
+                should_activate = intent.ability_pressed
+                intent.ability_pressed = False
+                intent.ability_released = False
+
+            if not should_activate or not _can_activate(health, state, ability):
+                continue
+            execution = registry.get(ability.current_id).activate(
+                AbilityContext(
+                    actor_id=entity_id,
+                    frame_index=world.frame_index,
+                    x=transform.x,
+                    y=transform.y,
+                    facing=facing.direction,
+                    on_ground=collider.on_ground,
+                    charge_ms=charge_ms,
+                    combo_step=ability.combo_step,
+                    meter=ability.meter,
                 )
+            )
+            if not _has_effect(execution):
+                continue
 
-        while requests:
-            req = requests.pop(0)
-            projectile_id = world.create_entity()
-            world.add_component(projectile_id, Transform(float(req["x"]), float(req["y"])))
-            world.add_component(projectile_id, Velocity(float(req["vx"]), float(req["vy"])))
-            world.add_component(
-                projectile_id,
-                Collider(int(req["width"]), int(req["height"]), on_ground=False, solid=False),
-            )
-            world.add_component(
-                projectile_id,
-                Projectile(
-                    owner=int(req["owner"]),
-                    tag=str(req["tag"]),
-                    damage=int(req["damage"]),
-                    ttl_ms=int(req["ttl_ms"]),
-                ),
-            )
-            world.add_component(projectile_id, Team(str(req["team"])))
+            requests.extend(execution.attacks)
+            ability.cooldown_remaining_ms = max(0, execution.cooldown_ms)
+            ability.combo_step = execution.next_combo_step
+            ability.combo_window_remaining_ms = max(0, execution.combo_window_ms)
+            ability.armor_remaining_ms = max(ability.armor_remaining_ms, execution.armor_ms)
+            ability.meter = max(0, ability.meter - execution.meter_cost)
+            if execution.restore_previous:
+                ability.current_id, ability.previous_id = ability.previous_id, ability.current_id
+            state.name = transition(state.name, "Attack")
+
+
+def _can_activate(health: Health, state: ActorState, ability: AbilityState) -> bool:
+    if health.dead or state.name == "Dead" or ability.cooldown_remaining_ms > 0:
+        return False
+    return state.name == "Attack" or can_transition(state.name, "Attack")
+
+
+def _has_effect(execution: AbilityExecution) -> bool:
+    return bool(
+        execution.attacks
+        or execution.armor_ms
+        or execution.meter_cost
+        or execution.restore_previous
+    )
+
+
+def _resting_state(collider: Collider, intent: ControlIntent) -> str:
+    if not collider.on_ground:
+        return "Fall"
+    return "Run" if intent.move_axis else "Idle"

@@ -1,3 +1,5 @@
+"""Route roster-scoped pygame input into gameplay and menu commands."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -199,20 +201,24 @@ class InputRouter:
             axis = 0
             hover = False
             guard = False
+            ability_held = False
         else:
             try:
                 axis_value = joystick.get_axis(GAMEPAD_BINDING.axis_move_x)
                 axis = 1 if axis_value > 0.35 else -1 if axis_value < -0.35 else 0
                 hover = bool(joystick.get_button(GAMEPAD_BINDING.jump_button))
                 guard = bool(joystick.get_button(GAMEPAD_BINDING.guard_button))
+                ability_held = bool(joystick.get_button(GAMEPAD_BINDING.ability_button))
             except pygame.error:
                 axis = 0
                 hover = False
                 guard = False
+                ability_held = False
         return [
             MoveCommand(player_slot=player.slot, axis=axis),
             HoverCommand(player_slot=player.slot, held=hover),
             GuardCommand(player_slot=player.slot, held=guard),
+            AbilityUseCommand(player_slot=player.slot, held=ability_held),
         ]
 
     def _gamepad_event_commands(
@@ -241,8 +247,11 @@ class InputRouter:
                 return [DropAbilityCommand(slot, True)]
             if event.button == GAMEPAD_BINDING.start_button:
                 return [PauseCommand(slot)]
-        elif event.type == pygame.JOYBUTTONUP and event.button == GAMEPAD_BINDING.draw_button:
-            return [DrawReleaseCommand(slot)]
+        elif event.type == pygame.JOYBUTTONUP:
+            if event.button == GAMEPAD_BINDING.draw_button:
+                return [DrawReleaseCommand(slot)]
+            if event.button == GAMEPAD_BINDING.ability_button:
+                return [AbilityUseCommand(slot, released=True)]
         elif event.type == pygame.JOYHATMOTION:
             hat_x, hat_y = (int(value) for value in event.value)
             state_key = (instance_id, int(event.hat))
@@ -313,6 +322,7 @@ def _keyboard_held_commands(slot: int, profile: KeyboardProfile, keys: KeyState)
         MoveCommand(player_slot=slot, axis=move_axis),
         HoverCommand(player_slot=slot, held=bool(keys[profile.jump])),
         GuardCommand(player_slot=slot, held=bool(keys[profile.guard])),
+        AbilityUseCommand(player_slot=slot, held=bool(keys[profile.ability])),
     ]
 
 
@@ -323,7 +333,11 @@ def _keyboard_event_commands(
 ) -> list[InputCommand]:
     profile = route.profile
     if event.type == pygame.KEYUP:
-        return [DrawReleaseCommand(slot)] if event.key == profile.draw else []
+        if event.key == profile.draw:
+            return [DrawReleaseCommand(slot)]
+        if event.key == profile.ability:
+            return [AbilityUseCommand(slot, released=True)]
+        return []
     if event.type != pygame.KEYDOWN or _is_repeat(event):
         return []
 

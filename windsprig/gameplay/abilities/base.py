@@ -1,84 +1,56 @@
+"""Typed ability activation boundary shared by deterministic strategies."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
 
-from windsprig.core.ecs import World
+from windsprig.gameplay.components import AttackRequest
 
 
-@dataclass(frozen=True)
-class AttackShape:
-    dx: float
-    dy: float
-    width: int
-    height: int
-    damage: int
-    knockback_x: float
-    knockback_y: float
-    ttl_ms: int
-    tag: str
+@dataclass(frozen=True, slots=True)
+class AbilityContext:
+    """Immutable actor and simulation state supplied to one activation."""
+
+    actor_id: int
+    frame_index: int
+    x: float
+    y: float
+    facing: int
+    on_ground: bool
+    charge_ms: int
+    combo_step: int
+    meter: int
+
+
+@dataclass(frozen=True, slots=True)
+class AbilityExecution:
+    """Frozen gameplay effects returned atomically by an ability strategy."""
+
+    attacks: tuple[AttackRequest, ...]
+    cooldown_ms: int
+    next_combo_step: int
+    combo_window_ms: int = 0
+    armor_ms: int = 0
+    meter_cost: int = 0
+    restore_previous: bool = False
 
 
 class AbilityStrategy(Protocol):
+    """Convert a frozen activation context into deterministic gameplay effects."""
+
     name: str
 
-    def on_enter(self, actor: int, world: World) -> None:
-        ...
-
-    def handle_input(self, actor: int, command: object, world: World) -> None:
-        ...
-
-    def update(self, actor: int, world: World, dt_ms: int) -> None:
-        ...
-
-    def get_attack_shapes(self, actor: int, frame_idx: int) -> list[AttackShape]:
-        ...
+    def activate(self, context: AbilityContext) -> AbilityExecution:
+        """Return all effects for one accepted activation edge."""
 
 
-@dataclass
-class DataDrivenAbilityStrategy:
-    name: str
-    damage: int
-    cooldown_ms: int
-    range_px: int
-    projectile_speed: float
-    is_super: bool = False
+class NoneAbilityStrategy:
+    """Safe no-op used only for the explicit empty ability sentinel."""
 
-    def on_enter(self, actor: int, world: World) -> None:
-        # Strategy objects are stateless; per-actor cooldown lives in AbilityState component.
-        _ = (actor, world)
+    __slots__ = ()
+    name = "none"
 
-    def handle_input(self, actor: int, command: object, world: World) -> None:
-        if command.__class__.__name__ != "AbilityUseCommand":
-            return
-        world.events.publish(
-            "ability_use_requested",
-            {
-                "actor": actor,
-                "ability": self.name,
-                "damage": self.damage,
-                "range_px": self.range_px,
-                "speed": self.projectile_speed,
-                "cooldown_ms": self.cooldown_ms,
-                "is_super": self.is_super,
-            },
-        )
-
-    def update(self, actor: int, world: World, dt_ms: int) -> None:
-        _ = (actor, world, dt_ms)
-
-    def get_attack_shapes(self, actor: int, frame_idx: int) -> list[AttackShape]:
-        _ = (actor, frame_idx)
-        return [
-            AttackShape(
-                dx=float(self.range_px),
-                dy=0.0,
-                width=max(20, self.range_px // 3),
-                height=18,
-                damage=self.damage,
-                knockback_x=self.projectile_speed * 0.2,
-                knockback_y=-90.0,
-                ttl_ms=280,
-                tag=self.name,
-            )
-        ]
+    def activate(self, context: AbilityContext) -> AbilityExecution:
+        _ = context
+        return AbilityExecution(attacks=(), cooldown_ms=0, next_combo_step=0)

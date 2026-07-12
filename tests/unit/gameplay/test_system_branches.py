@@ -12,6 +12,7 @@ from windsprig.gameplay.components import (
     NON_ENTITY_DAMAGE_SOURCE_ID,
     AbilityState,
     ActorState,
+    AttackRequest,
     Collectible,
     Collider,
     ControlIntent,
@@ -82,7 +83,7 @@ def stage_spec() -> StageSpec:
     )
 
 
-def test_ability_system_ignores_drop_and_materializes_an_attack_as_a_projectile() -> None:
+def test_ability_system_ignores_drop_and_queues_a_typed_attack_without_materializing() -> None:
     world = World()
     world.resources["ability_registry"] = create_default_registry(GameConfig().content_dir)
     add_entity(
@@ -90,8 +91,10 @@ def test_ability_system_ignores_drop_and_materializes_an_attack_as_a_projectile(
         Team("enemy"),
         Transform(0, 0),
         Facing(),
+        Collider(28, 28, on_ground=True),
+        Health(3, 3),
         ControlIntent(ability_pressed=True),
-        AbilityState(current_id="fire"),
+        AbilityState(current_id="bloomblade"),
         ActorState(),
     )
     dropped = add_entity(
@@ -99,8 +102,10 @@ def test_ability_system_ignores_drop_and_materializes_an_attack_as_a_projectile(
         Team("player"),
         Transform(20, 30),
         Facing(),
+        Collider(28, 28, on_ground=True),
+        Health(10, 10),
         ControlIntent(drop_pressed=True),
-        AbilityState(current_id="fire"),
+        AbilityState(current_id="cinder"),
         ActorState(),
     )
     caster = add_entity(
@@ -108,8 +113,10 @@ def test_ability_system_ignores_drop_and_materializes_an_attack_as_a_projectile(
         Team("player"),
         Transform(100, 50),
         Facing(-1),
+        Collider(28, 28, on_ground=True),
+        Health(10, 10),
         ControlIntent(ability_pressed=True),
-        AbilityState(current_id="ultra_sword", cooldown_remaining_ms=10),
+        AbilityState(current_id="bloomblade", cooldown_remaining_ms=10),
         ActorState(),
     )
 
@@ -117,19 +124,20 @@ def test_ability_system_ignores_drop_and_materializes_an_attack_as_a_projectile(
 
     dropped_ability = world.get_component(dropped, AbilityState)
     caster_ability = world.get_component(caster, AbilityState)
-    assert (dropped_ability.previous_id, dropped_ability.current_id) == ("none", "fire")
-    assert caster_ability.cooldown_remaining_ms == 600
-    projectile_rows = world.query(Projectile, Team, Transform, Velocity, Collider)
-    assert len(projectile_rows) == 1
-    _, projectile, team, transform, velocity, collider = projectile_rows[0]
-    assert projectile.owner == caster
-    assert projectile.tag == "ultra_sword"
-    assert team.name == "player"
-    assert transform.x < 100
-    assert velocity.vx < 0
-    assert collider.solid is False
-    assert world.resources["projectile_requests"] == []
-    assert [event.topic for event in world.events.peek()] == ["ability_used"]
+    assert (dropped_ability.previous_id, dropped_ability.current_id) == ("none", "cinder")
+    assert caster_ability.cooldown_remaining_ms == 120
+    assert world.query(Projectile) == []
+    requests = world.resources["attack_requests"]
+    assert isinstance(requests, list)
+    assert len(requests) == 1
+    assert isinstance(requests[0], AttackRequest)
+    assert (requests[0].owner_entity_id, requests[0].ability_id, requests[0].x) == (
+        caster,
+        "bloomblade",
+        72.0,
+    )
+    assert "projectile_requests" not in world.resources
+    assert world.events.peek() == []
 
 
 def test_combat_system_expires_projectiles_and_queues_projectile_and_contact_damage() -> None:
@@ -426,7 +434,9 @@ def test_input_command_system_resets_stale_intent_and_maps_every_command_type() 
                 HoverCommand(1, True),
                 DrawStartCommand(1),
                 DrawReleaseCommand(1),
-                AbilityUseCommand(1, True),
+                AbilityUseCommand(1, held=True),
+                AbilityUseCommand(1, pressed=True),
+                AbilityUseCommand(1, released=True),
                 GuardCommand(1, True),
                 DodgeCommand(1, True),
                 DropAbilityCommand(1, True),
@@ -445,6 +455,8 @@ def test_input_command_system_resets_stale_intent_and_maps_every_command_type() 
         draw_started=True,
         draw_released=True,
         ability_pressed=True,
+        ability_held=True,
+        ability_released=True,
         guard_held=True,
         dodge_pressed=True,
         drop_pressed=True,

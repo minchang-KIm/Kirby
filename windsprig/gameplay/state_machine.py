@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "Idle": {"Run", "Jump", "Hover", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
-    "Run": {"Idle", "Jump", "Hover", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
+    "Idle": {"Run", "Jump", "Hover", "Attack", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
+    "Run": {"Idle", "Jump", "Hover", "Attack", "Draw", "Guard", "Dodge", "Hurt", "Dead"},
     "Jump": {"Hover", "Fall", "Attack", "Draw", "Dodge", "Hurt", "Dead"},
     "Hover": {"Fall", "Attack", "Draw", "Dodge", "Hurt", "Dead"},
     "Fall": {"Idle", "Run", "Draw", "Attack", "Dodge", "Hurt", "Dead"},

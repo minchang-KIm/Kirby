@@ -1,3 +1,5 @@
+"""Map one fixed-step command frame onto mutable player intent components."""
+
 from __future__ import annotations
 
 from windsprig.core.ecs import World
@@ -25,6 +27,7 @@ class InputCommandSystem:
             intent.draw_started = False
             intent.draw_released = False
             intent.ability_pressed = False
+            intent.ability_released = False
             intent.ability_consumed = False
             intent.dodge_pressed = False
             intent.drop_pressed = False
@@ -35,6 +38,7 @@ class InputCommandSystem:
             intent.move_axis = 0
             intent.hover_held = False
             intent.guard_held = False
+            intent.ability_held = False
 
         for entity_id, slot, intent in world.query(PlayerSlot, ControlIntent):
             for command in input_frame.commands_for(slot.slot):
@@ -52,7 +56,12 @@ class InputCommandSystem:
                 elif isinstance(command, DrawReleaseCommand):
                     intent.draw_released = True
                 elif isinstance(command, AbilityUseCommand):
-                    intent.ability_pressed = command.pressed
+                    intent.ability_pressed = intent.ability_pressed or command.pressed
+                    intent.ability_released = intent.ability_released or command.released
+                    if not command.pressed and not command.released:
+                        intent.ability_held = command.held
+                    elif command.held:
+                        intent.ability_held = True
                 elif isinstance(command, GuardCommand):
                     intent.guard_held = command.held
                 elif isinstance(command, DodgeCommand):

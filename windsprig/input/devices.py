@@ -1,3 +1,5 @@
+"""Collect both legacy fixed slots into deterministic phased commands."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -50,7 +52,7 @@ class InputDeviceMux:
         gamepad_up: dict[int, set[int]] = {3: set(), 4: set()}
 
         for event in events:
-            if event.type == pygame.KEYDOWN:
+            if event.type == pygame.KEYDOWN and not _is_repeat(event):
                 for slot, profile in KEYBOARD_BINDINGS.items():
                     if event.key in _profile_keys(profile):
                         edge_down[slot].add(event.key)
@@ -98,6 +100,10 @@ class InputDeviceMux:
             MoveCommand(player_slot=slot, axis=move_axis),
             HoverCommand(player_slot=slot, held=joy.get_button(GAMEPAD_BINDING.jump_button) == 1),
             GuardCommand(player_slot=slot, held=joy.get_button(GAMEPAD_BINDING.guard_button) == 1),
+            AbilityUseCommand(
+                player_slot=slot,
+                held=joy.get_button(GAMEPAD_BINDING.ability_button) == 1,
+            ),
         ]
         if GAMEPAD_BINDING.jump_button in edge_down:
             commands.append(JumpCommand(player_slot=slot, pressed=True))
@@ -107,6 +113,8 @@ class InputDeviceMux:
             commands.append(DrawReleaseCommand(player_slot=slot))
         if GAMEPAD_BINDING.ability_button in edge_down:
             commands.append(AbilityUseCommand(player_slot=slot, pressed=True))
+        if GAMEPAD_BINDING.ability_button in edge_up:
+            commands.append(AbilityUseCommand(player_slot=slot, released=True))
         if GAMEPAD_BINDING.dodge_button in edge_down:
             commands.append(DodgeCommand(player_slot=slot, pressed=True))
         if GAMEPAD_BINDING.drop_button in edge_down:
@@ -126,6 +134,7 @@ def build_keyboard_commands(
         MoveCommand(player_slot=slot, axis=move_axis),
         HoverCommand(player_slot=slot, held=bool(keys[profile.jump])),
         GuardCommand(player_slot=slot, held=bool(keys[profile.guard])),
+        AbilityUseCommand(player_slot=slot, held=bool(keys[profile.ability])),
     ]
     if profile.jump in edge_down:
         commands.append(JumpCommand(player_slot=slot, pressed=True))
@@ -135,6 +144,8 @@ def build_keyboard_commands(
         commands.append(DrawReleaseCommand(player_slot=slot))
     if profile.ability in edge_down:
         commands.append(AbilityUseCommand(player_slot=slot, pressed=True))
+    if profile.ability in edge_up:
+        commands.append(AbilityUseCommand(player_slot=slot, released=True))
     if profile.dodge in edge_down:
         commands.append(DodgeCommand(player_slot=slot, pressed=True))
     if profile.drop_ability in edge_down:
@@ -153,3 +164,7 @@ def _profile_keys(profile: KeyboardProfile) -> set[int]:
         profile.dodge,
         profile.drop_ability,
     }
+
+
+def _is_repeat(event: pygame.event.Event) -> bool:
+    return bool(getattr(event, "repeat", False))

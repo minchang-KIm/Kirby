@@ -65,6 +65,8 @@ class ControlIntent:
     draw_started: bool = False
     draw_released: bool = False
     ability_pressed: bool = False
+    ability_held: bool = False
+    ability_released: bool = False
     ability_consumed: bool = False
     guard_held: bool = False
     dodge_pressed: bool = False

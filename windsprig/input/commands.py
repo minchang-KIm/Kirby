@@ -1,3 +1,5 @@
+"""Immutable device-agnostic input values crossing the fixed-step boundary."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -38,7 +40,9 @@ class DrawReleaseCommand(InputCommand):
 
 @dataclass(frozen=True, slots=True)
 class AbilityUseCommand(InputCommand):
-    pressed: bool
+    pressed: bool = False
+    held: bool = False
+    released: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,9 +101,19 @@ class InputFrame:
     def continuous_only(self) -> InputFrame:
         filtered: dict[int, list[InputCommand]] = {}
         for slot, commands in self.commands_by_slot.items():
-            filtered[slot] = [
+            continuous: list[InputCommand] = [
                 command for command in commands if isinstance(command, (MoveCommand, HoverCommand, GuardCommand))
             ]
+            ability_commands = [command for command in commands if isinstance(command, AbilityUseCommand)]
+            if ability_commands:
+                pure_samples = [
+                    command
+                    for command in ability_commands
+                    if not command.pressed and not command.released
+                ]
+                sample = pure_samples[-1] if pure_samples else ability_commands[-1]
+                continuous.append(AbilityUseCommand(player_slot=slot, held=sample.held))
+            filtered[slot] = continuous
         return InputFrame(commands_by_slot=filtered)
 
     @staticmethod

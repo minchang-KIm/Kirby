@@ -1,8 +1,18 @@
+"""Buffer render-frame samples until deterministic simulation steps consume them."""
+
 from __future__ import annotations
 
-from windsprig.input.commands import GuardCommand, HoverCommand, InputCommand, InputFrame, MoveCommand
+from windsprig.input.commands import (
+    AbilityUseCommand,
+    GuardCommand,
+    HoverCommand,
+    InputCommand,
+    InputFrame,
+    MoveCommand,
+)
 
 HELD_TYPES = (MoveCommand, HoverCommand, GuardCommand)
+HELD_ORDER = (*HELD_TYPES, AbilityUseCommand)
 
 
 class InputQueue:
@@ -22,7 +32,34 @@ class InputQueue:
             self.clear_slot(slot)
 
         for slot, commands in frame.commands_by_slot.items():
+            # Ability phases share one value type; edge values must not replace the held sample.
+            pure_ability_samples = [
+                command
+                for command in commands
+                if isinstance(command, AbilityUseCommand)
+                and not command.pressed
+                and not command.released
+            ]
+            if pure_ability_samples:
+                sample = pure_ability_samples[-1]
+                self._held.setdefault(slot, {})[AbilityUseCommand] = sample
             for command in commands:
+                if isinstance(command, AbilityUseCommand):
+                    if command.pressed or command.released:
+                        self._edges.setdefault(slot, []).append(
+                            AbilityUseCommand(
+                                player_slot=slot,
+                                pressed=command.pressed,
+                                released=command.released,
+                            )
+                        )
+                        if not pure_ability_samples:
+                            # Combined commands still carry their continuous portion into catch-up steps.
+                            self._held.setdefault(slot, {})[AbilityUseCommand] = AbilityUseCommand(
+                                player_slot=slot,
+                                held=command.held,
+                            )
+                    continue
                 if isinstance(command, HELD_TYPES):
                     self._held.setdefault(slot, {})[type(command)] = command
                 else:
@@ -33,7 +70,7 @@ class InputQueue:
         output = InputFrame.empty()
         for slot in sorted(set(self._held) | set(self._edges)):
             held_by_type = self._held.get(slot, {})
-            held = [held_by_type[command_type] for command_type in HELD_TYPES if command_type in held_by_type]
+            held = [held_by_type[command_type] for command_type in HELD_ORDER if command_type in held_by_type]
             output.commands_by_slot[slot] = held + self._edges.get(slot, [])
         self._edges = {}
         return output
