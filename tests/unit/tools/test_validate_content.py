@@ -95,3 +95,66 @@ def test_cli_reports_complete_release_success_with_exit_zero(
     assert capsys.readouterr().out == (
         "OK: 6 worlds, 30 stages, 6 bosses, 90 motes, 2 locales, 28 music cues, 29 sfx cues, 0 duplicate layouts\n"
     )
+
+
+def test_cli_writes_canonical_machine_readable_release_report(tmp_path: Path) -> None:
+    content, asset_root = write_release_bundle(tmp_path)
+    report_path = tmp_path / "evidence" / "content-report.json"
+
+    result = validate_content.main(
+        [
+            "--content",
+            str(content),
+            "--assets",
+            str(asset_root),
+            "--all",
+            "--report",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload == {
+        "counts": {
+            "bosses": 6,
+            "duplicate_layouts": 0,
+            "locales": 2,
+            "motes": 90,
+            "music": 28,
+            "sfx": 29,
+            "stages": 30,
+            "worlds": 6,
+        },
+        "errors": [],
+        "status": "passed",
+        "warnings": [],
+    }
+    assert report_path.read_bytes().endswith(b"\n")
+
+
+def test_cli_report_records_semantic_failure_without_hiding_console_errors(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    content = write_minimal_bundle(tmp_path / "content")
+    _write_supporting_catalogs(content)
+    report_path = tmp_path / "content-report.json"
+
+    result = validate_content.main(
+        [
+            "--content",
+            str(content),
+            "--assets",
+            str(tmp_path / "assets"),
+            "--all",
+            "--report",
+            str(report_path),
+        ]
+    )
+
+    assert result == 1
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert any(issue["code"] == "world_count" for issue in payload["errors"])
+    assert "ERROR world_count" in capsys.readouterr().out
