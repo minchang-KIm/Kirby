@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers.catalog import write_minimal_bundle
+from tests.helpers.catalog import write_minimal_bundle, write_release_bundle
 from tools import validate_content
 
 
@@ -80,3 +80,17 @@ def test_cli_reports_semantic_issues_with_exit_one(
     output = capsys.readouterr().out
     assert "ERROR world_count campaign.worlds: expected 6, received 1\n" in output
     assert output.endswith(" validation errors\n")
+
+
+def test_cli_reports_complete_release_success_with_exit_zero(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    content, asset_root = write_release_bundle(tmp_path)
+
+    result = validate_content.main(["--content", str(content), "--assets", str(asset_root), "--all"])
+
+    assert result == 0
+    assert capsys.readouterr().out == (
+        "OK: 6 worlds, 30 stages, 6 bosses, 90 motes, 2 locales, 28 music cues, 29 sfx cues, 0 duplicate layouts\n"
+    )

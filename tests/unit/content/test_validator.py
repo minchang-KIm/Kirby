@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
-from tests.helpers.catalog import write_minimal_bundle
-from windsprig.content.loader import load_catalog_bundle
+from tests.helpers.catalog import minimal_documents, write_minimal_bundle, write_release_bundle
+from windsprig.content.loader import load_asset_manifest, load_catalog_bundle, load_locales
 from windsprig.content.models import (
     ArtAssetSpec,
     AssetManifest,
@@ -59,6 +60,11 @@ def _context() -> tuple[AssetManifest, LocaleCatalog]:
 def _selected(report_codes: tuple[str, ...], report: object) -> list[tuple[str, str]]:
     errors = report.errors  # type: ignore[attr-defined]
     return [(issue.code, issue.path) for issue in errors if issue.code in report_codes]
+
+
+def _first_stage_document(documents: dict[str, dict[str, object]]) -> dict[str, object]:
+    stages = cast(list[object], documents["campaign"]["stages"])
+    return cast(dict[str, object], stages[0])
 
 
 def test_validator_orders_duplicate_identity_navigation_and_layout_categories(
@@ -160,6 +166,69 @@ def test_validator_checks_ground_row_against_stage_bounds(tmp_path: Path) -> Non
     assert _selected(("out_of_bounds",), report) == [("out_of_bounds", "campaign.stages.demo_01.ground_y_tile")]
 
 
+def test_validator_rejects_stage_without_a_player_spawn(tmp_path: Path) -> None:
+    documents = minimal_documents()
+    _first_stage_document(documents)["player_spawns"] = []
+    bundle = load_catalog_bundle(write_minimal_bundle(tmp_path, documents))
+    assets, locales = _context()
+
+    report = validate_bundle(bundle, assets, locales)
+
+    assert bundle.campaign.stages["demo_01"].player_spawns == ()
+    assert _selected(("missing_player_spawn",), report) == [
+        ("missing_player_spawn", "campaign.stages.demo_01.player_spawns")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("patrol_left", "patrol_right", "code", "path"),
+    [
+        (-1.0, 224.0, "out_of_bounds", "campaign.stages.demo_01.enemy_spawns[0].patrol_left"),
+        (160.0, 384.0, "out_of_bounds", "campaign.stages.demo_01.enemy_spawns[0].patrol_right"),
+        (225.0, 224.0, "invalid_patrol_range", "campaign.stages.demo_01.enemy_spawns[0]"),
+    ],
+)
+def test_validator_rejects_unordered_or_out_of_bounds_enemy_patrol(
+    tmp_path: Path,
+    patrol_left: float,
+    patrol_right: float,
+    code: str,
+    path: str,
+) -> None:
+    documents = minimal_documents()
+    stage = _first_stage_document(documents)
+    enemies = cast(list[object], stage["enemy_spawns"])
+    enemy = cast(dict[str, object], enemies[0])
+    enemy["patrol_left"] = patrol_left
+    enemy["patrol_right"] = patrol_right
+    bundle = load_catalog_bundle(write_minimal_bundle(tmp_path, documents))
+    assets, locales = _context()
+
+    report = validate_bundle(bundle, assets, locales)
+
+    loaded = bundle.campaign.stages["demo_01"].enemy_spawns[0]
+    assert (loaded.patrol_left, loaded.patrol_right) == (patrol_left, patrol_right)
+    assert _selected((code,), report) == [(code, path)]
+
+
+def test_validator_binds_reachable_navigation_goal_to_gameplay_goal_tile(tmp_path: Path) -> None:
+    documents = minimal_documents()
+    stage = _first_stage_document(documents)
+    navigation = cast(dict[str, object], stage["navigation"])
+    nodes = cast(list[object], navigation["nodes"])
+    goal = next(cast(dict[str, object], node) for node in nodes if cast(dict[str, object], node)["nav_id"] == "goal")
+    goal["tile_x"] = 2
+    goal["tile_y"] = 2
+    bundle = load_catalog_bundle(write_minimal_bundle(tmp_path, documents))
+    assets, locales = _context()
+
+    report = validate_bundle(bundle, assets, locales)
+
+    assert _selected(("navigation_goal_mismatch",), report) == [
+        ("navigation_goal_mismatch", "campaign.stages.demo_01.navigation.goal")
+    ]
+
+
 def test_validation_order_is_independent_of_mapping_insertion_order(tmp_path: Path) -> None:
     bundle = load_catalog_bundle(write_minimal_bundle(tmp_path))
     assets, locales = _context()
@@ -188,6 +257,30 @@ def test_validation_issues_reports_and_counts_are_deeply_frozen(tmp_path: Path) 
     with pytest.raises(FrozenInstanceError):
         report.errors[0].message = "changed"  # type: ignore[misc]
     assert isinstance(report.errors[0], ValidationIssue)
+
+
+def test_complete_release_fixture_has_no_validation_issues(tmp_path: Path) -> None:
+    content, asset_root = write_release_bundle(tmp_path)
+
+    report = validate_bundle(
+        load_catalog_bundle(content),
+        load_asset_manifest(content / "assets.json"),
+        load_locales(content),
+        asset_root=asset_root,
+    )
+
+    assert report.errors == ()
+    assert report.warnings == ()
+    assert dict(report.counts) == {
+        "bosses": 6,
+        "duplicate_layouts": 0,
+        "locales": 2,
+        "motes": 90,
+        "music": 28,
+        "sfx": 29,
+        "stages": 30,
+        "worlds": 6,
+    }
 
 
 def test_validator_reports_reference_reward_and_locale_contracts(tmp_path: Path) -> None:

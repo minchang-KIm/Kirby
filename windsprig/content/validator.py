@@ -304,6 +304,7 @@ def _bounds_issues(bundle: CatalogBundle) -> list[ValidationIssue]:
                     )
                 )
         for index, enemy in enumerate(stage.enemy_spawns):
+            enemy_path = f"{base}.enemy_spawns[{index}]"
             if not (
                 math.isfinite(enemy.x)
                 and math.isfinite(enemy.y)
@@ -313,8 +314,28 @@ def _bounds_issues(bundle: CatalogBundle) -> list[ValidationIssue]:
                 issues.append(
                     _issue(
                         "out_of_bounds",
-                        f"{base}.enemy_spawns[{index}]",
+                        enemy_path,
                         f"pixel position ({enemy.x}, {enemy.y}) is outside stage bounds",
+                    )
+                )
+            for name, endpoint in (
+                ("patrol_left", enemy.patrol_left),
+                ("patrol_right", enemy.patrol_right),
+            ):
+                if not (math.isfinite(endpoint) and 0 <= endpoint < stage.pixel_width):
+                    issues.append(
+                        _issue(
+                            "out_of_bounds",
+                            f"{enemy_path}.{name}",
+                            f"patrol endpoint {endpoint} is outside pixel bounds [0, {stage.pixel_width})",
+                        )
+                    )
+            if enemy.patrol_left > enemy.patrol_right:
+                issues.append(
+                    _issue(
+                        "invalid_patrol_range",
+                        enemy_path,
+                        "patrol_left must be less than or equal to patrol_right",
                     )
                 )
     return issues
@@ -323,10 +344,18 @@ def _bounds_issues(bundle: CatalogBundle) -> list[ValidationIssue]:
 def _safe_spawn_issues(bundle: CatalogBundle) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     for stage_id, stage in bundle.campaign.stages.items():
+        base = f"campaign.stages.{stage_id}"
+        if not stage.player_spawns:
+            issues.append(
+                _issue(
+                    "missing_player_spawn",
+                    f"{base}.player_spawns",
+                    "stage must define at least one player spawn",
+                )
+            )
         if stage.tile_size <= 0:
             continue
         blocked = set(stage.solids) | set(stage.hazards)
-        base = f"campaign.stages.{stage_id}"
         for index, (x, y) in enumerate(stage.player_spawns):
             if math.isfinite(x) and math.isfinite(y):
                 tile = (int(x // stage.tile_size), int(y // stage.tile_size))
@@ -441,14 +470,23 @@ def _navigation_issues(bundle: CatalogBundle) -> list[ValidationIssue]:
                     f"goal node does not exist: {graph.goal}",
                 )
             )
-        elif graph.goal not in reachable:
-            issues.append(
-                _issue(
-                    "unreachable_goal",
-                    f"{nav_path}.goal",
-                    f"goal node is not reachable from {graph.start}",
+        else:
+            if nodes[graph.goal] != stage.goal_tile:
+                issues.append(
+                    _issue(
+                        "navigation_goal_mismatch",
+                        f"{nav_path}.goal",
+                        f"goal node must match gameplay goal tile {stage.goal_tile}; received {nodes[graph.goal]}",
+                    )
                 )
-            )
+            if graph.goal not in reachable:
+                issues.append(
+                    _issue(
+                        "unreachable_goal",
+                        f"{nav_path}.goal",
+                        f"goal node is not reachable from {graph.start}",
+                    )
+                )
 
         reachable_tiles = {nodes[node_id] for node_id in reachable}
         for index, checkpoint in enumerate(stage.checkpoints):
