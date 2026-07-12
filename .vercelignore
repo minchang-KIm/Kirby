@@ -1,0 +1,75 @@
+# Repository and local agent state
+.git
+.github
+.superpowers
+.vercel
+.agents
+.codex
+.claude
+.cursor
+.windsurf
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# Build outputs and native-only packaging
+artifacts
+build
+dist
+/build.spec
+
+# Tests, reports, and local saves
+tests
+test-results
+playwright-report
+save
+saves
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+
+# Python environments, caches, and generated metadata
+.venv
+venv
+env
+ENV
+__pypackages__
+.tox
+.nox
+.cache
+.hypothesis
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.pyre
+.pytype
+__pycache__
+*.py[cod]
+*.egg-info
+
+# JavaScript dependencies, caches, and debug logs
+node_modules
+.pnpm-store
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Private machine credentials and environment files
+.env
+.env.*
+.netrc
+.npmrc
+.pypirc
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Editor and operating-system temporary files
+*.swp
+*.swo
+*~
