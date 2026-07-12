@@ -41,13 +41,18 @@ def _committed_runtime(tmp_path: Path) -> Path:
     (root / "assets" / "fonts" / "font.ttf").write_bytes(b"font")
     (root / "assets" / "LICENSES.md").write_text("# Licenses\n", encoding="utf-8")
     (root / "tools").mkdir()
+    (root / "tools" / "__init__.py").write_text('"""Fixture tools."""\n', encoding="utf-8")
     (root / "tools" / "build_web.py").write_text("BUILD = 1\n", encoding="utf-8")
+    (root / "tools" / "generate_fixture.py").write_text("GENERATE = 1\n", encoding="utf-8")
     (root / "tools" / "release_common.py").write_text("RELEASE = 1\n", encoding="utf-8")
     (root / "tools" / "web_runtime.py").write_text("RUNTIME = 1\n", encoding="utf-8")
     (root / "tools" / "web_source_manifest.py").write_text("SOURCE = 1\n", encoding="utf-8")
     (root / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "1.0.0"\n', encoding="utf-8")
     (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
-    (root / ".gitignore").write_text("windsprig/ignored.py\n", encoding="utf-8")
+    (root / ".gitignore").write_text(
+        "windsprig/ignored.py\ntools/ignored.py\n",
+        encoding="utf-8",
+    )
     _git(root, "init", "--quiet")
     _git(root, "add", ".")
     _git(
@@ -105,7 +110,9 @@ def test_runtime_manifest_rejects_dirty_or_ignored_packageable_sources(tmp_path:
     [
         "pyproject.toml",
         "uv.lock",
+        "tools/__init__.py",
         "tools/build_web.py",
+        "tools/generate_fixture.py",
         "tools/release_common.py",
         "tools/web_runtime.py",
         "tools/web_source_manifest.py",
@@ -117,6 +124,14 @@ def test_runtime_manifest_rejects_dirty_build_recipe_sources(tmp_path: Path, rel
     path.write_bytes(path.read_bytes() + b"# dirty\n")
 
     with pytest.raises(SourceProvenanceError, match="build recipe source is dirty"):
+        inspect_runtime_source(root)
+
+
+def test_runtime_manifest_rejects_an_ignored_tool_shadow(tmp_path: Path) -> None:
+    root = _committed_runtime(tmp_path)
+    (root / "tools" / "ignored.py").write_text("FORGE = True\n", encoding="utf-8")
+
+    with pytest.raises(SourceProvenanceError, match="build recipe source is not tracked by Git"):
         inspect_runtime_source(root)
 
 

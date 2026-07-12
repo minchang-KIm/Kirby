@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,14 +24,11 @@ _WEB_ENTRY_FILES: Final = (
     "runtime-manifest.json",
     "template.tmpl",
 )
-_BUILD_RECIPE_FILES: Final = (
+_BUILD_RECIPE_ROOT_FILES: Final = (
     "pyproject.toml",
     "uv.lock",
-    "tools/build_web.py",
-    "tools/release_common.py",
-    "tools/web_runtime.py",
-    "tools/web_source_manifest.py",
 )
+_BUILD_RECIPE_IGNORED_DIRS: Final = frozenset({"__pycache__"})
 _GENERATED_RUNTIME_FILES: Final = frozenset({"windsprig/_build_flags.py"})
 _SOURCE_ONLY_RUNTIME_FILES: Final = frozenset({"assets/fonts/NotoSansKR[wght].ttf"})
 
@@ -41,7 +39,7 @@ class SourceProvenanceError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class RuntimeSourceManifest:
-    """Canonical identity for every repository file eligible for web staging."""
+    """Canonical identity for staged runtime files and their release recipe."""
 
     source_commit: str
     sha256: str
@@ -86,6 +84,41 @@ def runtime_source_files(root: Path) -> tuple[Path, ...]:
     return tuple(sorted(files, key=lambda path: path.relative_to(lexical_root).as_posix()))
 
 
+def _is_link_or_reparse(path: Path) -> bool:
+    state = path.lstat()
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    return stat.S_ISLNK(state.st_mode) or bool(getattr(state, "st_file_attributes", 0) & reparse_flag)
+
+
+def _build_recipe_files(root: Path) -> tuple[Path, ...]:
+    """Return every physical input able to influence the Python build tools.
+
+    Binding the complete ``tools`` tree rejects ignored package/module shadows
+    and keeps future helper imports from silently escaping release provenance.
+    """
+
+    lexical_root = Path(root).absolute()
+    files: list[Path] = []
+    for root_relative in _BUILD_RECIPE_ROOT_FILES:
+        path = lexical_root / root_relative
+        if not path.is_file() or _is_link_or_reparse(path):
+            raise SourceProvenanceError(f"required build recipe source is missing or unsafe: {path}")
+        files.append(path)
+
+    tools_root = lexical_root / "tools"
+    if not tools_root.is_dir() or _is_link_or_reparse(tools_root):
+        raise SourceProvenanceError(f"required build recipe directory is missing or unsafe: {tools_root}")
+    for path in tools_root.rglob("*"):
+        tool_relative = path.relative_to(lexical_root)
+        if _is_link_or_reparse(path):
+            raise SourceProvenanceError(f"build recipe source is a link or reparse point: {path}")
+        if any(part in _BUILD_RECIPE_IGNORED_DIRS for part in tool_relative.parts):
+            continue
+        if path.is_file():
+            files.append(path)
+    return tuple(sorted(files, key=lambda path: path.relative_to(lexical_root).as_posix()))
+
+
 def _git(root: Path, *arguments: str) -> str:
     try:
         completed = subprocess.run(
@@ -106,6 +139,8 @@ def inspect_runtime_source(root: Path) -> RuntimeSourceManifest:
     lexical_root = Path(root).absolute()
     source_files = runtime_source_files(lexical_root)
     relative_files = tuple(path.relative_to(lexical_root).as_posix() for path in source_files)
+    recipe_files = _build_recipe_files(lexical_root)
+    relative_recipe_files = tuple(path.relative_to(lexical_root).as_posix() for path in recipe_files)
 
     source_commit = _git(lexical_root, "rev-parse", "HEAD").strip()
     if not _COMMIT_PATTERN.fullmatch(source_commit):
@@ -129,7 +164,8 @@ def inspect_runtime_source(root: Path) -> RuntimeSourceManifest:
         "--porcelain=v1",
         "--untracked-files=all",
         "--",
-        *_BUILD_RECIPE_FILES,
+        *_BUILD_RECIPE_ROOT_FILES,
+        "tools",
     )
     if recipe_status:
         raise SourceProvenanceError("tracked build recipe source is dirty")
@@ -144,20 +180,34 @@ def inspect_runtime_source(root: Path) -> RuntimeSourceManifest:
         joined = ", ".join(untracked_packageable)
         raise SourceProvenanceError(f"packageable runtime source is not tracked by Git: {joined}")
     tracked_recipe = frozenset(
-        value for value in _git(lexical_root, "ls-files", "-z", "--", *_BUILD_RECIPE_FILES).split("\0") if value
+        value
+        for value in _git(
+            lexical_root,
+            "ls-files",
+            "-z",
+            "--",
+            *_BUILD_RECIPE_ROOT_FILES,
+            "tools",
+        ).split("\0")
+        if value
     )
-    missing_recipe = tuple(path for path in _BUILD_RECIPE_FILES if path not in tracked_recipe)
+    missing_recipe = tuple(path for path in relative_recipe_files if path not in tracked_recipe)
     if missing_recipe:
         joined = ", ".join(missing_recipe)
         raise SourceProvenanceError(f"build recipe source is not tracked by Git: {joined}")
 
     digest = hashlib.sha256()
-    digest.update(b"windsprig-runtime-manifest-v1\0")
-    for relative, path in zip(relative_files, source_files, strict=True):
-        payload = path.read_bytes()
-        relative_bytes = relative.encode("utf-8")
-        digest.update(len(relative_bytes).to_bytes(4, "big"))
-        digest.update(relative_bytes)
-        digest.update(len(payload).to_bytes(8, "big"))
-        digest.update(payload)
+    digest.update(b"windsprig-web-build-inputs-v2\0")
+    for namespace, paths, relatives in (
+        (b"runtime\0", source_files, relative_files),
+        (b"recipe\0", recipe_files, relative_recipe_files),
+    ):
+        digest.update(namespace)
+        for relative, path in zip(relatives, paths, strict=True):
+            payload = path.read_bytes()
+            relative_bytes = relative.encode("utf-8")
+            digest.update(len(relative_bytes).to_bytes(4, "big"))
+            digest.update(relative_bytes)
+            digest.update(len(payload).to_bytes(8, "big"))
+            digest.update(payload)
     return RuntimeSourceManifest(source_commit, digest.hexdigest(), relative_files)
