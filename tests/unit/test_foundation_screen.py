@@ -139,6 +139,21 @@ def make_foundation_screen(
     )
 
 
+def test_foundation_fonts_never_consult_browser_host_fonts(monkeypatch) -> None:
+    """Keep the first rendered frame independent of WebAssembly font discovery."""
+
+    screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
+
+    def reject_system_font(*_args: object, **_kwargs: object) -> pygame.font.Font:
+        raise AssertionError("foundation rendering must use the bundled release font")
+
+    monkeypatch.setattr(pygame.font, "SysFont", reject_system_font)
+
+    title_font, small_font = screen._fonts()
+
+    assert title_font.get_height() > small_font.get_height() > 0
+
+
 def test_visible_nodes_preserves_the_map_service_authored_world_order() -> None:
     screen = make_foundation_screen(RecordingSaveService([SaveLoadResult(SaveData())]))
     world_2_node = screen.catalog.worlds["world_2"][0]

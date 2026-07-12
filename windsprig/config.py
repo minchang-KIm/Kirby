@@ -40,6 +40,7 @@ class GameConfig:
     replay_seed: int = 1337
     level_path: Path = Path("levels/level_01.json")
     content_dir: Path = Path(__file__).resolve().parent / "content"
+    asset_dir: Path = Path(__file__).resolve().parents[1] / "assets"
     max_local_players: int = 4
     release_version: str = "1.0.0"
     commit_sha: str = "development"

@@ -447,8 +447,12 @@ class FoundationScreen(Screen):
         if self._font is None or self._small_font is None:
             if not pygame.font.get_init():
                 pygame.font.init()
-            self._font = pygame.font.SysFont("malgungothic", 20)
-            self._small_font = pygame.font.SysFont("consolas", 16)
+            # WHY: SysFont performs host discovery and can block indefinitely in
+            # WebAssembly. The release font is deterministic, bilingual, and is
+            # verified by the asset manifest before publication.
+            font_path = self.config.asset_dir / "fonts" / "WindsprigSansKR.ttf"
+            self._font = pygame.font.Font(str(font_path), 20)
+            self._small_font = pygame.font.Font(str(font_path), 16)
         return self._font, self._small_font
 
     def _render_world_map(
