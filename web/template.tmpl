@@ -5,6 +5,68 @@ from pathlib import Path, PurePosixPath
 import platform
 import stat
 import sys
+import unicodedata
+
+
+def _validated_archive_members(members):
+    """Return one collision-free portable regular-file namespace."""
+
+    invalid_component_characters = frozenset('<>:"\\|?*')
+    reserved_basenames = frozenset(
+        {"con", "prn", "aux", "nul"}
+        | {f"com{number}" for number in range(1, 10)}
+        | {f"lpt{number}" for number in range(1, 10)}
+    )
+    exact_names = set()
+    portable_paths = {}
+    validated = []
+    for member in members:
+        name = member.filename
+        member_path = PurePosixPath(name)
+        member_mode = member.external_attr >> 16
+        drive_prefixed = len(name) >= 2 and name[0].isalpha() and name[1] == ":"
+        if (
+            not name
+            or "\\" in name
+            or drive_prefixed
+            or member_path.is_absolute()
+            or member_path.as_posix() != name
+            or any(part in {"", ".", ".."} for part in member_path.parts)
+            or any(ord(character) < 32 or ord(character) == 127 for character in name)
+            or not stat.S_ISREG(member_mode)
+            or stat.S_ISLNK(member_mode)
+        ):
+            raise RuntimeError(f"unsafe application archive member: {name}")
+        for component in member_path.parts:
+            reserved_basename = unicodedata.normalize(
+                "NFKC", component.split(".", 1)[0]
+            ).casefold()
+            if (
+                component.endswith((".", " "))
+                or any(character in invalid_component_characters for character in component)
+                or reserved_basename in reserved_basenames
+            ):
+                raise RuntimeError(f"unsafe application archive member: {name}")
+        if name in exact_names:
+            raise RuntimeError(f"archive path collision: duplicate member {name!r}")
+        exact_names.add(name)
+        parts = member_path.parts
+        for length in range(1, len(parts) + 1):
+            original = "/".join(parts[:length])
+            portable_key = "/".join(
+                unicodedata.normalize("NFKC", part).casefold()
+                for part in parts[:length]
+            )
+            current = (original, length == len(parts))
+            previous = portable_paths.get(portable_key)
+            if previous is None:
+                portable_paths[portable_key] = current
+            elif previous != current:
+                raise RuntimeError(
+                    f"archive path collision: {previous[0]!r} conflicts with {original!r}"
+                )
+        validated.append(member)
+    return tuple(validated)
 
 
 # Pygbag 0.9.3 discovers this exact coroutine name from its template loader.
@@ -22,16 +84,8 @@ async def custom_site():
 
     async with platform.fopen("{{cookiecutter.archive}}.apk", "rb") as archive:
         with zipfile.ZipFile(archive) as zip_ref:
-            for member in zip_ref.infolist():
-                member_path = PurePosixPath(member.filename)
-                member_mode = member.external_attr >> 16
-                if (
-                    member_path.is_absolute()
-                    or ".." in member_path.parts
-                    or stat.S_ISLNK(member_mode)
-                ):
-                    raise RuntimeError(f"unsafe application archive member: {member.filename}")
-            zip_ref.extractall(appdir.as_posix())
+            members = _validated_archive_members(tuple(zip_ref.infolist()))
+            zip_ref.extractall(appdir.as_posix(), members=members)
 
     platform.run_main(PyConfig, loaderhome=appdir / "assets", loadermain=None)
     while embed.counter() < 0:

@@ -585,6 +585,9 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
     identity = read_build_identity(root, "web")
     if identity.commit_sha != runtime_manifest.source_commit:
         raise SystemExit("repository HEAD changed during the web build")
+    final_runtime_manifest = inspect_runtime_source(root)
+    if final_runtime_manifest != runtime_manifest:
+        raise SystemExit("runtime source or build recipe changed during the web build")
     report: dict[str, object] = {
         **measurements,
         "browser_runtime_bytes": browser_runtime_bytes,

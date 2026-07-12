@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import io
 import os
 import subprocess
@@ -13,6 +14,73 @@ import pygame
 import pytest
 
 from tools import build_web
+
+
+def _template_archive_validator():
+    """Compile the exact pure validation function embedded in the web loader."""
+
+    template = (Path(__file__).resolve().parents[2] / "web" / "template.tmpl").read_text(encoding="utf-8")
+    tree = ast.parse(template.split("#<!--", 1)[1].split("# BEGIN BLOCK", 1)[0])
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_validated_archive_members"
+    ]
+    if len(functions) != 1:
+        raise AssertionError("template must define exactly one archive validator")
+    module = ast.Module(body=functions, type_ignores=[])
+    namespace: dict[str, object] = {
+        "PurePosixPath": __import__("pathlib").PurePosixPath,
+        "stat": __import__("stat"),
+        "unicodedata": __import__("unicodedata"),
+    }
+    exec(compile(module, "web/template.tmpl", "exec"), namespace)  # noqa: S102 - exact reviewed loader code
+    return namespace["_validated_archive_members"]
+
+
+def _zip_member(name: str, *, mode: int = 0o100644) -> zipfile.ZipInfo:
+    member = zipfile.ZipInfo(name)
+    # ZipInfo normalizes the host separator in its constructor on Windows;
+    # restore the raw central-directory spelling to exercise the web/POSIX gate.
+    member.filename = name
+    member.create_system = 3
+    member.external_attr = mode << 16
+    return member
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("assets/main.py", "assets/main.py"),
+        ("assets/Main.py", "assets/main.py"),
+        ("assets/caf\u00e9.py", "assets/cafe\u0301.py"),
+        ("assets/foo", "assets/foo/bar.py"),
+        ("assets/foo/bar.py", "assets/foo"),
+        ("C:/evil.py",),
+        ("assets\\evil.py",),
+        ("assets//evil.py",),
+        ("assets/./evil.py",),
+        ("assets/../evil.py",),
+        ("assets/CON",),
+        ("assets/trailing. ",),
+    ],
+)
+def test_template_archive_validator_rejects_ambiguous_or_nonportable_members(
+    names: tuple[str, ...],
+) -> None:
+    validate = _template_archive_validator()
+
+    with pytest.raises(RuntimeError, match="unsafe application archive member|archive path collision"):
+        validate(tuple(_zip_member(name) for name in names))
+
+
+def test_template_archive_validator_rejects_symlinks_and_preserves_safe_order() -> None:
+    validate = _template_archive_validator()
+    safe = (_zip_member("assets/main.py"), _zip_member("assets/data/one.json"))
+
+    assert validate(safe) == safe
+    with pytest.raises(RuntimeError, match="unsafe application archive member"):
+        validate((_zip_member("assets/link", mode=0o120777),))
 
 
 def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path) -> None:
@@ -294,9 +362,11 @@ def test_browser_entry_and_template_keep_the_real_loader_and_runtime_boundaries(
     assert "runtime/browserfs/2.0.0/browserfs.min.js" in template
     assert "async def custom_site()" in template
     assert 'platform.fopen("{{cookiecutter.archive}}.apk", "rb")' in template
-    assert "PurePosixPath(member.filename)" in template
+    assert "_validated_archive_members" in template
+    assert "PurePosixPath(name)" in template
     assert "member_path.is_absolute()" in template
-    assert '".." in member_path.parts' in template
+    assert "member_path.as_posix() != name" in template
+    assert "archive path collision" in template
     assert 'platform.fopen("{{cookiecutter.archive}}.tar.gz", "rb")' not in template
     assert "function custom_onload" in template
     assert 'id="canvas"' in template

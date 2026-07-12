@@ -23,6 +23,14 @@ _WEB_ENTRY_FILES: Final = (
     "runtime-manifest.json",
     "template.tmpl",
 )
+_BUILD_RECIPE_FILES: Final = (
+    "pyproject.toml",
+    "uv.lock",
+    "tools/build_web.py",
+    "tools/release_common.py",
+    "tools/web_runtime.py",
+    "tools/web_source_manifest.py",
+)
 _GENERATED_RUNTIME_FILES: Final = frozenset({"windsprig/_build_flags.py"})
 _SOURCE_ONLY_RUNTIME_FILES: Final = frozenset({"assets/fonts/NotoSansKR[wght].ttf"})
 
@@ -115,6 +123,16 @@ def inspect_runtime_source(root: Path) -> RuntimeSourceManifest:
     )
     if status:
         raise SourceProvenanceError("tracked runtime source is dirty")
+    recipe_status = _git(
+        lexical_root,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+        "--",
+        *_BUILD_RECIPE_FILES,
+    )
+    if recipe_status:
+        raise SourceProvenanceError("tracked build recipe source is dirty")
 
     tracked = frozenset(
         value
@@ -125,6 +143,13 @@ def inspect_runtime_source(root: Path) -> RuntimeSourceManifest:
     if untracked_packageable:
         joined = ", ".join(untracked_packageable)
         raise SourceProvenanceError(f"packageable runtime source is not tracked by Git: {joined}")
+    tracked_recipe = frozenset(
+        value for value in _git(lexical_root, "ls-files", "-z", "--", *_BUILD_RECIPE_FILES).split("\0") if value
+    )
+    missing_recipe = tuple(path for path in _BUILD_RECIPE_FILES if path not in tracked_recipe)
+    if missing_recipe:
+        joined = ", ".join(missing_recipe)
+        raise SourceProvenanceError(f"build recipe source is not tracked by Git: {joined}")
 
     digest = hashlib.sha256()
     digest.update(b"windsprig-runtime-manifest-v1\0")

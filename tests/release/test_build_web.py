@@ -364,6 +364,27 @@ def test_build_web_rejects_commit_drift_before_attaching_identity(
     assert not (output / "build-info.json").exists()
 
 
+def test_build_web_rejects_runtime_or_recipe_drift_before_attaching_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "repo"
+    _patch_build_dependencies(monkeypatch, root)
+    manifests = iter(
+        (
+            SimpleNamespace(sha256="e" * 64, source_commit="a" * 40),
+            SimpleNamespace(sha256="d" * 64, source_commit="a" * 40),
+        )
+    )
+    monkeypatch.setattr(build_web, "inspect_runtime_source", lambda _root: next(manifests))
+    output = tmp_path / "publish" / "web"
+
+    with pytest.raises(SystemExit, match="source or build recipe changed"):
+        build_web.build_web(probe=False, output=output)
+
+    assert not (output / "build-info.json").exists()
+
+
 def test_build_web_revalidates_destination_before_publishing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

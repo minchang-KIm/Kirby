@@ -34,7 +34,11 @@ class CompletionDelta:
 
 @dataclass(frozen=True, slots=True, order=True)
 class CompletionPercent:
-    """Exact fixed-point completion in tenths of one percent."""
+    """Versioned public completion value in exact tenths of one percent.
+
+    See ``docs/development/adr-001-fixed-point-completion.md`` for the browser
+    portability decision and the approved pre-1.0 API correction.
+    """
 
     tenths: int
 

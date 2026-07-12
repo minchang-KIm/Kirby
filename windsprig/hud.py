@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pygame
 
 from .simulation import Simulation
 
 
 class HudRenderer:
-    def __init__(self) -> None:
-        self.font = pygame.font.SysFont("consolas", 22)
-        self.small_font = pygame.font.SysFont("consolas", 16)
+    def __init__(self, font_path: Path | None = None) -> None:
+        # This compatibility HUD is still packaged until the single-runtime
+        # consolidation task removes it. It must therefore obey the same
+        # host-independent font boundary as the production renderer.
+        source = font_path or Path(__file__).resolve().parents[1] / "assets" / "fonts" / "WindsprigSansKR.ttf"
+        if not pygame.font.get_init():
+            pygame.font.init()
+        self.font = pygame.font.Font(str(source), 22)
+        self.small_font = pygame.font.Font(str(source), 16)
 
     def draw(self, screen: pygame.Surface, sim: Simulation) -> None:
         hp = self.font.render(f"HP: {sim.player.hp}/{sim.player.max_hp}", True, (255, 255, 255))

@@ -384,7 +384,7 @@ apply_stage_result(
     catalog: CatalogBundle,
 ) -> tuple[SaveProfile, CompletionDelta]
 
-completion_percent(profile: SaveProfile, catalog: CatalogBundle) -> Decimal
+completion_percent(profile: SaveProfile, catalog: CatalogBundle) -> CompletionPercent
 
 # windsprig/meta/presentation_models.py
 build_profile_cards(save: SaveData, catalog: CatalogBundle, tr: Localizer) -> tuple[ProfileCardVM, ...]
@@ -1590,12 +1590,10 @@ git commit -m "feat: add six multi-phase Windsprig bosses"
 ```python
 # tests/unit/meta/test_completion.py
 from dataclasses import replace
-from decimal import Decimal
-
 import pytest
 
 from windsprig.gameplay.snapshot import StageResult
-from windsprig.meta.completion import apply_stage_result, completion_percent
+from windsprig.meta.completion import CompletionPercent, apply_stage_result, completion_percent
 from tests.helpers.catalog import empty_profile, release_bundle
 
 
@@ -1642,7 +1640,7 @@ def test_documented_completion_weighting() -> None:
         collected_mote_ids=frozenset(f"mote-{n}" for n in range(45)),
         challenge_rewards=frozenset({"challenge.sunleaf", "challenge.emberglass", "challenge.tidemoon"}),
     )
-    assert completion_percent(profile, release_bundle(), cleared_bosses=3) == Decimal("50.0")
+    assert completion_percent(profile, release_bundle()) == CompletionPercent(500)
 ```
 
 - [ ] **Step 2: Run the focused progression tests and confirm they fail**
@@ -1658,8 +1656,6 @@ Expected: collection fails because `apply_stage_result` and the documented compl
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from decimal import Decimal, ROUND_HALF_UP
-
 from windsprig.content.models import CatalogBundle
 from windsprig.gameplay.snapshot import StageResult
 from windsprig.meta.save_models import SaveProfile
@@ -1687,27 +1683,17 @@ class CompletionBreakdown:
     total_bosses: int
     challenge_rewards: int
     total_challenges: int
-    percent: Decimal
+    percent: CompletionPercent
 
 
 def completion_percent(
     profile: SaveProfile,
     catalog: CatalogBundle,
-    *,
-    cleared_bosses: int | None = None,
-) -> Decimal:
-    stages = tuple(catalog.campaign.stages.values())
-    cleared_ids = {stage_id for stage_id, count in profile.clear_counts.items() if count > 0}
-    boss_ids = {stage.stage_id for stage in stages if stage.boss_id is not None}
-    boss_count = len(cleared_ids & boss_ids) if cleared_bosses is None else cleared_bosses
-    challenges = {reward.reward_id for reward in catalog.rewards.mote_thresholds if reward.kind == "challenge"}
-    score = (
-        Decimal("0.50") * Decimal(len(cleared_ids)) / Decimal(30)
-        + Decimal("0.30") * Decimal(len(profile.collected_mote_ids)) / Decimal(90)
-        + Decimal("0.10") * Decimal(boss_count) / Decimal(6)
-        + Decimal("0.10") * Decimal(len(profile.challenge_rewards & challenges)) / Decimal(len(challenges))
-    ) * Decimal(100)
-    return min(Decimal("100.0"), score.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+) -> CompletionPercent:
+    # ADR 001 replaces the unavailable WebAssembly Decimal boundary with exact
+    # integer tenths. The 500/300/100/100 weights are combined as rational
+    # values and rounded half-up once by completion_breakdown().
+    return completion_breakdown(profile, catalog).percent
 
 
 def apply_stage_result(
