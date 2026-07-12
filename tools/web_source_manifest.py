@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+import marshal
 import re
 import stat
 import subprocess
+import sys
+import tokenize
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -90,6 +95,49 @@ def _is_link_or_reparse(path: Path) -> bool:
     return stat.S_ISLNK(state.st_mode) or bool(getattr(state, "st_file_attributes", 0) & reparse_flag)
 
 
+def _normalized_code(code: types.CodeType) -> types.CodeType:
+    """Erase source-path variance while preserving every executable field."""
+
+    return code.replace(
+        co_filename="<tracked-tool-source>",
+        co_consts=tuple(
+            _normalized_code(value) if isinstance(value, types.CodeType) else value for value in code.co_consts
+        ),
+    )
+
+
+def _validate_tool_bytecode(tools_root: Path) -> None:
+    """Reject any active cache whose code diverges from its tracked source."""
+
+    for cache in sorted(tools_root.rglob("*.pyc"), key=lambda path: path.as_posix()):
+        try:
+            source = Path(importlib.util.source_from_cache(str(cache))).absolute()
+            expected_cache = Path(importlib.util.cache_from_source(str(source))).absolute()
+            if cache.absolute() != expected_cache or not source.is_file():
+                raise ValueError
+            payload = cache.read_bytes()
+            if len(payload) < 17 or payload[:4] != importlib.util.MAGIC_NUMBER:
+                raise ValueError
+            cached_code = marshal.loads(payload[16:])
+            if not isinstance(cached_code, types.CodeType):
+                raise ValueError
+            with tokenize.open(source) as stream:
+                source_text = stream.read()
+            source_code = compile(
+                source_text,
+                str(source),
+                "exec",
+                dont_inherit=True,
+                optimize=sys.flags.optimize,
+            )
+        except (EOFError, OSError, TypeError, ValueError) as error:
+            relative = cache.relative_to(tools_root.parent).as_posix()
+            raise SourceProvenanceError(f"unverifiable build-tool bytecode: {relative}") from error
+        if _normalized_code(cached_code) != _normalized_code(source_code):
+            relative = cache.relative_to(tools_root.parent).as_posix()
+            raise SourceProvenanceError(f"divergent build-tool bytecode: {relative}")
+
+
 def _build_recipe_files(root: Path) -> tuple[Path, ...]:
     """Return every physical input able to influence the Python build tools.
 
@@ -108,6 +156,7 @@ def _build_recipe_files(root: Path) -> tuple[Path, ...]:
     tools_root = lexical_root / "tools"
     if not tools_root.is_dir() or _is_link_or_reparse(tools_root):
         raise SourceProvenanceError(f"required build recipe directory is missing or unsafe: {tools_root}")
+    _validate_tool_bytecode(tools_root)
     for path in tools_root.rglob("*"):
         tool_relative = path.relative_to(lexical_root)
         if _is_link_or_reparse(path):

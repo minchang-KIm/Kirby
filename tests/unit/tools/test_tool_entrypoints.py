@@ -12,12 +12,18 @@ _ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.mark.parametrize(
-    "script",
-    ["tools/build_web.py", "tools/evaluate_web_feasibility.py"],
+    ("script", "interpreter_args"),
+    [
+        ("tools/build_web.py", ("-I",)),
+        ("tools/evaluate_web_feasibility.py", ()),
+    ],
 )
-def test_tool_supports_direct_script_execution(script: str) -> None:
+def test_tool_supports_direct_script_execution(
+    script: str,
+    interpreter_args: tuple[str, ...],
+) -> None:
     completed = subprocess.run(
-        [sys.executable, script, "--help"],
+        [sys.executable, *interpreter_args, script, "--help"],
         cwd=_ROOT,
         capture_output=True,
         text=True,

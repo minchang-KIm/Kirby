@@ -266,7 +266,7 @@ git commit -m "build: add deterministic release manifests"
 
 **Interfaces:**
 - Consumes: the foundation plan's proven `web/main.py`, `build_web(probe: bool)`, Pygbag 0.9.3 pin, and Task 1 release helpers.
-- Produces: `python tools/build_web.py --output dist/web`, a static artifact containing `index.html`, Pygbag runtime files, application archive, and `build-info.json`.
+- Produces: `python -I tools/build_web.py --output dist/web`, a static artifact containing `index.html`, Pygbag runtime files, application archive, and `build-info.json`.
 
 - [ ] **Step 1: Write a failing test for staging and release metadata**
 
@@ -348,7 +348,7 @@ Run: `uv run pytest tests/release/test_build_web.py -q`
 
 Expected: `1 passed`.
 
-Run: `uv run python tools/build_web.py --output dist/web`
+Run: `uv run python -I tools/build_web.py --output dist/web`
 
 Expected: exit 0; `dist/web/index.html`, an application archive, and `dist/web/build-info.json` exist; the manifest SHA equals `git rev-parse HEAD`.
 
@@ -518,7 +518,7 @@ Run: `uv run pytest tests/release/test_build_web.py -q`
 
 Expected: all tests pass.
 
-Run: `uv run python tools/build_web.py --output dist/web`
+Run: `uv run python -I tools/build_web.py --output dist/web`
 
 Expected: exit 0; the final HTML contains one `#windsprig-loader`; the manifest lists the shell, manifest, worker, icon, and card.
 
@@ -658,7 +658,7 @@ Retain the foundation lock pins `playwright==1.61.0` and `pygbag==0.9.3`; this t
 
 - [ ] **Step 4: Run the E2E tests and capture the transfer report**
 
-Run: `uv run python tools/build_web.py --output dist/web`
+Run: `uv run python -I tools/build_web.py --output dist/web`
 
 Run: `uv run pytest tests/e2e/test_web_product.py -q`
 
@@ -704,7 +704,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_vercel_serves_only_the_staged_web_artifact() -> None:
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
     assert config["installCommand"] == "python -m pip install uv==0.11.28 && uv sync --all-extras --locked"
-    assert config["buildCommand"] == "uv run python tools/build_web.py --output dist/web"
+    assert config["buildCommand"] == "uv run python -I tools/build_web.py --output dist/web"
     assert config["outputDirectory"] == "dist/web"
     assert {header["key"] for rule in config["headers"] for header in rule["headers"]} >= {
         "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy"
@@ -728,7 +728,7 @@ Expected: failures report missing `vercel.json` and `.vercelignore`.
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "python -m pip install uv==0.11.28 && uv sync --all-extras --locked",
-  "buildCommand": "uv run python tools/build_web.py --output dist/web",
+  "buildCommand": "uv run python -I tools/build_web.py --output dist/web",
   "outputDirectory": "dist/web",
   "cleanUrls": true,
   "trailingSlash": false,
@@ -1237,7 +1237,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --all-extras --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run python tools/build_web.py --output dist/web
+      - run: uv run python -I tools/build_web.py --output dist/web
       - run: uv run pytest tests/e2e/test_web_product.py -q
       - uses: actions/upload-artifact@v4
         with: {name: windsprig-web, path: dist/web, if-no-files-found: error}
@@ -1275,7 +1275,7 @@ jobs:
       - run: uv sync --all-extras --locked
       - run: uv run pytest -q --cov=windsprig --cov-branch --cov-fail-under=85
       - run: uv run python tools/build_windows.py --output dist/release
-      - run: uv run python tools/build_web.py --output dist/web
+      - run: uv run python -I tools/build_web.py --output dist/web
       - run: uv run python -c "from pathlib import Path; from tools.release_common import read_build_identity, write_reproducible_zip, sha256_file; i=read_build_identity(Path('.'), 'web'); z=write_reproducible_zip(Path('dist/web'), Path(f'dist/release/Windsprig-{i.version}-web.zip')); z.with_suffix(z.suffix+'.sha256').write_text(f'{sha256_file(z)}  {z.name}\n', encoding='ascii')"
       - shell: pwsh
         run: |
@@ -1601,7 +1601,7 @@ Run: `uv run python tools/build_windows.py --output dist/release`
 
 Expected: packaged smoke, metadata, ZIP, and checksum all pass.
 
-Run: `uv run python tools/build_web.py --output dist/web`
+Run: `uv run python -I tools/build_web.py --output dist/web`
 
 Expected: web build passes and its manifest SHA equals HEAD.
 

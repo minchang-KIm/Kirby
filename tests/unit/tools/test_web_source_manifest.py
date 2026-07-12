@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import ast
+import os
+import py_compile
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from tools import build_web
 from tools.web_source_manifest import (
     SourceProvenanceError,
     inspect_runtime_source,
@@ -52,7 +57,7 @@ def _committed_runtime(tmp_path: Path) -> Path:
     (root / "pyproject.toml").write_text('[project]\nname = "fixture"\nversion = "1.0.0"\n', encoding="utf-8")
     (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     (root / ".gitignore").write_text(
-        "windsprig/ignored.py\ntools/ignored.py\n",
+        "windsprig/ignored.py\ntools/ignored.py\ntools/__pycache__/\n",
         encoding="utf-8",
     )
     _git(root, "init", "--quiet")
@@ -138,6 +143,42 @@ def test_runtime_manifest_rejects_an_ignored_tool_shadow(tmp_path: Path) -> None
         inspect_runtime_source(root)
 
 
+def test_manifest_and_cli_preflight_reject_divergent_timestamp_valid_tool_bytecode(
+    tmp_path: Path,
+) -> None:
+    root = _committed_runtime(tmp_path)
+    source = root / "tools" / "generate_fixture.py"
+    safe_source = source.read_text(encoding="utf-8")
+    malicious_source = safe_source.replace("GENERATE = 1", "GENERATE = 9")
+    fixed_timestamp = 1_700_000_000
+    source.write_text(malicious_source, encoding="utf-8")
+    os.utime(source, (fixed_timestamp, fixed_timestamp))
+    bytecode = Path(py_compile.compile(str(source), doraise=True))
+    source.write_text(safe_source, encoding="utf-8")
+    os.utime(source, (fixed_timestamp, fixed_timestamp))
+
+    # Prove this is not merely a junk-cache fixture: the standard importer
+    # accepts the forged timestamp/size header and executes divergent code.
+    imported = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from tools.generate_fixture import GENERATE; print(GENERATE)",
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert imported.stdout.strip() == "9"
+    assert bytecode.is_file()
+
+    with pytest.raises(SourceProvenanceError, match="divergent build-tool bytecode"):
+        inspect_runtime_source(root)
+    with pytest.raises(SystemExit, match="divergent build-tool bytecode"):
+        build_web._preflight_build_recipe(root)
+
+
 def test_browser_runtime_sources_never_depend_on_host_font_discovery() -> None:
     root = Path(__file__).resolve().parents[3]
     packaged_python = [path for path in runtime_source_files(root) if path.suffix == ".py"]
@@ -147,4 +188,32 @@ def test_browser_runtime_sources_never_depend_on_host_font_discovery() -> None:
         for path in packaged_python
         if "pygame.font.SysFont" in path.read_text(encoding="utf-8")
     ]
+    assert offenders == []
+
+
+def test_browser_runtime_never_imports_resolver_ambiguous_stdlib_modules() -> None:
+    """Keep Pygbag from resolving omitted stdlib names as unrelated PyPI packages."""
+
+    root = Path(__file__).resolve().parents[3]
+    forbidden = {"decimal", "wave"}
+    offenders: list[str] = []
+    for path in runtime_source_files(root):
+        if path.suffix != ".py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=path.as_posix())
+        imported = {
+            name.name.partition(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for name in node.names
+        }
+        imported.update(
+            node.module.partition(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module is not None
+        )
+        ambiguous = sorted(imported & forbidden)
+        if ambiguous:
+            relative = path.relative_to(root).as_posix()
+            offenders.append(f"{relative}: {', '.join(ambiguous)}")
     assert offenders == []

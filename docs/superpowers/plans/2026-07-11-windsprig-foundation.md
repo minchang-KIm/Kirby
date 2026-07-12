@@ -2288,7 +2288,7 @@ git commit -m "refactor: run Windsprig asynchronously"
 **Interfaces:**
 - Produces: Pygbag entry `web/main.py` invoking the same async `GameApp` without process exit or pygame shutdown.
 - Produces: `FoundationProbe` enabled only by `?foundation_probe=1`, publishing namespaced local-storage evidence.
-- Produces: `python tools/build_web.py --probe` -> `dist/web` and `artifacts/web-build.json`.
+- Produces: `python -I tools/build_web.py --probe` -> `dist/web` and `artifacts/web-build.json`.
 - Consumes: real `InputRouter`, `ActiveRoster`, browser `AudioService`, `StageRuntime`, `StageGoalSystem`, and `SaveService`.
 
 - [ ] **Step 1: Add a failing probe-state unit test**
@@ -2551,7 +2551,7 @@ Run:
 ```powershell
 uv sync --all-extras --locked
 uv run playwright install chromium
-uv run python tools/build_web.py --probe
+uv run python -I tools/build_web.py --probe
 uv run pytest tests/unit/test_feasibility_probe.py tests/e2e/test_web_feasibility.py -v
 uv run pytest tests/e2e/test_web_feasibility.py -v
 ```
@@ -2784,7 +2784,7 @@ jobs:
           enable-cache: true
       - run: uv sync --all-extras --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run python tools/build_web.py --probe
+      - run: uv run python -I tools/build_web.py --probe
       - run: uv run pytest tests/e2e/test_web_feasibility.py -v
       - run: uv run python tools/evaluate_web_feasibility.py --write docs/feasibility/pygbag-0.9.3.md
       - uses: actions/upload-artifact@v4
@@ -2808,7 +2808,7 @@ uv run mypy windsprig/platform windsprig/input windsprig/meta windsprig/app.py w
 $env:SDL_VIDEODRIVER='dummy'
 $env:SDL_AUDIODRIVER='dummy'
 uv run pytest -q --cov=windsprig --cov-branch --cov-report=term-missing --cov-fail-under=85
-uv run python tools/build_web.py --probe
+uv run python -I tools/build_web.py --probe
 uv run pytest tests/e2e/test_web_feasibility.py -v
 uv run python tools/evaluate_web_feasibility.py --write docs/feasibility/pygbag-0.9.3.md
 ```
@@ -2857,7 +2857,7 @@ $env:SDL_AUDIODRIVER='dummy'
 uv run ruff check .
 uv run mypy windsprig/platform windsprig/input windsprig/meta windsprig/app.py windsprig/screens
 uv run pytest -q --cov=windsprig --cov-branch --cov-fail-under=85
-uv run python tools/build_web.py --probe
+uv run python -I tools/build_web.py --probe
 uv run pytest tests/e2e/test_web_feasibility.py -v
 uv run python tools/evaluate_web_feasibility.py --write docs/feasibility/pygbag-0.9.3.md
 git status --short

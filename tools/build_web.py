@@ -1,24 +1,139 @@
 """Build the pinned Pygbag artifact from a runtime-only deterministic staging tree."""
 
+# Project imports intentionally occur after the direct-CLI provenance preflight.
+# ruff: noqa: E402
+
 from __future__ import annotations
+
+import sys
+
+if __name__ == "__main__" and not sys.flags.isolated:
+    raise SystemExit("release web builds require: python -I tools/build_web.py")
 
 import argparse
 import gzip
+import importlib.util
 import io
 import json
+import marshal
 import os
 import shutil
 import stat
 import subprocess
-import sys
 import tarfile
+import tokenize
+import types
 import zipfile
 from collections.abc import Callable
 from importlib.metadata import version
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Final, TypedDict
 
-import pygame
+
+def _normalized_tool_code(code: types.CodeType) -> types.CodeType:
+    """Erase path variance while retaining every executable code field."""
+
+    return code.replace(
+        co_filename="<tracked-tool-source>",
+        co_consts=tuple(
+            _normalized_tool_code(value) if isinstance(value, types.CodeType) else value for value in code.co_consts
+        ),
+    )
+
+
+def _preflight_tool_bytecode(tools_root: Path) -> None:
+    """Validate executable caches before importing any project build helper."""
+
+    for cache in sorted(tools_root.rglob("*.pyc"), key=lambda path: path.as_posix()):
+        try:
+            source = Path(importlib.util.source_from_cache(str(cache))).absolute()
+            expected_cache = Path(importlib.util.cache_from_source(str(source))).absolute()
+            if cache.absolute() != expected_cache or not source.is_file():
+                raise ValueError
+            payload = cache.read_bytes()
+            if len(payload) < 17 or payload[:4] != importlib.util.MAGIC_NUMBER:
+                raise ValueError
+            cached_code = marshal.loads(payload[16:])
+            if not isinstance(cached_code, types.CodeType):
+                raise ValueError
+            with tokenize.open(source) as stream:
+                source_text = stream.read()
+            source_code = compile(
+                source_text,
+                str(source),
+                "exec",
+                dont_inherit=True,
+                optimize=sys.flags.optimize,
+            )
+        except (EOFError, OSError, TypeError, ValueError) as error:
+            relative = cache.relative_to(tools_root.parent).as_posix()
+            raise SystemExit(f"unverifiable build-tool bytecode: {relative}") from error
+        if _normalized_tool_code(cached_code) != _normalized_tool_code(source_code):
+            relative = cache.relative_to(tools_root.parent).as_posix()
+            raise SystemExit(f"divergent build-tool bytecode: {relative}")
+
+
+def _preflight_build_recipe(root: Path) -> None:
+    """Bind executable build helpers before their first project import."""
+
+    lexical_root = Path(root).absolute()
+    tools_root = lexical_root / "tools"
+    if not tools_root.is_dir() or tools_root.is_symlink():
+        raise SystemExit("build-tool preflight requires a regular tools directory")
+    _preflight_tool_bytecode(tools_root)
+
+    try:
+        status = subprocess.run(
+            [
+                "git",
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "--",
+                "pyproject.toml",
+                "uv.lock",
+                "tools",
+            ],
+            cwd=lexical_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+        tracked = frozenset(
+            value
+            for value in subprocess.run(
+                ["git", "ls-files", "-z", "--", "pyproject.toml", "uv.lock", "tools"],
+                cwd=lexical_root,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout.split("\0")
+            if value
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise SystemExit("build-tool provenance preflight failed") from error
+    if status:
+        raise SystemExit("build recipe source is dirty before project imports")
+
+    physical = {
+        path.relative_to(lexical_root).as_posix()
+        for path in tools_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+    physical.update({"pyproject.toml", "uv.lock"})
+    missing = tuple(sorted(physical - tracked))
+    if missing:
+        raise SystemExit("build recipe source is not tracked before project imports: " + ", ".join(missing))
+    sys.dont_write_bytecode = True
+
+
+if __name__ == "__main__" and not {"-h", "--help"}.intersection(sys.argv[1:]):
+    _preflight_build_recipe(Path(__file__).resolve().parents[1])
+
+
+import pygame  # noqa: E402 - project imports follow the release provenance preflight
 
 # Direct script execution places ``tools/`` on sys.path, while CI invokes this file by path.
 if __package__ in {None, ""}:

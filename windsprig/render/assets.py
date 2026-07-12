@@ -8,7 +8,6 @@ import os
 import re
 import stat
 import struct
-import wave
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
@@ -131,24 +130,15 @@ def _validate_wav(payload: bytes) -> None:
             raise ValueError
         if payload[36:40] != b"data":
             raise ValueError
+        audio_format = struct.unpack_from("<HHIIHH", payload, 20)
+        if audio_format != (1, 1, 22_050, 44_100, 2, 16):
+            raise RuntimeError("expected mono 16-bit 22050 Hz PCM")
         data_size = struct.unpack_from("<I", payload, 40)[0]
-        if data_size != len(payload) - 44 or data_size % 2:
+        if data_size <= 0 or data_size != len(payload) - 44 or data_size % 2:
             raise ValueError
-        with wave.open(io.BytesIO(payload), "rb") as source:
-            if (
-                source.getnchannels() != 1
-                or source.getsampwidth() != 2
-                or source.getframerate() != 22_050
-                or source.getcomptype() != "NONE"
-            ):
-                raise RuntimeError("expected mono 16-bit 22050 Hz PCM")
-            frame_count = source.getnframes()
-            decoded = source.readframes(frame_count)
-            if frame_count <= 0 or len(decoded) != frame_count * 2 or source.readframes(1):
-                raise ValueError
     except RuntimeError as error:
         raise ValueError(str(error)) from None
-    except (EOFError, OSError, ValueError, wave.Error):
+    except (struct.error, ValueError):
         raise ValueError("unreadable WAV") from None
 
 
@@ -300,9 +290,7 @@ class AssetCatalog:
         lexical_root = _validated_asset_root(root, manifest)
         sounds, failures = _verified_audio_entries(lexical_root, manifest)
         if failures:
-            raise MissingAssetError(
-                "asset catalog release load failed: " + "; ".join(sorted(failures))
-            )
+            raise MissingAssetError("asset catalog release load failed: " + "; ".join(sorted(failures)))
         return MappingProxyType(dict(sorted(sounds.items())))
 
     def frame_count(self, asset_id: str) -> int:

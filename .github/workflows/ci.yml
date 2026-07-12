@@ -70,7 +70,7 @@ jobs:
           enable-cache: true
       - run: uv sync --all-extras --locked
       - run: uv run --locked --no-sync playwright install --with-deps chromium
-      - run: uv run --locked --no-sync python tools/build_web.py --probe
+      - run: uv run --locked --no-sync python -I tools/build_web.py --probe
       - run: git diff --exit-code -- web/favicon.png
       - run: uv run --locked --no-sync pytest tests/e2e/test_web_feasibility.py -v
       - if: always()

@@ -76,7 +76,7 @@ def test_web_job_builds_chromium_evidence_even_after_an_earlier_failure() -> Non
     text = workflow_text()
 
     assert "playwright install --with-deps chromium" in text
-    assert "python tools/build_web.py --probe" in text
+    assert "python -I tools/build_web.py --probe" in text
     assert "pytest tests/e2e/test_web_feasibility.py -v" in text
     assert re.search(
         r"if: always\(\)\s+run: uv run --locked --no-sync python tools/evaluate_web_feasibility.py",

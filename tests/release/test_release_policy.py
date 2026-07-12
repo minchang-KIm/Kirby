@@ -82,7 +82,7 @@ def test_vercel_build_is_pinned_locked_and_stages_only_the_web_output() -> None:
     config = _load_vercel_config()
 
     assert config["installCommand"] == ("python -m pip install uv==0.11.28 && uv sync --all-extras --locked")
-    assert config["buildCommand"] == "uv run python tools/build_web.py --output dist/web"
+    assert config["buildCommand"] == "uv run python -I tools/build_web.py --output dist/web"
     assert config["outputDirectory"] == "dist/web"
     assert "latest" not in config["installCommand"].lower()
     assert config["installCommand"].count("uv==0.11.28") == 1

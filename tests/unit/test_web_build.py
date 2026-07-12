@@ -6,6 +6,7 @@ import ast
 import io
 import os
 import subprocess
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -412,6 +413,7 @@ def test_browser_entry_and_template_keep_the_real_loader_and_runtime_boundaries(
     root = Path(__file__).resolve().parents[2]
     entry = (root / "web" / "main.py").read_text(encoding="utf-8")
     template = (root / "web" / "template.tmpl").read_text(encoding="utf-8")
+    build_source = (root / "tools" / "build_web.py").read_text(encoding="utf-8")
 
     assert "GameApp" in entry
     assert "create_web_services" in entry
@@ -436,3 +438,19 @@ def test_browser_entry_and_template_keep_the_real_loader_and_runtime_boundaries(
     assert "Loading Windsprig…" in template
     assert "physical keyboard or compatible gamepad" in template
     assert "<noscript>" in template
+    preflight_call = "_preflight_build_recipe(Path(__file__).resolve().parents[1])"
+    assert build_source.index(preflight_call) < build_source.index("from tools.release_common import")
+
+
+def test_direct_web_build_requires_an_isolated_interpreter() -> None:
+    script = Path(__file__).resolve().parents[2] / "tools" / "build_web.py"
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "python -I tools/build_web.py" in completed.stderr
