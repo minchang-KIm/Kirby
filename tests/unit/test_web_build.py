@@ -20,9 +20,12 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
     web = root / "web"
     package = root / "windsprig"
     levels = root / "levels"
+    assets = root / "assets"
     web.mkdir()
     package.mkdir()
     levels.mkdir()
+    (assets / "generated" / "ui").mkdir(parents=True)
+    (assets / "fonts").mkdir()
     for name in ("main.py", "runtime-manifest.json", "template.tmpl", "favicon.png"):
         (web / name).write_bytes(name.encode())
     (package / "__init__.py").write_text("", encoding="utf-8")
@@ -33,6 +36,9 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
     (package / "__pycache__").mkdir()
     (package / "__pycache__" / "cached.pyc").write_bytes(b"cache")
     (levels / "level.json").write_text("{}", encoding="utf-8")
+    (assets / "generated" / "ui" / "icons.png").write_bytes(b"icons")
+    (assets / "fonts" / "font.ttf").write_bytes(b"font")
+    (assets / "LICENSES.md").write_text("# Licenses\n", encoding="utf-8")
     (root / "tests").mkdir()
     (root / "tests" / "test_game.py").write_text("", encoding="utf-8")
     stage = root / "build" / "web-stage"
@@ -41,6 +47,9 @@ def test_stage_sources_copies_only_runtime_files_and_probe_module(tmp_path: Path
 
     staged = {path.relative_to(stage).as_posix() for path in stage.rglob("*") if path.is_file()}
     assert staged == {
+        "assets/LICENSES.md",
+        "assets/fonts/font.ttf",
+        "assets/generated/ui/icons.png",
         "favicon.png",
         "levels/level.json",
         "main.py",
@@ -61,9 +70,11 @@ def test_non_probe_staging_overrides_source_capability_to_false(tmp_path: Path) 
     web = root / "web"
     package = root / "windsprig"
     levels = root / "levels"
+    assets = root / "assets"
     web.mkdir()
     package.mkdir()
     levels.mkdir()
+    assets.mkdir()
     for name in ("main.py", "runtime-manifest.json", "template.tmpl", "favicon.png"):
         (web / name).write_bytes(name.encode())
     (package / "__init__.py").write_text("", encoding="utf-8")

@@ -1,0 +1,482 @@
+{
+  "art": {
+    "boss.crucible_crab": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/crucible_crab.png",
+      "pixel_sha256": "000efa0b4871ab3a8f3c55bb68b3742040cd06853f7bee17852f84efd3bc0892",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.luma_eel": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/luma_eel.png",
+      "pixel_sha256": "7286b5c13c73d44b8666bb016dde23b5a077a953246da8eaa180801715ce460a",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.prism_warden": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/prism_warden.png",
+      "pixel_sha256": "876b617054968ca0d8a3754c340d69f7bef183af2af2395d19bf32bd02a85971",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.rootjaw": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/rootjaw.png",
+      "pixel_sha256": "8f9c827faa33da5a3cb5b9ac57657b83152506315d9adaba8722c761f913ca59",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.the_stillness": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/the_stillness.png",
+      "pixel_sha256": "cf93c6b1c0732cc4687293ee8acf0e94a6f4918c9b9fe90b67693d4a92ef56ed",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.volt_roc": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/volt_roc.png",
+      "pixel_sha256": "d80a4c9af2a85f305959348e12aad79d1c2e80d47934433c838b4dbad0746f3d",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "enemy.bramblekin": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/bramblekin.png",
+      "pixel_sha256": "02fbb4b796e44684a1b4f0da860b694dcaecbd00f1e777cff6f81ffc9eb2e322",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.breezeling": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/breezeling.png",
+      "pixel_sha256": "4066bbc47dbd10c8fbcbb2006404c8c804914f1e5fd90cb29d0fb272169d0d3c",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.bubblefin": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/bubblefin.png",
+      "pixel_sha256": "5129c174ed4b415e02b09a9bb10e25dc9a4899d06243deb88963a7777cedb26e",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.cinderling": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/cinderling.png",
+      "pixel_sha256": "179c3768244c51201dbd03d334d34693b825f3a1163c7f100d4f0b0a4f49a320",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.coilbird": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/coilbird.png",
+      "pixel_sha256": "1d56db7586d9d05453bc082d24720008d3c752b31afff241cc769685080ec1db",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.gravitybud": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/gravitybud.png",
+      "pixel_sha256": "baa3f95b67bbdf359043cbd8ad1b1515d90b9e40b5123f5cc7ab970d0ec17930",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.hushshade": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/hushshade.png",
+      "pixel_sha256": "6fde573020b96e608d63b2e136c311dfd7ff58d60ecde624514cedd0b1cf6573",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.lockwarden": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/lockwarden.png",
+      "pixel_sha256": "29cfde69344bd6e73c108345656935ff5181e92b243958f758d05e4545ae0420",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.millmite": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/millmite.png",
+      "pixel_sha256": "6f97211ed423e96fa730c88daa492b7a85f501b9026e050718a831163b0e11b3",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.mirrormite": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/mirrormite.png",
+      "pixel_sha256": "f848e70156c72958d95a1babf32fd1674698a67ddbb84b3f5ffde065a644884f",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.moonjelly": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/moonjelly.png",
+      "pixel_sha256": "c5446fd4037848a395473b45511bfca8fa9b3ba38c282f20544681bff2c3292b",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.petalisk": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/petalisk.png",
+      "pixel_sha256": "5ee3438c20174f35f3d41f765bce97dec3fdd25d848737d8fd6ca3965ac8ce81",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.railrunner": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/railrunner.png",
+      "pixel_sha256": "b9d756d0097e7d1679796d84f6ec50f955794df7bd208d09da2cf39eb9aac4bc",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.riftling": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/riftling.png",
+      "pixel_sha256": "955beca622cf7ef7195b30bb09ae6b09810d13c9a1dcf5444432f979f3b78128",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.shellskiff": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/shellskiff.png",
+      "pixel_sha256": "d62694e5079217edb43f6e4675300fd38b6370174563f04cfe36977accbb4ee4",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.shutterimp": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/shutterimp.png",
+      "pixel_sha256": "010ae7400df8a13b54edb5b6b75cb5b0d11e63f54c557f078433b66be913870b",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.slagroller": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/slagroller.png",
+      "pixel_sha256": "5f12b3064f96d1ff2f92b117513b02c561a4969f19219ca931e9cac773660982",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.stormlens": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/stormlens.png",
+      "pixel_sha256": "4520efecaf0ce2821b4166ebf5d44a128630745d6f3e6930f2965a00c08630a9",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "player.sprig": {
+      "frames": 56,
+      "height": 672,
+      "mandatory": true,
+      "path": "generated/player/sprig.png",
+      "pixel_sha256": "268a2a797e4adc926d9f5bb934a63c986f90789f90e650946b1cc70514feb3bd",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "ui.favicon": {
+      "frames": 1,
+      "height": 192,
+      "mandatory": true,
+      "path": "generated/ui/favicon.png",
+      "pixel_sha256": "29c8443f6c81e8f62c3bd8d7d05e28465385fce15b6c50496dd6cead1e17f07d",
+      "provenance": "procedural-vector-v1",
+      "width": 192
+    },
+    "ui.icons": {
+      "frames": 32,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/ui/icons.png",
+      "pixel_sha256": "9c6ced00ed8aa1e21e308843a1548d3310d7f5e9093a33e95dbf464be5cff5ff",
+      "provenance": "procedural-vector-v1",
+      "width": 2048
+    },
+    "ui.social_card": {
+      "frames": 1,
+      "height": 630,
+      "mandatory": true,
+      "path": "generated/ui/social-card.png",
+      "pixel_sha256": "8ee54d4fad5d2204ed15b98d2eb090aee953b179f8aff04a5fa85b057709c257",
+      "provenance": "procedural-vector-v1",
+      "width": 1200
+    },
+    "world.world_1.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-background.png",
+      "pixel_sha256": "60a288bbe373fffe2c8f9a0bbee8163189877c4e28091d440f7f63666f92b6ad",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_1.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-props.png",
+      "pixel_sha256": "f04160bccca32a6d3b070270068de927a7e22c1dcd559273042d60fc430bf28d",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_1.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-tiles.png",
+      "pixel_sha256": "c2d99854d03e33f2ef10a18cf4386796388322604207e7a7630e3843da3cb8b5",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_1.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-transition.png",
+      "pixel_sha256": "944c00b598c772eb620ee77436a62fd773b1418a44a4ec13b656b52ebed84494",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_2.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-background.png",
+      "pixel_sha256": "e411bba5be3e0a14fef30d17226ce6652f4808cf4e9a227da3eef9dd4e87c7fe",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_2.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-props.png",
+      "pixel_sha256": "ad01b1d403da53b8f77708b54711de3ee2911ec9d7fdef35f1c10fe7c12c317d",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_2.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-tiles.png",
+      "pixel_sha256": "d4133384bd58b8f47a1834fd6987041db56317fdc08a84bb8961bd228445d4a7",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_2.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-transition.png",
+      "pixel_sha256": "6a4fd2e9754a1c058d0e72e16bcb4d935105d2b19339e74b975d09bd63d5cf78",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_3.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-background.png",
+      "pixel_sha256": "c95b6153a99a7780c40895f412afec6a3e46983d6d014213f1c55412b81466e3",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_3.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-props.png",
+      "pixel_sha256": "822fe4b1858f877fd23c8671f08d2523e721f67c79c28c08226abfcc387b2977",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_3.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-tiles.png",
+      "pixel_sha256": "5f1cf65122130b81d4692824e4997d38b43a121c9a37a4d57ceee9c75e69154d",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_3.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-transition.png",
+      "pixel_sha256": "d260ee509d1665218011b1cac5ca53941ec101215a5d08a27f8f1b4ec0a60f29",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_4.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-background.png",
+      "pixel_sha256": "e4744547b290ac02e48bedf9359bac7a25a438480262943b5e6387bb23afcac8",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_4.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-props.png",
+      "pixel_sha256": "d48e9e97c7b4a8c994cf48220b6c2d3f6daa5ec1e55bf6a9a2b68063ad107d86",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_4.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-tiles.png",
+      "pixel_sha256": "e7e4e2a0c579b11cbf8fa6ed2eef273a45e1488e822452fb5b54636d2e94d6e9",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_4.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-transition.png",
+      "pixel_sha256": "281c1378523fb935da9a8f3ac6837465344623facae14a8c5ff34e309de36c3b",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_5.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-background.png",
+      "pixel_sha256": "f90b39767c04cf01c361ee3d8d052ea76bada926ddd908b72b44c7311d9e8202",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_5.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-props.png",
+      "pixel_sha256": "46d1fce174b5af7cb7313c290636105e1172afdb172520fa3de383bb9f984741",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_5.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-tiles.png",
+      "pixel_sha256": "425221050c55435295f965ae65e80fe89606ef8e3cabe352b6cc7d6e2223405f",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_5.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-transition.png",
+      "pixel_sha256": "854f3cfaa5dd306b68011b78b6faaccb06df46e59de70c9eae07b660204d2ecb",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_6.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-background.png",
+      "pixel_sha256": "ac9e2258f8050b626c756552f9bd12a759fc65305748d8b0f6e686561ec67571",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_6.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-props.png",
+      "pixel_sha256": "f49cdb259d4c475080ecec9387eaa0039d355e47865dd66dcde3c6f23e373524",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_6.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-tiles.png",
+      "pixel_sha256": "16e9f04f779989e3f664459bbe9ad02c9a7b65a81bb942c5d1531d1c632995a1",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_6.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-transition.png",
+      "pixel_sha256": "b3627e77b7a5ace33e37f335b4bddd079ca56a0e254b2397cd10e75e6421e4c6",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    }
+  },
+  "audio": {},
+  "font": {
+    "license": "fonts/OFL-NotoSansKR.txt",
+    "mandatory": true,
+    "path": "fonts/NotoSansKR[wght].ttf",
+    "sha256": "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252"
+  },
+  "provenance_files": [
+    "generated/art-provenance.json"
+  ]
+}

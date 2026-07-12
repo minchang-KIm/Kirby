@@ -96,7 +96,7 @@ def _probe_capability_source(probe: bool) -> bytes:
 
 
 def stage_sources(root: Path, stage: Path, *, probe: bool) -> None:
-    """Copy only the browser entry, installable package, and level data into staging."""
+    """Copy the canonical browser entry, runtime assets, package, and levels."""
     stage.mkdir(parents=True, exist_ok=False)
     lexical_root = Path(root).absolute()
     for source in runtime_source_files(lexical_root):

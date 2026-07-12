@@ -30,6 +30,7 @@ def _context() -> tuple[AssetManifest, LocaleCatalog]:
                 path="fonts/NotoSansKR.ttf",
                 license="fonts/OFL-NotoSansKR.txt",
                 mandatory=True,
+                sha256="f" * 64,
             ),
         ),
         LocaleCatalog(
@@ -427,6 +428,7 @@ def test_validator_reports_safe_missing_and_provenance_asset_paths(tmp_path: Pat
             path="fonts/NotoSansKR.ttf",
             license="fonts/missing-license.txt",
             mandatory=True,
+            sha256="f" * 64,
         ),
         provenance_files=("records/art.json", "records/missing.json"),
     )
@@ -442,4 +444,46 @@ def test_validator_reports_safe_missing_and_provenance_asset_paths(tmp_path: Pat
         ("unsafe_asset_path", "assets.art.unsafe.path"),
         ("missing_font_license", "assets.font.license"),
         ("missing_provenance", "assets.provenance_files[1]"),
+    ]
+
+
+def test_validator_reports_exact_art_inventory_frames_and_mandatory_flags(tmp_path: Path) -> None:
+    content, asset_root = write_release_bundle(tmp_path)
+    bundle = load_catalog_bundle(content)
+    locales = load_locales(content)
+    loaded = load_asset_manifest(content / "assets.json")
+    art = dict(loaded.art)
+    art.pop("player.sprig")
+    enemy_id = next(asset_id for asset_id in art if asset_id.startswith("enemy."))
+    boss_id = next(asset_id for asset_id in art if asset_id.startswith("boss."))
+    art[enemy_id] = replace(art[enemy_id], mandatory=False)
+    art[boss_id] = replace(art[boss_id], frames=17)
+    assets = replace(loaded, art=art)
+
+    report = validate_bundle(bundle, assets, locales, asset_root=asset_root)
+
+    assert _selected(
+        ("art_inventory_count", "missing_asset_id", "art_not_mandatory", "invalid_art_frames"),
+        report,
+    ) == [
+        ("art_inventory_count", "assets.art"),
+        ("invalid_art_frames", f"assets.art.{boss_id}.frames"),
+        ("art_not_mandatory", f"assets.art.{enemy_id}.mandatory"),
+        ("missing_asset_id", "assets.art.player.sprig"),
+    ]
+
+
+def test_validator_rejects_substituted_art_ids_even_when_category_counts_match(tmp_path: Path) -> None:
+    content, asset_root = write_release_bundle(tmp_path)
+    bundle = load_catalog_bundle(content)
+    locales = load_locales(content)
+    loaded = load_asset_manifest(content / "assets.json")
+    art = dict(loaded.art)
+    art["ui.surprise"] = art.pop("ui.favicon")
+
+    report = validate_bundle(bundle, replace(loaded, art=art), locales, asset_root=asset_root)
+
+    assert _selected(("missing_asset_id", "unexpected_asset_id"), report) == [
+        ("missing_asset_id", "assets.art.ui.favicon"),
+        ("unexpected_asset_id", "assets.art.ui.surprise"),
     ]

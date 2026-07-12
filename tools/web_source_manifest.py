@@ -13,7 +13,9 @@ _COMMIT_PATTERN: Final = re.compile(r"[0-9a-f]{40}\Z")
 _IGNORED_DIRS: Final = frozenset(
     {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__", "test", "tests"}
 )
-_ALLOWED_SUFFIXES: Final = frozenset({".json", ".jpg", ".jpeg", ".ogg", ".otf", ".png", ".py", ".ttf", ".txt", ".webp"})
+_ALLOWED_SUFFIXES: Final = frozenset(
+    {".json", ".jpg", ".jpeg", ".md", ".ogg", ".otf", ".png", ".py", ".ttf", ".txt", ".webp"}
+)
 _SECRET_SUFFIXES: Final = frozenset({".key", ".p12", ".pem", ".pfx"})
 _WEB_ENTRY_FILES: Final = (
     "favicon.png",
@@ -56,7 +58,9 @@ def runtime_source_files(root: Path) -> tuple[Path, ...]:
             raise SourceProvenanceError(f"required web source is missing: {path}")
         files.append(path)
 
-    for directory in ("windsprig", "levels"):
+    # Runtime assets use the same source identity and cleanliness gate as Python
+    # and level data, so browser packaging cannot silently omit or replace art.
+    for directory in ("assets", "windsprig", "levels"):
         source = lexical_root / directory
         if not source.is_dir():
             raise SourceProvenanceError(f"required runtime source directory is missing: {source}")
@@ -102,6 +106,7 @@ def inspect_runtime_source(root: Path) -> RuntimeSourceManifest:
         "--untracked-files=all",
         "--",
         "web",
+        "assets",
         "windsprig",
         "levels",
     )
@@ -109,7 +114,9 @@ def inspect_runtime_source(root: Path) -> RuntimeSourceManifest:
         raise SourceProvenanceError("tracked runtime source is dirty")
 
     tracked = frozenset(
-        value for value in _git(lexical_root, "ls-files", "-z", "--", "web", "windsprig", "levels").split("\0") if value
+        value
+        for value in _git(lexical_root, "ls-files", "-z", "--", "web", "assets", "windsprig", "levels").split("\0")
+        if value
     )
     untracked_packageable = tuple(path for path in relative_files if path not in tracked)
     if untracked_packageable:

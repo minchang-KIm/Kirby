@@ -23,6 +23,9 @@ _EXPECTED_BOSSES = 6
 _EXPECTED_MOTES = 90
 _EXPECTED_MUSIC = 28
 _EXPECTED_SFX = 29
+_EXPECTED_ART = 52
+_WORLD_ART_KINDS = {"background": 4, "tiles": 8, "props": 6, "transition": 1}
+_UI_ART_FRAMES = {"ui.icons": 32, "ui.favicon": 1, "ui.social_card": 1}
 
 
 def _issue(code: str, path: str, message: str) -> ValidationIssue:
@@ -775,6 +778,93 @@ def _manifest_issues(
     return issues
 
 
+def _art_inventory_issues(bundle: CatalogBundle, assets: AssetManifest) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    art = assets.art
+    if len(art) != _EXPECTED_ART:
+        issues.append(
+            _issue(
+                "art_inventory_count",
+                "assets.art",
+                f"expected {_EXPECTED_ART}, received {len(art)}",
+            )
+        )
+
+    expected_ids = {"player.sprig", *_UI_ART_FRAMES}
+    expected_ids.update(f"world.{world_id}.{kind}" for world_id in bundle.campaign.worlds for kind in _WORLD_ART_KINDS)
+    expected_ids.update(boss.visual_id for boss in bundle.bosses.values())
+    expected_ids.update(
+        f"enemy.{enemy.kind}" for stage in bundle.campaign.stages.values() for enemy in stage.enemy_spawns
+    )
+    for asset_id in sorted(expected_ids - art.keys()):
+        issues.append(
+            _issue(
+                "missing_asset_id",
+                f"assets.art.{asset_id}",
+                "required art asset is missing",
+            )
+        )
+    for asset_id in sorted(art.keys() - expected_ids):
+        issues.append(
+            _issue(
+                "unexpected_asset_id",
+                f"assets.art.{asset_id}",
+                "art asset is not part of the canonical release inventory",
+            )
+        )
+
+    categories = {
+        "enemy": sum(asset_id.startswith("enemy.") for asset_id in art),
+        "boss": sum(asset_id.startswith("boss.") for asset_id in art),
+        "world": sum(asset_id.startswith("world.") for asset_id in art),
+        "ui": sum(asset_id.startswith("ui.") for asset_id in art),
+    }
+    for category, expected in (("enemy", 18), ("boss", 6), ("world", 24), ("ui", 3)):
+        received = categories[category]
+        if received != expected:
+            issues.append(
+                _issue(
+                    "art_category_count",
+                    f"assets.art.{category}",
+                    f"expected {expected}, received {received}",
+                )
+            )
+
+    for asset_id, record in art.items():
+        path = f"assets.art.{asset_id}"
+        expected_frames: int | None = None
+        if asset_id == "player.sprig":
+            expected_frames = 56
+        elif asset_id.startswith("enemy."):
+            expected_frames = 4
+        elif asset_id.startswith("boss."):
+            expected_frames = 18
+        elif asset_id in _UI_ART_FRAMES:
+            expected_frames = _UI_ART_FRAMES[asset_id]
+        elif asset_id.startswith("world."):
+            kind = asset_id.rsplit(".", 1)[-1]
+            expected_frames = _WORLD_ART_KINDS.get(kind)
+        if expected_frames is not None and record.frames != expected_frames:
+            issues.append(
+                _issue(
+                    "invalid_art_frames",
+                    f"{path}.frames",
+                    f"expected {expected_frames}, received {record.frames}",
+                )
+            )
+        if not record.mandatory:
+            issues.append(_issue("art_not_mandatory", f"{path}.mandatory", "must be true"))
+        if record.provenance != "procedural-vector-v1":
+            issues.append(
+                _issue(
+                    "invalid_art_provenance",
+                    f"{path}.provenance",
+                    "expected procedural-vector-v1",
+                )
+            )
+    return issues
+
+
 def _font_issues(assets: AssetManifest, asset_root: Path | None) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     if not assets.font.mandatory:
@@ -885,6 +975,7 @@ def validate_bundle(
         layout_issues,
         _reward_issues(bundle),
         _locale_issues(bundle, locales),
+        _art_inventory_issues(bundle, assets),
         _manifest_issues(bundle, assets, asset_root),
         _font_issues(assets, asset_root),
         _provenance_issues(assets, asset_root),

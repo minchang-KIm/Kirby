@@ -88,6 +88,7 @@ def _asset_document() -> JsonObject:
             "path": "fonts/NotoSansKR.ttf",
             "license": "fonts/OFL-NotoSansKR.txt",
             "mandatory": True,
+            "sha256": "c" * 64,
         },
         "provenance_files": ["generated/art-provenance.json"],
     }
@@ -529,6 +530,7 @@ def test_asset_and_locale_loaders_return_deeply_immutable_native_models(tmp_path
                     "path": "fonts/NotoSansKR.ttf",
                     "license": "fonts/OFL-NotoSansKR.txt",
                     "mandatory": True,
+                    "sha256": "c" * 64,
                 },
                 "provenance_files": ["generated/art-provenance.json"],
             }
@@ -571,6 +573,7 @@ def test_asset_loader_reports_nested_schema_and_numeric_errors(tmp_path: Path) -
                     "path": "fonts/NotoSansKR.ttf",
                     "license": "fonts/OFL-NotoSansKR.txt",
                     "mandatory": True,
+                    "sha256": "c" * 64,
                 },
             }
         ),
@@ -595,6 +598,7 @@ def test_asset_loader_reports_nested_schema_and_numeric_errors(tmp_path: Path) -
         (("art", "boss.demo"), "path", True, "assets.art.boss.demo.path", "missing field"),
         (("audio", "sfx.boss.demo"), "path", True, "assets.audio.sfx.boss.demo.path", "missing field"),
         (("font",), "path", True, "assets.font.path", "missing field"),
+        (("font",), "sha256", True, "assets.font.sha256", "missing field"),
     ],
 )
 def test_asset_loader_reports_exact_unknown_and_missing_fields(
@@ -616,6 +620,65 @@ def test_asset_loader_reports_exact_unknown_and_missing_fields(
     with pytest.raises(
         ContentError,
         match=rf"^{re.escape(expected_path)}: {re.escape(reason)}$",
+    ):
+        load_asset_manifest(tmp_path / "assets.json")
+
+
+@pytest.mark.parametrize(
+    ("object_path", "field_name", "value", "expected_path", "reason"),
+    [
+        (("art", "boss.demo"), "width", 0, "assets.art.boss.demo.width", "must be positive"),
+        (("art", "boss.demo"), "frames", -1, "assets.art.boss.demo.frames", "must be positive"),
+        (
+            ("art", "boss.demo"),
+            "pixel_sha256",
+            "A" * 64,
+            "assets.art.boss.demo.pixel_sha256",
+            "must be 64 lowercase hexadecimal characters",
+        ),
+        (
+            ("audio", "sfx.boss.demo"),
+            "sha256",
+            "short",
+            "assets.audio.sfx.boss.demo.sha256",
+            "must be 64 lowercase hexadecimal characters",
+        ),
+        (("font",), "sha256", "f" * 63, "assets.font.sha256", "must be 64 lowercase hexadecimal characters"),
+        (
+            ("art", "boss.demo"),
+            "path",
+            "../escape.png",
+            "assets.art.boss.demo.path",
+            "must be a safe relative POSIX path",
+        ),
+        (("font",), "license", "C:\\escape.txt", "assets.font.license", "must be a safe relative POSIX path"),
+    ],
+)
+def test_asset_loader_rejects_invalid_release_integrity_fields(
+    tmp_path: Path,
+    object_path: tuple[str, ...],
+    field_name: str,
+    value: object,
+    expected_path: str,
+    reason: str,
+) -> None:
+    document = _asset_document()
+    _object_at(document, object_path)[field_name] = value
+    (tmp_path / "assets.json").write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ContentError, match=rf"^{re.escape(expected_path)}: {re.escape(reason)}$"):
+        load_asset_manifest(tmp_path / "assets.json")
+
+
+def test_asset_loader_rejects_an_id_that_does_not_start_with_domain_text(tmp_path: Path) -> None:
+    document = _asset_document()
+    art = _object_at(document, ("art",))
+    art["9boss.demo"] = art.pop("boss.demo")
+    (tmp_path / "assets.json").write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(
+        ContentError,
+        match=r"^assets\.art\.9boss\.demo: must be a lowercase dotted stable ID$",
     ):
         load_asset_manifest(tmp_path / "assets.json")
 

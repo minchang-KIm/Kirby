@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import cast
 
@@ -71,6 +72,8 @@ ROUTE_KINDS = frozenset({"main", "optional", "mastery"})
 ATTACK_MARKERS = frozenset({"ground", "silhouette", "lane", "orbit", "beam", "arena"})
 VULNERABILITY_STATES = frozenset({"vulnerable", "armored", "hidden", "invulnerable"})
 REWARD_KINDS = frozenset({"challenge", "gallery", "palette"})
+_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
+_ASSET_ID_PATTERN = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*\Z")
 
 # Save migration still documents prototype-to-public IDs. The strict content parser
 # never consults this table and therefore cannot accept these aliases.
@@ -208,6 +211,39 @@ def _text(value: object, path: str) -> str:
 def _integer(value: object, path: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ContentError(path, "must be an integer")
+    return value
+
+
+def _positive_integer(value: object, path: str) -> int:
+    result = _integer(value, path)
+    if result <= 0:
+        raise ContentError(path, "must be positive")
+    return result
+
+
+def _sha256(value: object, path: str) -> str:
+    result = _text(value, path)
+    if _SHA256_PATTERN.fullmatch(result) is None:
+        raise ContentError(path, "must be 64 lowercase hexadecimal characters")
+    return result
+
+
+def _relative_asset_path(value: object, path: str) -> str:
+    result = _text(value, path)
+    candidate = PurePosixPath(result)
+    if (
+        "\\" in result
+        or candidate.is_absolute()
+        or candidate.as_posix() != result
+        or any(part in {"", ".", ".."} or ":" in part for part in candidate.parts)
+    ):
+        raise ContentError(path, "must be a safe relative POSIX path")
+    return result
+
+
+def _asset_id(value: str, path: str) -> str:
+    if _ASSET_ID_PATTERN.fullmatch(value) is None:
+        raise ContentError(path, "must be a lowercase dotted stable ID")
     return value
 
 
@@ -706,11 +742,11 @@ def _load_art_asset(value: object, path: str) -> ArtAssetSpec:
         ),
     )
     return ArtAssetSpec(
-        path=_text(raw["path"], f"{path}.path"),
-        width=_integer(raw["width"], f"{path}.width"),
-        height=_integer(raw["height"], f"{path}.height"),
-        frames=_integer(raw["frames"], f"{path}.frames"),
-        pixel_sha256=_text(raw["pixel_sha256"], f"{path}.pixel_sha256"),
+        path=_relative_asset_path(raw["path"], f"{path}.path"),
+        width=_positive_integer(raw["width"], f"{path}.width"),
+        height=_positive_integer(raw["height"], f"{path}.height"),
+        frames=_positive_integer(raw["frames"], f"{path}.frames"),
+        pixel_sha256=_sha256(raw["pixel_sha256"], f"{path}.pixel_sha256"),
         mandatory=_boolean(raw["mandatory"], f"{path}.mandatory"),
         provenance=_text(raw["provenance"], f"{path}.provenance"),
     )
@@ -727,10 +763,10 @@ def _load_audio_asset(value: object, path: str) -> AudioAssetSpec:
         _enum(raw["bus"], f"{path}.bus", frozenset({"music", "sfx"}), "audio bus"),
     )
     return AudioAssetSpec(
-        path=_text(raw["path"], f"{path}.path"),
+        path=_relative_asset_path(raw["path"], f"{path}.path"),
         bus=bus,
         mandatory=_boolean(raw["mandatory"], f"{path}.mandatory"),
-        sha256=_text(raw["sha256"], f"{path}.sha256"),
+        sha256=_sha256(raw["sha256"], f"{path}.sha256"),
     )
 
 
@@ -738,12 +774,13 @@ def _load_font_asset(value: object, path: str) -> FontAssetSpec:
     raw = _fields(
         value,
         path,
-        frozenset({"path", "license", "mandatory"}),
+        frozenset({"path", "license", "mandatory", "sha256"}),
     )
     return FontAssetSpec(
-        path=_text(raw["path"], f"{path}.path"),
-        license=_text(raw["license"], f"{path}.license"),
+        path=_relative_asset_path(raw["path"], f"{path}.path"),
+        license=_relative_asset_path(raw["license"], f"{path}.license"),
         mandatory=_boolean(raw["mandatory"], f"{path}.mandatory"),
+        sha256=_sha256(raw["sha256"], f"{path}.sha256"),
     )
 
 
@@ -758,12 +795,20 @@ def load_asset_manifest(path: Path) -> AssetManifest:
         frozenset({"art", "font"}),
         frozenset({"audio", "provenance_files"}),
     )
+    art = _named_objects(raw["art"], "assets.art", _load_art_asset)
+    audio = _named_objects(raw["audio"], "assets.audio", _load_audio_asset) if "audio" in raw else {}
+    for asset_id in art:
+        _asset_id(asset_id, f"assets.art.{asset_id}")
+    for cue_id in audio:
+        _asset_id(cue_id, f"assets.audio.{cue_id}")
     return AssetManifest(
-        art=_named_objects(raw["art"], "assets.art", _load_art_asset),
-        audio=(_named_objects(raw["audio"], "assets.audio", _load_audio_asset) if "audio" in raw else {}),
+        art=art,
+        audio=audio,
         font=_load_font_asset(raw["font"], "assets.font"),
         provenance_files=(
-            _sequence(raw["provenance_files"], "assets.provenance_files", _text) if "provenance_files" in raw else ()
+            _sequence(raw["provenance_files"], "assets.provenance_files", _relative_asset_path)
+            if "provenance_files" in raw
+            else ()
         ),
     )
 

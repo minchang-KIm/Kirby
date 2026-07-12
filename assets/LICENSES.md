@@ -10,10 +10,14 @@
 Noto Sans KR is redistributed unmodified under the SIL Open Font License 1.1. The complete retained license is
 `assets/fonts/OFL-NotoSansKR.txt`.
 
-## Original generated art provenance — reserved for Task 6
+## Original generated art
 
-Task 5 does not distribute generated art. Task 6 will record each committed generated-art recipe, seed, parameter set,
-and decoded pixel hash in `assets/generated/art-provenance.json` when those assets exist.
+The 52 PNGs under `assets/generated/player`, `enemies`, `bosses`, `worlds`, and `ui` are original Windsprig project
+art generated solely from checked-in geometric recipes and deterministic seeds in `tools/generate_art.py`. They use no
+third-party character, logo, raster, or vector inputs. The canonical recipe IDs, dimensions, frame counts, seeds,
+mandatory flags, and decoded-pixel SHA-256 hashes are recorded in `assets/generated/art-provenance.json`.
+
+Original generated art is distributed under the project MIT license in `LICENSE`.
 
 ## Original generated audio provenance — reserved for Task 8
 

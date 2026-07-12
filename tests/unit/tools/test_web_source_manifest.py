@@ -25,12 +25,17 @@ def _committed_runtime(tmp_path: Path) -> Path:
     (root / "web").mkdir(parents=True)
     (root / "windsprig").mkdir()
     (root / "levels").mkdir()
+    (root / "assets" / "generated" / "ui").mkdir(parents=True)
+    (root / "assets" / "fonts").mkdir()
     (root / "web" / "main.py").write_text("print('web')\n", encoding="utf-8")
     (root / "web" / "template.tmpl").write_text("<html></html>\n", encoding="utf-8")
     (root / "web" / "runtime-manifest.json").write_text("{}\n", encoding="utf-8")
     (root / "web" / "favicon.png").write_bytes(b"png")
     (root / "windsprig" / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
     (root / "levels" / "stage.json").write_text("{}\n", encoding="utf-8")
+    (root / "assets" / "generated" / "ui" / "icons.png").write_bytes(b"png")
+    (root / "assets" / "fonts" / "font.ttf").write_bytes(b"font")
+    (root / "assets" / "LICENSES.md").write_text("# Licenses\n", encoding="utf-8")
     (root / ".gitignore").write_text("windsprig/ignored.py\n", encoding="utf-8")
     _git(root, "init", "--quiet")
     _git(root, "add", ".")
@@ -58,6 +63,9 @@ def test_runtime_manifest_is_stable_and_bound_to_clean_head(tmp_path: Path) -> N
     assert len(first.source_commit) == 40
     assert len(first.sha256) == 64
     assert first.files == (
+        "assets/LICENSES.md",
+        "assets/fonts/font.ttf",
+        "assets/generated/ui/icons.png",
         "levels/stage.json",
         "web/favicon.png",
         "web/main.py",

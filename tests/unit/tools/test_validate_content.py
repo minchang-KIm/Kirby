@@ -21,6 +21,7 @@ def _write_supporting_catalogs(content: Path) -> None:
                     "path": "fonts/NotoSansKR.ttf",
                     "license": "fonts/OFL-NotoSansKR.txt",
                     "mandatory": True,
+                    "sha256": "f" * 64,
                 },
                 "provenance_files": [],
             }

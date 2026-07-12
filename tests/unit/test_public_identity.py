@@ -8,6 +8,7 @@ PUBLIC_PATHS = (
     ROOT / "windsprig",
     ROOT / "README.md",
     ROOT / "assets" / "LICENSES.md",
+    ROOT / "assets" / "generated",
     ROOT / "build.spec",
     ROOT / "docs" / "kr",
 )

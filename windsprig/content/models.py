@@ -420,6 +420,7 @@ class FontAssetSpec:
     path: str
     license: str
     mandatory: bool
+    sha256: str
 
 
 type AssetRecord = ArtAssetSpec | AudioAssetSpec | FontAssetSpec

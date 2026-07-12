@@ -214,7 +214,7 @@ def release_documents() -> dict[str, dict[str, object]]:
                         {
                             "x": 160.0,
                             "y": 224.0,
-                            "kind": f"enemy_{ordinal:02d}",
+                            "kind": f"enemy_{((ordinal - 1) % 18) + 1:02d}",
                             "ability_id": ability_id,
                             "patrol_left": 128.0,
                             "patrol_right": 192.0,
@@ -344,12 +344,40 @@ def write_release_bundle(root: Path) -> tuple[Path, Path]:
         asset_paths.append(relative)
         art[f"boss.{boss_id}"] = {
             "path": relative,
-            "width": 192,
-            "height": 64,
-            "frames": 3,
+            "width": 768,
+            "height": 384,
+            "frames": 18,
             "pixel_sha256": f"{world_index:x}" * 64,
             "mandatory": True,
-            "provenance": "deterministic-test-fixture",
+            "provenance": "procedural-vector-v1",
+        }
+
+    additional_art: list[tuple[str, str, int]] = [
+        ("player.sprig", "generated/player/sprig.png", 56),
+        *[(f"enemy.enemy_{index:02d}", f"generated/enemies/enemy-{index:02d}.png", 4) for index in range(1, 19)],
+        *[
+            (
+                f"world.world_{world_index}.{kind}",
+                f"generated/worlds/world-{world_index}-{kind}.png",
+                {"background": 4, "tiles": 8, "props": 6, "transition": 1}[kind],
+            )
+            for world_index in range(1, 7)
+            for kind in ("background", "tiles", "props", "transition")
+        ],
+        ("ui.icons", "generated/ui/icons.png", 32),
+        ("ui.favicon", "generated/ui/favicon.png", 1),
+        ("ui.social_card", "generated/ui/social-card.png", 1),
+    ]
+    for index, (asset_id, relative, frames) in enumerate(additional_art, start=7):
+        asset_paths.append(relative)
+        art[asset_id] = {
+            "path": relative,
+            "width": 64 * frames,
+            "height": 64,
+            "frames": frames,
+            "pixel_sha256": f"{index % 16:x}" * 64,
+            "mandatory": True,
+            "provenance": "procedural-vector-v1",
         }
 
     boss_cues = [
@@ -383,6 +411,7 @@ def write_release_bundle(root: Path) -> tuple[Path, Path]:
             "path": "fonts/NotoSansKR.ttf",
             "license": "fonts/OFL-NotoSansKR.txt",
             "mandatory": True,
+            "sha256": "f" * 64,
         },
         "provenance_files": [
             "generated/art-provenance.json",
