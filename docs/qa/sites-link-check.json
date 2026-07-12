@@ -1,0 +1,17 @@
+{
+  "broken_links_allowed": 0,
+  "required_http_status": 200,
+  "required_labels": [
+    "Play Windsprig",
+    "Download for Windows",
+    "Source",
+    "Support",
+    "Privacy"
+  ],
+  "responsive_widths_px": [
+    390,
+    768,
+    1440
+  ],
+  "version": "1.0.0"
+}

@@ -359,3 +359,22 @@ def test_live_verifier_rejects_noncanonical_production_origins(url: str) -> None
 
     with pytest.raises(ValueError, match="canonical HTTPS origin"):
         verify_live_web(url, "1.0.0", "d" * 40, fetcher=lambda _url: (200, ""))
+
+
+def test_sites_brief_and_required_link_contract_are_canonical() -> None:
+    brief = (ROOT / "docs/launch/sites-brief.md").read_text(encoding="utf-8")
+    links = json.loads((ROOT / "docs/qa/sites-link-check.json").read_text(encoding="utf-8"))
+
+    assert "Catch the wind. Carry its echoes." in brief
+    assert "30 hand-crafted stages · 6 multi-phase bosses · 90 hidden Wind Motes" in brief
+    assert all(
+        heading in brief
+        for heading in ("## Gameplay", "## Six worlds", "## Local co-op", "## Accessibility", "## Press kit")
+    )
+    assert links == {
+        "broken_links_allowed": 0,
+        "required_http_status": 200,
+        "required_labels": ["Play Windsprig", "Download for Windows", "Source", "Support", "Privacy"],
+        "responsive_widths_px": [390, 768, 1440],
+        "version": "1.0.0",
+    }
