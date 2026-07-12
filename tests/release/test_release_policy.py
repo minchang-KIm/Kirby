@@ -8,6 +8,8 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import pytest
+
 from tools.verify_release import verify_local_release
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -279,3 +281,33 @@ def test_public_support_and_policy_documents_name_actionable_routes() -> None:
     assert "security/advisories/new" in security
     assert "1.0.x" in security
     assert all(term in privacy for term in ("No account", "No analytics", "No server save"))
+
+
+def test_ci_covers_source_web_and_windows_artifacts() -> None:
+    ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert all(name in ci for name in ("source-tests:", "web-artifact:", "windows-artifact:"))
+    assert "python -I tools/build_web.py" in ci
+    assert "python tools/build_windows.py" in ci
+    assert "tests/e2e/test_web_product.py" in ci
+    assert "tests/e2e/test_web_pwa.py" in ci
+
+
+def test_release_workflow_is_tag_bound_and_publishes_checksums() -> None:
+    release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+
+    assert 'tags: ["v*.*.*"]' in release
+    assert "contents: write" in release
+    assert "--verify-tag" in release
+    assert "gh release create" in release
+    assert "*.sha256" in release
+    assert "github.ref_name" in release
+
+
+@pytest.mark.parametrize("relative", [".github/workflows/ci.yml", ".github/workflows/release.yml"])
+def test_release_workflows_pin_third_party_actions(relative: str) -> None:
+    workflow = (ROOT / relative).read_text(encoding="utf-8")
+    uses = re.findall(r"uses:\s+([^\s#]+)", workflow)
+
+    assert uses
+    assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", action) for action in uses)
