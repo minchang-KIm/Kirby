@@ -164,9 +164,12 @@ def validate_stage_result(
         result.discovered_ability_ids,
     )
     known_abilities = _known_ability_ids(catalog)
+    stage_ability_sources = frozenset(enemy.ability_id for enemy in stage.enemy_spawns if enemy.ability_id is not None)
     for ability_id in ability_ids:
         if ability_id not in known_abilities:
             raise ValueError(f"unknown ability_id: {ability_id}")
+        if ability_id not in stage_ability_sources:
+            raise ValueError(f"{ability_id} is not an authored acquisition source in {stage_id}")
     _validate_team_result(result)
 
 

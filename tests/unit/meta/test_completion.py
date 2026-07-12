@@ -187,6 +187,19 @@ def test_result_catalog_identity_is_rejected_before_progress_changes(
     assert profile.unlocked_nodes == frozenset({"world_1_node_1"})
 
 
+def test_catalog_known_ability_must_have_an_authored_source_in_the_result_stage() -> None:
+    profile = SaveProfile(profile_id="profile_1", display_name="Sprig")
+    forged = _result(ability_ids=("tempest",))
+
+    with pytest.raises(
+        ValueError,
+        match="tempest is not an authored acquisition source in world_1_stage_1",
+    ):
+        apply_stage_result(profile, forged, _bundle())
+
+    assert profile == SaveProfile(profile_id="profile_1", display_name="Sprig")
+
+
 @pytest.mark.parametrize("clear_time_ms", [0, -1, True, 1.5])
 def test_result_rejects_non_positive_or_non_integer_clear_time(clear_time_ms: object) -> None:
     forged = replace(_result(), clear_time_ms=clear_time_ms)  # type: ignore[arg-type]
