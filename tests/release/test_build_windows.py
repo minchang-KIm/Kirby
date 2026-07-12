@@ -156,6 +156,18 @@ def test_windows_spec_and_metadata_are_product_bound() -> None:
     assert smoke == {"exit_code": 0, "expect_screen": "title", "frames": 3, "save_profile": "Package Smoke"}
 
 
+def test_windows_spec_is_a_tracked_release_input() -> None:
+    result = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "packaging/windows.spec"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, "a clean checkout would omit the supported Windows spec"
+
+
 def test_windows_icon_is_a_canonical_embedded_copy_of_the_product_favicon() -> None:
     icon = (ROOT / "assets/branding/windsprig.ico").read_bytes()
     favicon = (ROOT / "assets/generated/ui/favicon.png").read_bytes()

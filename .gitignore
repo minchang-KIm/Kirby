@@ -33,6 +33,7 @@ MANIFEST
 *.manifest
 *.spec
 !build.spec
+!packaging/windows.spec
 
 # Installer logs
 pip-log.txt
