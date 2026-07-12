@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 import tomllib
 import unicodedata
@@ -50,6 +51,12 @@ class _StatFingerprint:
     kind: int
     size: int
     modified_ns: int
+
+
+@dataclass(frozen=True, slots=True)
+class _PortablePathNode:
+    original: str
+    is_terminal: bool
 
 
 @dataclass(slots=True)
@@ -147,6 +154,7 @@ def write_build_manifest(
     ).encode("utf-8")
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    descriptor: int | None = None
     temporary_path: Path | None = None
     try:
         descriptor, temporary_name = tempfile.mkstemp(
@@ -155,15 +163,21 @@ def write_build_manifest(
             suffix=".tmp",
         )
         temporary_path = Path(temporary_name)
-        with os.fdopen(descriptor, "wb") as destination:
+        destination = os.fdopen(descriptor, "wb")
+        descriptor = None
+        with destination:
             destination.write(encoded)
             destination.flush()
             os.fsync(destination.fileno())
         # A same-directory replacement prevents readers from observing a partial manifest.
         os.replace(temporary_path, path)
+        temporary_path = None
     finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+        _cleanup_temporary_output(
+            temporary_path,
+            descriptor,
+            preserve_active_error=sys.exc_info()[0] is not None,
+        )
     return path
 
 
@@ -210,6 +224,7 @@ def write_reproducible_zip(source_dir: Path, destination: Path) -> Path:
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     _preflight_zip_compression()
+    descriptor: int | None = None
     temporary_path: Path | None = None
     try:
         descriptor, temporary_name = tempfile.mkstemp(
@@ -217,8 +232,9 @@ def write_reproducible_zip(source_dir: Path, destination: Path) -> Path:
             prefix=f".{destination.name}.",
             suffix=".tmp",
         )
-        os.close(descriptor)
         temporary_path = Path(temporary_name)
+        os.close(descriptor)
+        descriptor = None
         with zipfile.ZipFile(
             temporary_path,
             mode="w",
@@ -235,10 +251,35 @@ def write_reproducible_zip(source_dir: Path, destination: Path) -> Path:
             os.fsync(completed_archive.fileno())
         temporary_path.chmod(0o644)
         os.replace(temporary_path, destination)
+        temporary_path = None
     finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+        _cleanup_temporary_output(
+            temporary_path,
+            descriptor,
+            preserve_active_error=sys.exc_info()[0] is not None,
+        )
     return destination
+
+
+def _cleanup_temporary_output(
+    temporary_path: Path | None,
+    descriptor: int | None,
+    *,
+    preserve_active_error: bool,
+) -> None:
+    cleanup_errors: list[OSError] = []
+    if descriptor is not None:
+        try:
+            os.close(descriptor)
+        except OSError as error:
+            cleanup_errors.append(error)
+    if temporary_path is not None:
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError as error:
+            cleanup_errors.append(error)
+    if cleanup_errors and not preserve_active_error:
+        raise cleanup_errors[0]
 
 
 def _validate_target(target: object) -> Target:
@@ -282,22 +323,32 @@ def _portable_component_key(component: str) -> str:
     return unicodedata.normalize("NFKC", component).casefold()
 
 
-def _register_portable_path(path: str, registered: dict[str, str]) -> None:
+def _register_portable_path(
+    path: str,
+    registered: dict[str, _PortablePathNode],
+    *,
+    terminal: bool,
+) -> None:
     parts = PurePosixPath(path).parts
     for length in range(1, len(parts) + 1):
         portable_key = "/".join(_portable_component_key(part) for part in parts[:length])
         original = "/".join(parts[:length])
-        previous = registered.setdefault(portable_key, original)
-        if previous != original:
-            raise ValueError(f"portable path collision: {previous!r} conflicts with {original!r}")
+        is_terminal = terminal and length == len(parts)
+        previous = registered.get(portable_key)
+        if previous is None:
+            registered[portable_key] = _PortablePathNode(original, is_terminal)
+        elif previous.original != original or previous.is_terminal != is_terminal:
+            raise ValueError(
+                f"portable path collision: {previous.original!r} conflicts with {original!r}"
+            )
 
 
 def _canonical_manifest_files(files: list[str]) -> list[str]:
     canonical: set[str] = set()
-    registered: dict[str, str] = {}
+    registered: dict[str, _PortablePathNode] = {}
     for item in files:
         path = _validate_manifest_path(item)
-        _register_portable_path(path, registered)
+        _register_portable_path(path, registered, terminal=True)
         canonical.add(path)
     return sorted(canonical)
 
@@ -428,7 +479,15 @@ def _open_windows_descriptor(path: Path, *, directory: bool) -> int:
     except BaseException:
         close_handle(handle)
         raise
-    os.set_inheritable(descriptor, False)
+    try:
+        os.set_inheritable(descriptor, False)
+    except BaseException:
+        # open_osfhandle transferred HANDLE ownership to this CRT descriptor.
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        raise
     return descriptor
 
 
@@ -677,14 +736,18 @@ def _archive_directory(
     archive: zipfile.ZipFile,
     directory: _DirectoryHandle,
     relative_parts: tuple[str, ...],
-    registered: dict[str, str],
+    registered: dict[str, _PortablePathNode],
 ) -> None:
     for name in _directory_names(directory):
         path = directory.path / name
         expected = _entry_lstat(directory, name)
         member_parts = (*relative_parts, name)
         member_name = _validate_manifest_path(PurePosixPath(*member_parts).as_posix())
-        _register_portable_path(member_name, registered)
+        _register_portable_path(
+            member_name,
+            registered,
+            terminal=stat.S_ISREG(expected.st_mode),
+        )
         if _is_link_or_reparse(path) or _stat_is_link_or_reparse(expected):
             raise ValueError(f"ZIP source contains a link or reparse point: {path}")
         if stat.S_ISDIR(expected.st_mode):

@@ -8,6 +8,7 @@ import os
 import socket
 import stat
 import subprocess
+import tempfile
 import zipfile
 import zlib
 from dataclasses import FrozenInstanceError
@@ -292,6 +293,44 @@ def test_manifest_rejects_portable_case_and_unicode_collisions(
         write_build_manifest(tmp_path / "build-info.json", identity, files)
 
 
+@pytest.mark.parametrize(
+    "files",
+    [
+        ["foo", "foo/bar.txt"],
+        ["foo/bar.txt", "foo"],
+        ["Foo", "foo/bar.txt"],
+        ["foo/bar.txt", "Foo"],
+        ["caf\u00e9", "cafe\u0301/bar.txt"],
+        ["cafe\u0301/bar.txt", "caf\u00e9"],
+    ],
+)
+def test_manifest_rejects_portable_file_directory_prefix_conflicts(
+    tmp_path: Path,
+    files: list[str],
+) -> None:
+    identity = BuildIdentity(version="1.0.0", commit_sha="d" * 40, target="source")
+
+    with pytest.raises(ValueError, match="portable path collision"):
+        write_build_manifest(tmp_path / "build-info.json", identity, files)
+
+
+def test_manifest_allows_shared_portable_directory_prefixes(tmp_path: Path) -> None:
+    identity = BuildIdentity(version="1.0.0", commit_sha="d" * 40, target="source")
+    destination = tmp_path / "build-info.json"
+
+    write_build_manifest(
+        destination,
+        identity,
+        ["foo/bar.txt", "foo/baz/qux.txt", "other.txt"],
+    )
+
+    assert json.loads(destination.read_text(encoding="utf-8"))["files"] == [
+        "foo/bar.txt",
+        "foo/baz/qux.txt",
+        "other.txt",
+    ]
+
+
 def test_read_build_identity_rejects_nonpath_root() -> None:
     with pytest.raises(TypeError, match="root"):
         read_build_identity(cast(Path, "not-a-path"), "web")
@@ -408,6 +447,40 @@ def test_sha256_file_rejects_same_size_mid_read_mutation(
             sha256_file(source)
 
     assert mutated
+
+
+def test_windows_descriptor_closes_transferred_fd_when_inheritable_setup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows descriptor ownership regression")
+    source = tmp_path / "payload.bin"
+    renamed = tmp_path / "renamed.bin"
+    source.write_bytes(b"payload")
+    injected_error = OSError("injected inheritable failure")
+    transferred_descriptor: int | None = None
+
+    def fail_set_inheritable(descriptor: int, inheritable: bool) -> NoReturn:
+        nonlocal transferred_descriptor
+        assert inheritable is False
+        transferred_descriptor = descriptor
+        raise injected_error
+
+    monkeypatch.setattr(os, "set_inheritable", fail_set_inheritable)
+
+    try:
+        with pytest.raises(OSError, match="inheritable failure") as captured:
+            release_common._open_windows_descriptor(source, directory=False)
+        assert captured.value is injected_error
+        source.rename(renamed)
+        assert renamed.read_bytes() == b"payload"
+    finally:
+        if transferred_descriptor is not None:
+            try:
+                os.close(transferred_descriptor)
+            except OSError:
+                pass
 
 
 def test_reproducible_zip_is_recursive_sorted_and_metadata_normalized(
@@ -630,6 +703,18 @@ def test_reproducible_zip_rejects_nfkc_windows_reserved_component(tmp_path: Path
         write_reproducible_zip(source, tmp_path / "reserved.zip")
 
 
+def test_reproducible_zip_allows_shared_portable_directory_prefixes(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "foo" / "baz").mkdir(parents=True)
+    (source / "foo" / "bar.txt").write_text("bar", encoding="utf-8")
+    (source / "foo" / "baz" / "qux.txt").write_text("qux", encoding="utf-8")
+
+    destination = write_reproducible_zip(source, tmp_path / "valid.zip")
+
+    with zipfile.ZipFile(destination) as archive:
+        assert archive.namelist() == ["foo/bar.txt", "foo/baz/qux.txt"]
+
+
 @pytest.mark.parametrize("file_type", [stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFCHR])
 def test_reproducible_zip_rejects_existing_nonregular_destination_from_lstat(
     tmp_path: Path,
@@ -726,6 +811,50 @@ def test_manifest_preserves_existing_output_and_cleans_temp_after_write_failure(
     assert list(tmp_path.glob(".build-info.json.*.tmp")) == []
 
 
+def test_manifest_fdopen_failure_closes_descriptor_and_preserves_original_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "build-info.json"
+    destination.write_bytes(b"existing manifest")
+    identity = BuildIdentity(version="1.0.0", commit_sha="e" * 40, target="source")
+    injected_error = OSError("injected fdopen failure")
+    original_close = os.close
+    captured_descriptor: int | None = None
+    successful_closes = 0
+
+    def fail_fdopen(descriptor: int, mode: str) -> NoReturn:
+        nonlocal captured_descriptor
+        assert mode == "wb"
+        captured_descriptor = descriptor
+        raise injected_error
+
+    def tracking_close(descriptor: int) -> None:
+        nonlocal successful_closes
+        original_close(descriptor)
+        if descriptor == captured_descriptor:
+            successful_closes += 1
+
+    monkeypatch.setattr(os, "fdopen", fail_fdopen)
+    monkeypatch.setattr(os, "close", tracking_close)
+
+    try:
+        with pytest.raises(OSError, match="fdopen failure") as captured:
+            write_build_manifest(destination, identity, ["content.txt"])
+        assert captured.value is injected_error
+        assert successful_closes == 1
+        assert destination.read_bytes() == b"existing manifest"
+        assert list(tmp_path.glob(".build-info.json.*.tmp")) == []
+    finally:
+        if captured_descriptor is not None:
+            try:
+                original_close(captured_descriptor)
+            except OSError:
+                pass
+        for temporary_path in tmp_path.glob(".build-info.json.*.tmp"):
+            temporary_path.unlink(missing_ok=True)
+
+
 @pytest.mark.parametrize("failure_point", ["fsync", "replace"])
 def test_manifest_preserves_existing_output_and_cleans_temp_after_commit_failure(
     tmp_path: Path,
@@ -773,6 +902,69 @@ def test_archive_preserves_existing_output_and_cleans_temp_after_failure(
 
     assert destination.read_bytes() == b"existing archive"
     assert list(tmp_path.glob(".release.zip.*.tmp")) == []
+
+
+def test_archive_initial_close_failure_releases_temp_and_preserves_original_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "content.txt").write_text("content", encoding="utf-8")
+    destination = tmp_path / "release.zip"
+    destination.write_bytes(b"existing archive")
+    injected_error = OSError("injected initial close failure")
+    original_mkstemp = tempfile.mkstemp
+    original_close = os.close
+    temporary_descriptor: int | None = None
+    temporary_path: Path | None = None
+    close_attempts = 0
+    successful_closes = 0
+
+    def tracking_mkstemp(
+        suffix: str | None = None,
+        prefix: str | None = None,
+        dir: str | os.PathLike[str] | None = None,
+        text: bool = False,
+    ) -> tuple[int, str]:
+        nonlocal temporary_descriptor, temporary_path
+        descriptor, name = original_mkstemp(suffix=suffix, prefix=prefix, dir=dir, text=text)
+        temporary_descriptor = descriptor
+        temporary_path = Path(name)
+        return descriptor, name
+
+    def fail_first_close(descriptor: int) -> None:
+        nonlocal close_attempts, successful_closes
+        if descriptor == temporary_descriptor:
+            close_attempts += 1
+            if close_attempts == 1:
+                raise injected_error
+        original_close(descriptor)
+        if descriptor == temporary_descriptor:
+            successful_closes += 1
+
+    monkeypatch.setattr(tempfile, "mkstemp", tracking_mkstemp)
+    monkeypatch.setattr(os, "close", fail_first_close)
+
+    try:
+        with pytest.raises(OSError, match="initial close failure") as captured:
+            write_reproducible_zip(source, destination)
+        assert captured.value is injected_error
+        assert close_attempts == 2
+        assert successful_closes == 1
+        assert destination.read_bytes() == b"existing archive"
+        assert list(tmp_path.glob(".release.zip.*.tmp")) == []
+        assert temporary_descriptor is not None
+        with pytest.raises(OSError):
+            os.fstat(temporary_descriptor)
+    finally:
+        if temporary_descriptor is not None:
+            try:
+                original_close(temporary_descriptor)
+            except OSError:
+                pass
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def test_archive_preserves_existing_output_after_midstream_compression_failure(
