@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 import pygame
 
@@ -91,6 +93,8 @@ class PygameAudioService:
         self.requires_gesture = requires_gesture
         self._sounds = dict(sounds or {})
         self._bus_volumes: dict[AudioBus, float] = {"music": 1.0, "sfx": 1.0}
+        self._user_muted = False
+        self._focus_paused = False
         self._status = AudioStatus(ready=False, muted=True)
 
     @property
@@ -100,6 +104,7 @@ class PygameAudioService:
     async def initialize(self, after_user_gesture: bool = False) -> AudioStatus:
         if self.requires_gesture and not after_user_gesture:
             self._status = AudioStatus(ready=False, muted=True, error_code="gesture_required")
+            self._publish_status()
             return self._status
         try:
             if pygame.mixer.get_init() is None:
@@ -107,18 +112,24 @@ class PygameAudioService:
         except pygame.error:
             self._status = AudioStatus(ready=False, muted=True, error_code="audio_init_failed")
         else:
-            self._status = AudioStatus(ready=True, muted=False)
+            self._status = AudioStatus(
+                ready=True,
+                muted=self._user_muted or self._focus_paused,
+                error_code="focus_lost" if self._focus_paused else None,
+            )
+        self._publish_status()
         return self._status
 
     def play_cue(self, cue_id: str, bus: AudioBus = "sfx") -> bool:
+        validated_bus = self._validate_bus(bus)
         if not self._status.ready or self._status.muted:
             return False
         sound = self._sounds.get(cue_id)
         if sound is None:
             return False
         try:
-            sound.set_volume(self._bus_volumes[bus])
-            channel = sound.play(loops=-1 if bus == "music" else 0)
+            sound.set_volume(self._bus_volumes[validated_bus])
+            channel = sound.play(loops=-1 if validated_bus == "music" else 0)
         except pygame.error:
             return False
         return channel is not None
@@ -129,18 +140,62 @@ class PygameAudioService:
         try:
             pygame.mixer.pause()
         except pygame.error:
-            return
+            pass
+        self._focus_paused = True
+        self._status = AudioStatus(ready=True, muted=True, error_code="focus_lost")
+        self._publish_status()
 
     def resume(self) -> None:
         if not self._status.ready:
             return
         try:
-            pygame.mixer.unpause()
+            if not self._user_muted:
+                pygame.mixer.unpause()
         except pygame.error:
-            return
+            pass
+        self._focus_paused = False
+        self._status = AudioStatus(ready=True, muted=self._user_muted)
+        self._publish_status()
 
     def set_bus_volume(self, bus: AudioBus, value: float) -> None:
-        self._bus_volumes[bus] = max(0.0, min(1.0, value))
+        validated_bus = self._validate_bus(bus)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("audio bus volume must be a finite number between zero and one")
+        number = float(value)
+        if not math.isfinite(number) or not 0.0 <= number <= 1.0:
+            raise ValueError("audio bus volume must be a finite number between zero and one")
+        self._bus_volumes[validated_bus] = number
+
+    def set_muted(self, muted: bool) -> None:
+        """Apply explicit user mute without losing focus-suspension ownership."""
+
+        if type(muted) is not bool:
+            raise TypeError("muted must be a boolean")
+        self._user_muted = muted
+        if not self._status.ready:
+            return
+        try:
+            if muted:
+                pygame.mixer.pause()
+            elif not self._focus_paused:
+                pygame.mixer.unpause()
+        except pygame.error:
+            pass
+        self._status = AudioStatus(
+            ready=True,
+            muted=muted or self._focus_paused,
+            error_code="focus_lost" if self._focus_paused else None,
+        )
+        self._publish_status()
+
+    def _publish_status(self) -> None:
+        """Allow web adapters to surface each immutable status transition."""
+
+    @staticmethod
+    def _validate_bus(bus: object) -> AudioBus:
+        if type(bus) is not str or bus not in {"music", "sfx"}:
+            raise ValueError("audio bus must be music or sfx")
+        return cast(AudioBus, bus)
 
 
 class PygameDisplayService:

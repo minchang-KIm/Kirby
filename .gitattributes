@@ -9,3 +9,5 @@ assets/fonts/WindsprigSansKR.ttf binary
 assets/fonts/OFL-NotoSansKR.txt binary
 assets/generated/**/*.png binary
 assets/generated/art-provenance.json text eol=lf
+assets/generated/audio/**/*.wav binary
+assets/generated/audio-provenance.json text eol=lf

@@ -218,10 +218,7 @@ class WebStorage:
 
     def keys(self, prefix: str) -> tuple[str, ...]:
         namespace = "windsprig:"
-        return tuple(
-            key.removeprefix(namespace)
-            for key in self.bridge.local_storage_keys(namespace + prefix)
-        )
+        return tuple(key.removeprefix(namespace) for key in self.bridge.local_storage_keys(namespace + prefix))
 
 
 class WebAudioService(PygameAudioService):
@@ -232,12 +229,10 @@ class WebAudioService(PygameAudioService):
         self.bridge.publish_audio_status(self._status)
 
     async def initialize(self, after_user_gesture: bool = False) -> AudioStatus:
-        if not after_user_gesture:
-            self._status = AudioStatus(ready=False, muted=True, error_code="gesture_required")
-        else:
-            self._status = await super().initialize(after_user_gesture=True)
+        return await super().initialize(after_user_gesture=after_user_gesture)
+
+    def _publish_status(self) -> None:
         self.bridge.publish_audio_status(self._status)
-        return self._status
 
 
 class WebDisplayService(PygameDisplayService):

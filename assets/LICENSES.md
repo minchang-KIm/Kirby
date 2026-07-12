@@ -21,10 +21,15 @@ mandatory flags, and decoded-pixel SHA-256 hashes are recorded in `assets/genera
 
 Original generated art is distributed under the project MIT license in `LICENSE`.
 
-## Original generated audio provenance — reserved for Task 8
+## Original generated audio
 
-Task 5 does not distribute generated audio. Task 8 will record each committed synthesis/composition recipe and decoded
-PCM hash in `assets/generated/audio-provenance.json` when those assets exist.
+The 57 WAV files under `assets/generated/audio` are original Windsprig project audio: 28 loopable music cues and 29
+one-shot sound effects. They are synthesized solely from the checked-in composition, oscillator, envelope, and seeded
+noise recipes in `tools/generate_audio.py`; no third-party samples, recordings, or AI-generated audio are used. The
+canonical algorithm, seeds, parameters, PCM metadata, durations, themes, phase variants, and byte/decoded-PCM SHA-256
+hashes are recorded in `assets/generated/audio-provenance.json`.
+
+Original generated audio is distributed under the project MIT license in `LICENSE`.
 
 ## Repository-authored release content
 

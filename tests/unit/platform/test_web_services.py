@@ -373,6 +373,27 @@ def test_web_audio_surfaces_muted_fallback_after_failed_initialization(
     assert window.document.audio_status.textContent == "Audio: muted"
 
 
+def test_web_audio_publishes_user_mute_and_focus_loss_restore_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pygame.mixer.quit()
+    monkeypatch.setattr(pygame.mixer, "get_init", lambda: (22_050, -16, 1))
+    window = FakeWindow()
+    audio = WebAudioService(PygbagBrowserBridge(window))
+    assert asyncio.run(audio.initialize(after_user_gesture=True)) == AudioStatus(ready=True, muted=False)
+
+    audio.set_muted(True)
+    assert window.document.audio_status.textContent == "Audio: muted"
+    audio.pause()
+    assert audio.status == AudioStatus(ready=True, muted=True, error_code="focus_lost")
+    assert window.document.audio_status.textContent == "Audio: muted"
+    audio.resume()
+    assert audio.status == AudioStatus(ready=True, muted=True)
+    assert window.document.audio_status.textContent == "Audio: muted"
+    audio.set_muted(False)
+    assert window.document.audio_status.textContent == "Audio: ready"
+
+
 def test_web_display_requests_browser_fullscreen_but_cannot_exit() -> None:
     window = FakeWindow()
     bridge = PygbagBrowserBridge(window)

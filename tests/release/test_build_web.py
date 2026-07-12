@@ -261,6 +261,7 @@ def test_build_web_stages_one_pygbag_artifact_at_an_explicit_output(
     assert len(commands) == 1
     assert commands[0][1:3] == ["-m", "pygbag"]
     assert commands[0].count("pygbag") == 1
+    assert commands[0].count("--disable-sound-format-error") == 1
     cdn_index = commands[0].index("--cdn")
     assert commands[0][cdn_index + 1] == "runtime/0.9.3/"
     assert report["probe"] is True

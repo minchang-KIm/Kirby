@@ -7,6 +7,8 @@ import io
 import os
 import re
 import stat
+import struct
+import wave
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
@@ -117,6 +119,39 @@ def _decoded_image(payload: bytes, name: str) -> pygame.Surface:
         raise ValueError("unreadable PNG") from error
 
 
+def _validate_wav(payload: bytes) -> None:
+    """Reject anything except the canonical release PCM container and format."""
+
+    try:
+        if len(payload) < 44 or payload[:4] != b"RIFF" or payload[8:12] != b"WAVE":
+            raise ValueError
+        if struct.unpack_from("<I", payload, 4)[0] != len(payload) - 8:
+            raise ValueError
+        if payload[12:16] != b"fmt " or struct.unpack_from("<I", payload, 16)[0] != 16:
+            raise ValueError
+        if payload[36:40] != b"data":
+            raise ValueError
+        data_size = struct.unpack_from("<I", payload, 40)[0]
+        if data_size != len(payload) - 44 or data_size % 2:
+            raise ValueError
+        with wave.open(io.BytesIO(payload), "rb") as source:
+            if (
+                source.getnchannels() != 1
+                or source.getsampwidth() != 2
+                or source.getframerate() != 22_050
+                or source.getcomptype() != "NONE"
+            ):
+                raise RuntimeError("expected mono 16-bit 22050 Hz PCM")
+            frame_count = source.getnframes()
+            decoded = source.readframes(frame_count)
+            if frame_count <= 0 or len(decoded) != frame_count * 2 or source.readframes(1):
+                raise ValueError
+    except RuntimeError as error:
+        raise ValueError(str(error)) from None
+    except (EOFError, OSError, ValueError, wave.Error):
+        raise ValueError("unreadable WAV") from None
+
+
 def _pixel_sha256(surface: pygame.Surface) -> str:
     return _sha256(pygame.image.tobytes(surface, "RGBA", False))
 
@@ -198,6 +233,7 @@ class AssetCatalog:
                 payload = _read_regular_file(path)
                 if _sha256(payload) != audio_spec.sha256:
                     raise ValueError("file hash mismatch")
+                _validate_wav(payload)
                 sounds[cue_id] = path
             except (FileNotFoundError, OSError, ValueError) as error:
                 if audio_spec.mandatory:

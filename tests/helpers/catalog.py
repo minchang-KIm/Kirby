@@ -6,6 +6,12 @@ import copy
 import json
 from pathlib import Path
 
+from windsprig.audio.catalog import (
+    ABILITY_SFX_CUE_IDS,
+    ACTION_SFX_CUE_IDS,
+    SYSTEM_MUSIC_CUE_IDS,
+)
+
 
 def minimal_documents() -> dict[str, dict[str, object]]:
     """Return independent JSON-shaped documents for one valid catalog bundle."""
@@ -302,7 +308,7 @@ def release_documents() -> dict[str, dict[str, object]]:
                                 "active_ms": 400,
                                 "recovery_ms": 500,
                                 "marker": "lane",
-                                "cue_id": f"sfx.{boss_id}.phase_{phase_index}",
+                                "cue_id": f"sfx.boss.{boss_id}",
                                 "parameters": {"lanes": phase_index + 1},
                             }
                         ],
@@ -380,11 +386,19 @@ def write_release_bundle(root: Path) -> tuple[Path, Path]:
             "provenance": "procedural-vector-v1",
         }
 
-    boss_cues = [
-        f"sfx.boss_{world_index}.phase_{phase_index}" for world_index in range(1, 7) for phase_index in range(1, 4)
-    ]
-    sfx_cues = boss_cues + [f"sfx.fixture.{index:02d}" for index in range(1, 12)]
-    music_cues = [f"music.fixture.{index:02d}" for index in range(1, 29)]
+    boss_cues = [f"sfx.boss.boss_{world_index}" for world_index in range(1, 7)]
+    sfx_cues = sorted({*boss_cues, *ACTION_SFX_CUE_IDS, *ABILITY_SFX_CUE_IDS})
+    music_cues = sorted(
+        {
+            *SYSTEM_MUSIC_CUE_IDS,
+            *(f"music.world.world_{world_index}" for world_index in range(1, 7)),
+            *(
+                f"music.boss.boss_{world_index}.p{phase_index}"
+                for world_index in range(1, 7)
+                for phase_index in range(1, 4)
+            ),
+        }
+    )
     for index, cue_id in enumerate(music_cues, start=1):
         relative = f"generated/audio/music-{index:02d}.wav"
         asset_paths.append(relative)

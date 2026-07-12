@@ -7,6 +7,12 @@ import string
 from collections.abc import Iterable
 from pathlib import Path
 
+from windsprig.audio.catalog import (
+    ABILITY_SFX_CUE_IDS,
+    ACTION_SFX_CUE_IDS,
+    SYSTEM_MUSIC_CUE_IDS,
+)
+
 from .loader import PUBLIC_ABILITY_IDS
 from .models import (
     AssetManifest,
@@ -934,8 +940,58 @@ def _provenance_issues(
     return issues
 
 
-def _audio_coverage_issues(assets: AssetManifest) -> list[ValidationIssue]:
+def _audio_coverage_issues(bundle: CatalogBundle, assets: AssetManifest) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
+    expected_music = {
+        *SYSTEM_MUSIC_CUE_IDS,
+        *(f"music.world.{world_id}" for world_id in bundle.campaign.worlds),
+        *(
+            f"music.boss.{boss_id}.p{phase_index}"
+            for boss_id, boss in bundle.bosses.items()
+            for phase_index in range(1, len(boss.phases) + 1)
+        ),
+    }
+    expected_sfx = {
+        *ACTION_SFX_CUE_IDS,
+        *ABILITY_SFX_CUE_IDS,
+        *(f"sfx.boss.{boss_id}" for boss_id in bundle.bosses),
+    }
+    expected = expected_music | expected_sfx
+    for cue_id in sorted(expected - assets.audio.keys()):
+        issues.append(
+            _issue(
+                "missing_audio_cue",
+                f"assets.audio.{cue_id}",
+                "required canonical audio cue is missing",
+            )
+        )
+    for cue_id in sorted(assets.audio.keys() - expected):
+        issues.append(
+            _issue(
+                "unexpected_audio_cue",
+                f"assets.audio.{cue_id}",
+                "audio cue is not part of the canonical release inventory",
+            )
+        )
+    for cue_id in sorted(expected & assets.audio.keys()):
+        record = assets.audio[cue_id]
+        expected_bus = "music" if cue_id in expected_music else "sfx"
+        if record.bus != expected_bus:
+            issues.append(
+                _issue(
+                    "audio_bus_mismatch",
+                    f"assets.audio.{cue_id}.bus",
+                    f"expected {expected_bus}, received {record.bus}",
+                )
+            )
+        if not record.mandatory:
+            issues.append(
+                _issue(
+                    "audio_not_mandatory",
+                    f"assets.audio.{cue_id}.mandatory",
+                    "must be true",
+                )
+            )
     music = sum(record.bus == "music" for record in assets.audio.values())
     sfx = sum(record.bus == "sfx" for record in assets.audio.values())
     if music != _EXPECTED_MUSIC:
@@ -993,7 +1049,7 @@ def validate_bundle(
         _manifest_issues(bundle, assets, asset_root),
         _font_issues(assets, asset_root),
         _provenance_issues(assets, asset_root),
-        _audio_coverage_issues(assets),
+        _audio_coverage_issues(bundle, assets),
     )
     errors = tuple(issue for category in categories for issue in _stable(category))
     music = sum(record.bus == "music" for record in assets.audio.values())

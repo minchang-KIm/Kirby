@@ -15,7 +15,7 @@ _IGNORED_DIRS: Final = frozenset(
     {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__", "test", "tests"}
 )
 _ALLOWED_SUFFIXES: Final = frozenset(
-    {".json", ".jpg", ".jpeg", ".md", ".ogg", ".otf", ".png", ".py", ".ttf", ".txt", ".webp"}
+    {".json", ".jpg", ".jpeg", ".md", ".ogg", ".otf", ".png", ".py", ".ttf", ".txt", ".wav", ".webp"}
 )
 _SECRET_SUFFIXES: Final = frozenset({".key", ".p12", ".pem", ".pfx"})
 _WEB_ENTRY_FILES: Final = (

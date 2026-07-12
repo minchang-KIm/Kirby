@@ -546,6 +546,7 @@ def build_web(probe: bool, output: Path | None = None) -> dict[str, object]:
         "-m",
         "pygbag",
         "--build",
+        "--disable-sound-format-error",
         "--no_opt",
         "--ume_block",
         "0",

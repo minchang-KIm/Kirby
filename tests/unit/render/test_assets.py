@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
 import subprocess
+import wave
 from dataclasses import replace
 from pathlib import Path
 
@@ -203,6 +205,16 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _wav_bytes(*, channels: int = 1, width: int = 2, rate: int = 22_050) -> bytes:
+    stream = io.BytesIO()
+    with wave.open(stream, "wb") as target:
+        target.setnchannels(channels)
+        target.setsampwidth(width)
+        target.setframerate(rate)
+        target.writeframes(b"\x00" * channels * width * 128)
+    return stream.getvalue()
+
+
 def _fixture_manifest(root: Path, art: ArtAssetSpec, *, audio: AudioAssetSpec | None = None) -> AssetManifest:
     font = root / "fonts/font.ttf"
     font.parent.mkdir(parents=True, exist_ok=True)
@@ -244,7 +256,7 @@ def test_release_catalog_loads_and_verifies_every_runtime_kind(tmp_path: Path) -
     art = _fixture_art(tmp_path)
     sound = tmp_path / "audio/cue.wav"
     sound.parent.mkdir()
-    sound.write_bytes(b"fixture audio")
+    sound.write_bytes(_wav_bytes())
     audio = AudioAssetSpec(
         path="audio/cue.wav",
         bus="sfx",
@@ -345,7 +357,8 @@ def test_release_catalog_rejects_font_audio_and_license_integrity_failures(tmp_p
     art = _fixture_art(tmp_path)
     sound = tmp_path / "audio/cue.wav"
     sound.parent.mkdir()
-    sound.write_bytes(b"fixture audio")
+    valid_wav = _wav_bytes()
+    sound.write_bytes(valid_wav)
     audio = AudioAssetSpec("audio/cue.wav", "sfx", True, _file_hash(sound))
     manifest = _fixture_manifest(tmp_path, art, audio=audio)
 
@@ -353,7 +366,7 @@ def test_release_catalog_rejects_font_audio_and_license_integrity_failures(tmp_p
     with pytest.raises(MissingAssetError, match="sfx.fixture: file hash mismatch"):
         AssetCatalog.load(tmp_path, manifest)
 
-    sound.write_bytes(b"fixture audio")
+    sound.write_bytes(valid_wav)
     (tmp_path / manifest.font.path).write_bytes(b"tampered")
     with pytest.raises(MissingAssetError, match="font.noto_sans_kr: file hash mismatch"):
         AssetCatalog.load(tmp_path, manifest)
@@ -362,6 +375,53 @@ def test_release_catalog_rejects_font_audio_and_license_integrity_failures(tmp_p
     (tmp_path / manifest.font.license).unlink()
     with pytest.raises(MissingAssetError, match="font.license: missing regular file"):
         AssetCatalog.load(tmp_path, manifest)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (b"not a wav", "unreadable WAV"),
+        (_wav_bytes(channels=2), "expected mono 16-bit 22050 Hz PCM"),
+        (_wav_bytes(width=1), "expected mono 16-bit 22050 Hz PCM"),
+        (_wav_bytes(rate=44_100), "expected mono 16-bit 22050 Hz PCM"),
+        (_wav_bytes()[:-3], "unreadable WAV"),
+    ],
+)
+def test_release_catalog_rejects_corrupt_or_wrong_format_audio_even_when_its_hash_matches(
+    tmp_path: Path,
+    payload: bytes,
+    message: str,
+) -> None:
+    art = _fixture_art(tmp_path)
+    sound = tmp_path / "audio/cue.wav"
+    sound.parent.mkdir()
+    sound.write_bytes(payload)
+    manifest = _fixture_manifest(
+        tmp_path,
+        art,
+        audio=AudioAssetSpec("audio/cue.wav", "sfx", True, _file_hash(sound)),
+    )
+
+    with pytest.raises(MissingAssetError, match=message):
+        AssetCatalog.load(tmp_path, manifest)
+
+
+def test_release_catalog_rejects_an_escaped_audio_path_without_reading_it(tmp_path: Path) -> None:
+    art = _fixture_art(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.wav"
+    outside.write_bytes(_wav_bytes())
+    manifest = _fixture_manifest(
+        tmp_path,
+        art,
+        audio=AudioAssetSpec("../outside.wav", "sfx", True, _file_hash(outside)),
+    )
+
+    try:
+        with pytest.raises(MissingAssetError, match="sfx.fixture: unsafe path"):
+            AssetCatalog.load(tmp_path, manifest)
+        assert outside.read_bytes() == _wav_bytes()
+    finally:
+        outside.unlink()
 
 
 def test_developer_placeholders_are_explicit_and_cannot_make_release_pass(tmp_path: Path) -> None:

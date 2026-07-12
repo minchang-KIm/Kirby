@@ -94,6 +94,9 @@ class AudioService(Protocol):
     def set_bus_volume(self, bus: AudioBus, value: float) -> None:
         raise NotImplementedError
 
+    def set_muted(self, muted: bool) -> None:
+        raise NotImplementedError
+
 
 class DisplayService(Protocol):
     @property

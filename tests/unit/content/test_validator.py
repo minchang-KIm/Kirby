@@ -515,3 +515,29 @@ def test_validator_rejects_substituted_art_ids_even_when_category_counts_match(t
         ("missing_asset_id", "assets.art.ui.favicon"),
         ("unexpected_asset_id", "assets.art.ui.surprise"),
     ]
+
+
+def test_validator_rejects_audio_aliases_wrong_buses_and_nonmandatory_cues_at_the_exact_count(
+    tmp_path: Path,
+) -> None:
+    content, asset_root = write_release_bundle(tmp_path)
+    bundle = load_catalog_bundle(content)
+    locales = load_locales(content)
+    loaded = load_asset_manifest(content / "assets.json")
+    audio = dict(loaded.audio)
+    audio["music.alias"] = audio.pop("music.title")
+    audio["sfx.damage"] = replace(audio["sfx.damage"], bus="music", mandatory=False)
+
+    report = validate_bundle(bundle, replace(loaded, audio=audio), locales, asset_root=asset_root)
+
+    assert report.counts["music"] == 29
+    assert report.counts["sfx"] == 28
+    assert _selected(
+        ("missing_audio_cue", "unexpected_audio_cue", "audio_bus_mismatch", "audio_not_mandatory"),
+        report,
+    ) == [
+        ("unexpected_audio_cue", "assets.audio.music.alias"),
+        ("missing_audio_cue", "assets.audio.music.title"),
+        ("audio_bus_mismatch", "assets.audio.sfx.damage.bus"),
+        ("audio_not_mandatory", "assets.audio.sfx.damage.mandatory"),
+    ]

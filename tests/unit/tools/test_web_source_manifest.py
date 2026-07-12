@@ -30,6 +30,7 @@ def _committed_runtime(tmp_path: Path) -> Path:
     (root / "windsprig").mkdir()
     (root / "levels").mkdir()
     (root / "assets" / "generated" / "ui").mkdir(parents=True)
+    (root / "assets" / "generated" / "audio" / "music").mkdir(parents=True)
     (root / "assets" / "fonts").mkdir()
     (root / "web" / "main.py").write_text("print('web')\n", encoding="utf-8")
     (root / "web" / "template.tmpl").write_text("<html></html>\n", encoding="utf-8")
@@ -38,6 +39,7 @@ def _committed_runtime(tmp_path: Path) -> Path:
     (root / "windsprig" / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
     (root / "levels" / "stage.json").write_text("{}\n", encoding="utf-8")
     (root / "assets" / "generated" / "ui" / "icons.png").write_bytes(b"png")
+    (root / "assets" / "generated" / "audio" / "music" / "title.wav").write_bytes(b"wav")
     (root / "assets" / "fonts" / "font.ttf").write_bytes(b"font")
     (root / "assets" / "LICENSES.md").write_text("# Licenses\n", encoding="utf-8")
     (root / "tools").mkdir()
@@ -81,6 +83,7 @@ def test_runtime_manifest_is_stable_and_bound_to_clean_head(tmp_path: Path) -> N
     assert first.files == (
         "assets/LICENSES.md",
         "assets/fonts/font.ttf",
+        "assets/generated/audio/music/title.wav",
         "assets/generated/ui/icons.png",
         "levels/stage.json",
         "web/favicon.png",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 from pathlib import Path
 
@@ -214,6 +215,60 @@ def test_audio_can_require_a_user_gesture_before_initialization() -> None:
         error_code="gesture_required",
     )
     assert pygame.mixer.get_init() is None
+
+
+@pytest.mark.parametrize("value", [True, float("nan"), float("inf"), -0.01, 1.01, "0.5"])
+def test_audio_bus_volume_rejects_invalid_values_without_changing_the_previous_volume(value: object) -> None:
+    pygame.mixer.quit()
+    try:
+        pygame.mixer.init()
+        sound = pygame.mixer.Sound(buffer=b"\x00" * 256)
+        audio = PygameAudioService(requires_gesture=False, sounds={"known": sound})
+        assert asyncio.run(audio.initialize()).ready
+        audio.set_bus_volume("sfx", 0.25)
+
+        with pytest.raises((TypeError, ValueError)):
+            audio.set_bus_volume("sfx", value)  # type: ignore[arg-type]
+
+        assert audio.play_cue("known")
+        assert sound.get_volume() == pytest.approx(0.25, abs=0.01)
+        assert math.isfinite(sound.get_volume())
+    finally:
+        pygame.mixer.quit()
+
+
+def test_audio_service_rejects_unknown_buses_before_playback_or_volume_mutation() -> None:
+    audio = PygameAudioService(requires_gesture=False)
+
+    with pytest.raises(ValueError, match="audio bus"):
+        audio.set_bus_volume("voice", 0.5)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="audio bus"):
+        audio.play_cue("known", "voice")  # type: ignore[arg-type]
+
+
+def test_user_mute_and_focus_pause_are_visible_and_restore_the_previous_mute_state() -> None:
+    pygame.mixer.quit()
+    try:
+        pygame.mixer.init()
+        sound = pygame.mixer.Sound(buffer=b"\x00" * 256)
+        audio = PygameAudioService(requires_gesture=False, sounds={"known": sound})
+        assert asyncio.run(audio.initialize()) == AudioStatus(ready=True, muted=False)
+
+        audio.set_muted(True)
+        assert audio.status == AudioStatus(ready=True, muted=True)
+        assert audio.play_cue("known") is False
+        audio.pause()
+        assert audio.status == AudioStatus(ready=True, muted=True, error_code="focus_lost")
+        audio.resume()
+        assert audio.status == AudioStatus(ready=True, muted=True)
+
+        audio.set_muted(False)
+        assert audio.status == AudioStatus(ready=True, muted=False)
+        assert audio.play_cue("known") is True
+        with pytest.raises(TypeError, match="muted must be a boolean"):
+            audio.set_muted(1)  # type: ignore[arg-type]
+    finally:
+        pygame.mixer.quit()
 
 
 def test_display_presents_a_letterboxed_logical_canvas() -> None:
