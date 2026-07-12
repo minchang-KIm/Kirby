@@ -78,6 +78,11 @@ from windsprig.gameplay.systems import (
     PickupSystem,
     StageGoalSystem,
 )
+from windsprig.gameplay.validation import (
+    validate_attack_requests,
+    validate_damage_queue,
+    validate_pending_enemy_launches,
+)
 from windsprig.input.commands import InputFrame
 from windsprig.input.roster import ActivePlayer
 
@@ -171,6 +176,8 @@ class StageRuntime:
         if self._result is not None:
             return StageFrame(self._last_simulation, self.snapshot(), (), self._result)
 
+        # Validate mutable queues before input, timers, RNG, ECS, events, or frame state can change.
+        self._validate_gameplay_resources(self.world)
         self._step_events.clear()
         # Events already waiting in the bus belong to this step's queued frame.
         self._step_events.extend(self.world.events.peek())
@@ -410,19 +417,9 @@ class StageRuntime:
             not isinstance(ability_id, str) for ability_id in discovered
         ):
             raise TypeError("discovered_ability_ids must be a collection of strings")
-        raw_damage_queue = world.resources.get("damage_queue")
-        if not isinstance(raw_damage_queue, list) or any(type(item) is not DamageRecord for item in raw_damage_queue):
-            raise TypeError("damage_queue must be a list of DamageRecord values")
-        raw_attack_requests = world.resources.get("attack_requests")
-        if not isinstance(raw_attack_requests, list) or any(
-            type(request) is not AttackRequest for request in raw_attack_requests
-        ):
-            raise TypeError("attack_requests must be a list of AttackRequest values")
-        raw_pending_launches = world.resources.get("pending_enemy_launches")
-        if not isinstance(raw_pending_launches, list) or any(
-            type(launch) is not PendingEnemyLaunch for launch in raw_pending_launches
-        ):
-            raise TypeError("pending_enemy_launches must be a list of PendingEnemyLaunch values")
+        damage_queue = validate_damage_queue(world.resources.get("damage_queue"))
+        attack_requests = validate_attack_requests(world.resources.get("attack_requests"))
+        pending_launches = validate_pending_enemy_launches(world.resources.get("pending_enemy_launches"))
         raw_boss_commands = world.resources.get("boss_commands")
         if not isinstance(raw_boss_commands, tuple) or any(
             type(command) is not BossCommand for command in raw_boss_commands
@@ -438,9 +435,9 @@ class StageRuntime:
             run_energy_spheres=run_motes,
             collected_mote_ids=tuple(sorted(set(collected))),
             discovered_ability_ids=tuple(sorted(set(discovered))),
-            damage_queue=tuple(raw_damage_queue),
-            attack_requests=tuple(raw_attack_requests),
-            pending_enemy_launches=tuple(raw_pending_launches),
+            damage_queue=damage_queue,
+            attack_requests=attack_requests,
+            pending_enemy_launches=pending_launches,
             boss_commands=boss_commands,
         )
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, astuple
 
 import pytest
 
@@ -787,6 +787,182 @@ def test_damage_and_pending_launch_resources_are_strictly_validated_and_hashed()
             runtime.snapshot()
         with pytest.raises(TypeError, match=message):
             runtime.world.world_hash()
+
+
+@pytest.mark.parametrize(
+    ("case", "error", "match"),
+    (
+        ("attack_type", TypeError, "attack_requests"),
+        ("attack_fields", ValueError, "AttackRequest.width"),
+        ("damage_type", TypeError, "damage_queue"),
+        ("damage_fields", ValueError, "DamageRecord.amount"),
+        ("launch_type", TypeError, "pending_enemy_launches"),
+        ("launch_fields", ValueError, "PendingEnemyLaunch.enemy_id"),
+    ),
+)
+def test_step_rejects_invalid_queued_items_atomically_before_any_mutation(
+    case: str,
+    error: type[Exception],
+    match: str,
+) -> None:
+    runtime = make_runtime()
+    player = runtime.player_entities[1]
+    resource_name: str
+    invalid: object
+
+    if case.startswith("attack"):
+        resource_name = "attack_requests"
+        valid_attack = _request(player)
+        if case.endswith("type"):
+
+            class DerivedAttackRequest(AttackRequest):
+                pass
+
+            invalid = DerivedAttackRequest(*astuple(valid_attack))
+        else:
+            invalid = valid_attack
+            object.__setattr__(invalid, "width", 0)
+    elif case.startswith("damage"):
+        resource_name = "damage_queue"
+        valid_damage = DamageRecord(0, player, 1, 0.0, 0.0, False)
+        if case.endswith("type"):
+
+            class DerivedDamageRecord(DamageRecord):
+                pass
+
+            invalid = DerivedDamageRecord(*astuple(valid_damage))
+        else:
+            invalid = valid_damage
+            object.__setattr__(invalid, "amount", 0)
+    else:
+        resource_name = "pending_enemy_launches"
+        runtime.world.resources["attack_requests"] = [
+            _request(
+                player,
+                ability_id="none",
+                attack_kind="launched_enemy",
+            )
+        ]
+        valid_launch = PendingEnemyLaunch(player, 99)
+        if case.endswith("type"):
+
+            class DerivedPendingEnemyLaunch(PendingEnemyLaunch):
+                pass
+
+            invalid = DerivedPendingEnemyLaunch(*astuple(valid_launch))
+        else:
+            invalid = valid_launch
+            object.__setattr__(invalid, "enemy_id", 0)
+
+    baseline_snapshot = runtime.snapshot()
+    baseline_hash = runtime.world.world_hash()
+    baseline_rng = runtime.world.rng.state_hash()
+    baseline_alive = set(runtime.world.alive_entities)
+    baseline_events = runtime.world.events.peek()
+    baseline_input = runtime.world.frame_input
+    queued = [invalid]
+    runtime.world.resources[resource_name] = queued
+
+    with pytest.raises(error, match=match):
+        runtime.step(InputFrame.empty())
+
+    assert runtime.world.resources[resource_name] is queued
+    assert runtime.world.frame_index == 0
+    assert runtime.world.rng.state_hash() == baseline_rng
+    assert runtime.world.alive_entities == baseline_alive
+    assert runtime.world.events.peek() == baseline_events
+    assert runtime.world.frame_input is baseline_input
+
+    runtime.world.resources[resource_name] = []
+    assert runtime.snapshot() == baseline_snapshot
+    assert runtime.world.world_hash() == baseline_hash
+
+
+@pytest.mark.parametrize(
+    ("kind", "field_name", "invalid_value", "error"),
+    (
+        ("attack", "owner_entity_id", True, TypeError),
+        ("attack", "owner_entity_id", 0, ValueError),
+        ("attack", "team", 7, TypeError),
+        ("attack", "team", "neutral", ValueError),
+        ("attack", "ability_id", 7, TypeError),
+        ("attack", "ability_id", "", ValueError),
+        ("attack", "attack_kind", 7, TypeError),
+        ("attack", "attack_kind", "", ValueError),
+        ("attack", "visual_id", 7, TypeError),
+        ("attack", "visual_id", "", ValueError),
+        ("attack", "x", True, TypeError),
+        ("attack", "x", float("inf"), ValueError),
+        ("attack", "y", "0", TypeError),
+        ("attack", "y", float("nan"), ValueError),
+        ("attack", "width", True, TypeError),
+        ("attack", "width", 0, ValueError),
+        ("attack", "height", 1.5, TypeError),
+        ("attack", "height", 0, ValueError),
+        ("attack", "vx", False, TypeError),
+        ("attack", "vx", float("inf"), ValueError),
+        ("attack", "vy", "0", TypeError),
+        ("attack", "vy", float("nan"), ValueError),
+        ("attack", "damage", True, TypeError),
+        ("attack", "damage", 0, ValueError),
+        ("attack", "knockback_x", False, TypeError),
+        ("attack", "knockback_x", float("inf"), ValueError),
+        ("attack", "knockback_y", "0", TypeError),
+        ("attack", "knockback_y", float("nan"), ValueError),
+        ("attack", "ttl_ms", True, TypeError),
+        ("attack", "ttl_ms", 0, ValueError),
+        ("attack", "pierce", True, TypeError),
+        ("attack", "pierce", -1, ValueError),
+        ("attack", "cuts_projectiles", 1, TypeError),
+        ("attack", "guard_break", 0, TypeError),
+        ("attack", "pull_strength", True, TypeError),
+        ("attack", "pull_strength", -1.0, ValueError),
+        ("attack", "interaction_kind", 1, TypeError),
+        ("attack", "interaction_kind", "", ValueError),
+        ("damage", "source_id", True, TypeError),
+        ("damage", "source_id", -1, ValueError),
+        ("damage", "target_id", False, TypeError),
+        ("damage", "target_id", 0, ValueError),
+        ("damage", "amount", True, TypeError),
+        ("damage", "amount", 0, ValueError),
+        ("damage", "knockback_x", False, TypeError),
+        ("damage", "knockback_x", float("inf"), ValueError),
+        ("damage", "knockback_y", "0", TypeError),
+        ("damage", "knockback_y", float("nan"), ValueError),
+        ("damage", "guard_break", 0, TypeError),
+        ("damage", "attack_id", True, TypeError),
+        ("damage", "attack_id", 0, ValueError),
+        ("launch", "player_id", True, TypeError),
+        ("launch", "player_id", 0, ValueError),
+        ("launch", "enemy_id", False, TypeError),
+        ("launch", "enemy_id", 0, ValueError),
+    ),
+)
+def test_every_queue_item_field_invariant_is_strictly_validated(
+    kind: str,
+    field_name: str,
+    invalid_value: object,
+    error: type[Exception],
+) -> None:
+    runtime = make_runtime()
+    player = runtime.player_entities[1]
+    if kind == "attack":
+        item: object = _request(player)
+        resource_name = "attack_requests"
+        type_name = "AttackRequest"
+    elif kind == "damage":
+        item = DamageRecord(0, player, 1, 0.0, 0.0, False)
+        resource_name = "damage_queue"
+        type_name = "DamageRecord"
+    else:
+        item = PendingEnemyLaunch(player, 99)
+        resource_name = "pending_enemy_launches"
+        type_name = "PendingEnemyLaunch"
+    object.__setattr__(item, field_name, invalid_value)
+    runtime.world.resources[resource_name] = [item]
+
+    with pytest.raises(error, match=rf"{type_name}\.{field_name}"):
+        runtime.snapshot()
 
 
 def test_attack_ids_views_events_and_hashes_match_fresh_and_reset_runs() -> None:

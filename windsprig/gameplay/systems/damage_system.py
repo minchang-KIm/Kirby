@@ -21,6 +21,7 @@ from windsprig.gameplay.components import (
 )
 from windsprig.gameplay.events import GameplayTopic, publish
 from windsprig.gameplay.state_machine import transition
+from windsprig.gameplay.validation import validate_damage_queue
 
 
 class DamageSystem:
@@ -28,13 +29,12 @@ class DamageSystem:
 
     def update(self, world: World, dt_ms: int) -> None:
         config = cast(GameConfig, world.resources["config"])
+        raw_queue = world.resources.get("damage_queue")
+        validate_damage_queue(raw_queue)
+        queue = cast(list[DamageRecord], raw_queue)
+
         for _, health in world.query(Health):
             health.invulnerable_ms = max(0, health.invulnerable_ms - dt_ms)
-
-        queue = cast(
-            list[DamageRecord],
-            world.resources.setdefault("damage_queue", []),
-        )
         while queue:
             item = queue.pop(0)
             target_id = item.target_id

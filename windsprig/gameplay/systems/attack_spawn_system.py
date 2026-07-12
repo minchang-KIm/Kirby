@@ -20,6 +20,10 @@ from windsprig.gameplay.components import (
     Velocity,
 )
 from windsprig.gameplay.events import GameplayTopic, publish
+from windsprig.gameplay.validation import (
+    validate_attack_requests,
+    validate_pending_enemy_launches,
+)
 
 
 class AttackSpawnSystem:
@@ -27,15 +31,19 @@ class AttackSpawnSystem:
 
     def update(self, world: World, dt_ms: int) -> None:
         _ = dt_ms
-        requests = cast(list[AttackRequest], world.resources.setdefault("attack_requests", []))
+        raw_requests = world.resources.get("attack_requests")
+        raw_pending_launches = world.resources.get("pending_enemy_launches")
+        queued_requests = validate_attack_requests(raw_requests)
+        validate_pending_enemy_launches(raw_pending_launches)
+        requests = cast(list[AttackRequest], raw_requests)
         pending_launches = cast(
             list[PendingEnemyLaunch],
-            world.resources.setdefault("pending_enemy_launches", []),
+            raw_pending_launches,
         )
         boss_requests, retained = _boss_requests(world)
         world.resources["boss_commands"] = retained
 
-        queued = tuple(requests) + boss_requests
+        queued = queued_requests + boss_requests
         requests.clear()
         for request in queued:
             attack_id = _spawn(world, request)
