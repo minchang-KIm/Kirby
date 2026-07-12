@@ -181,9 +181,19 @@ def test_foundation_completion_projects_the_canonical_result_without_count_synth
     )
     screen, save_service = _foundation_screen(bundle, save_data)
     frame_index = 625
+    expected_result = StageResult(
+        stage_id=stage.stage_id,
+        world_id=stage.world_id,
+        node_id=stage.node_id,
+        clear_time_ms=frame_index * screen.config.fixed_dt_ms,
+        collected_mote_ids=(exact_mote_id,),
+        discovered_ability_ids=("galehook",),
+        active_slots=(1,),
+        deaths_by_slot=((1, 2),),
+    )
     screen.runtime = SimpleNamespace(
         stage=stage,
-        result=None,
+        result=expected_result,
         player_entities={1: 1001},
         world=SimpleNamespace(
             frame_index=frame_index,
@@ -195,16 +205,6 @@ def test_foundation_completion_projects_the_canonical_result_without_count_synth
             },
         ),
         snapshot=lambda: SimpleNamespace(outcome=StageOutcome.COMPLETED),
-    )
-    expected_result = StageResult(
-        stage_id=stage.stage_id,
-        world_id=stage.world_id,
-        node_id=stage.node_id,
-        clear_time_ms=frame_index * screen.config.fixed_dt_ms,
-        collected_mote_ids=(exact_mote_id,),
-        discovered_ability_ids=("galehook",),
-        active_slots=(1,),
-        deaths_by_slot=((1, 2),),
     )
     expected_profile, _ = apply_stage_result(profile, expected_result, bundle)
 

@@ -21,7 +21,7 @@ from windsprig.gameplay.components import (
 )
 from windsprig.gameplay.events import GameplayTopic, publish
 from windsprig.gameplay.state_machine import transition
-from windsprig.gameplay.validation import validate_damage_queue
+from windsprig.gameplay.validation import validate_damage_queue, validate_deaths_by_slot
 
 
 class DamageSystem:
@@ -32,6 +32,11 @@ class DamageSystem:
         raw_queue = world.resources.get("damage_queue")
         validate_damage_queue(raw_queue)
         queue = cast(list[DamageRecord], raw_queue)
+        raw_deaths = world.resources.get("deaths_by_slot")
+        death_counters: dict[int, int] | None = None
+        if raw_deaths is not None:
+            validate_deaths_by_slot(raw_deaths)
+            death_counters = cast(dict[int, int], raw_deaths)
 
         for _, health in world.query(Health):
             health.invulnerable_ms = max(0, health.invulnerable_ms - dt_ms)
@@ -98,6 +103,10 @@ class DamageSystem:
                     state.name = transition(state.name, "Dead")
                     state.timer_ms = 0
                 if slot is not None:
+                    if death_counters is not None:
+                        if slot.slot not in death_counters:
+                            raise ValueError("player death counter is missing its active slot")
+                        death_counters[slot.slot] += 1
                     respawn = world.try_component(target_id, Respawn)
                     if respawn is not None:
                         respawn.timer_ms = config.respawn_delay_ms

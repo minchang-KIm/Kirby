@@ -5,6 +5,7 @@ from .attack_motion_system import AttackMotionSystem
 from .attack_spawn_system import AttackSpawnSystem
 from .camera_system import CameraSystem
 from .capture_system import CaptureSystem
+from .checkpoint_system import CheckpointSystem
 from .collision_system import CollisionSystem
 from .combat_system import CombatSystem
 from .coop_respawn_system import CoopRespawnSystem
@@ -23,6 +24,7 @@ __all__ = [
     "AttackSpawnSystem",
     "CameraSystem",
     "CaptureSystem",
+    "CheckpointSystem",
     "CollisionSystem",
     "CombatSystem",
     "CoopRespawnSystem",

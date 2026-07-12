@@ -36,7 +36,6 @@ from windsprig.gameplay.session import (
     SessionSnapshot,
 )
 from windsprig.gameplay.snapshot import StageOutcome
-from windsprig.gameplay.systems.stage_goal_system import PROVISIONAL_STAGE_CLEARED_TOPIC
 from windsprig.input.commands import InputFrame, MoveCommand
 
 EXPECTED_TRANSITIONS = {
@@ -159,7 +158,11 @@ def test_allowed_actions_are_ordered_by_phase_and_checkpoint_capability() -> Non
             SessionAction.RETURN_TO_MAP,
         ),
         SessionPhase.VICTORY: (SessionAction.SHOW_RESULTS,),
-        SessionPhase.DEFEAT: (SessionAction.RETRY_STAGE, SessionAction.RETURN_TO_MAP),
+        SessionPhase.DEFEAT: (
+            SessionAction.RETRY_CHECKPOINT,
+            SessionAction.RETRY_STAGE,
+            SessionAction.RETURN_TO_MAP,
+        ),
         SessionPhase.RESULTS: (
             SessionAction.NEXT_STAGE,
             SessionAction.REPLAY_STAGE,
@@ -214,12 +217,6 @@ def test_each_transition_pair_is_explicit(
     navigation: SessionNavigation | None,
 ) -> None:
     session = _session_for_phase(source)
-    if action is SessionAction.RETRY_CHECKPOINT:
-        with pytest.raises(ValueError, match="checkpoint"):
-            session.dispatch(action)
-        assert session.phase is source
-        return
-
     snapshot = session.dispatch(action)
 
     assert snapshot.phase is target
@@ -383,7 +380,7 @@ def test_completed_step_enters_victory_and_retains_semantic_events() -> None:
     assert snapshot.phase is SessionPhase.VICTORY
     assert snapshot.stage.outcome is StageOutcome.COMPLETED
     assert session.last_frame is not None
-    assert [event.topic for event in session.last_frame.events] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
+    assert [event.topic for event in session.last_frame.events] == ["StageCompleted"]
     retained_event = session.last_frame.events[0]
     with pytest.raises(TypeError):
         retained_event.payload["stage_id"] = "mutated"  # type: ignore[index]
@@ -445,8 +442,9 @@ def test_navigation_is_frozen_when_the_session_closes(
 
 def test_unavailable_checkpoint_retry_is_atomic_and_explicit() -> None:
     session = _session_for_phase(SessionPhase.DEFEAT)
-    assert session.runtime.can_retry_checkpoint is False
     player = session.runtime.player_entities[1]
+    session.runtime.world.get_component(player, PlayerSlot).lives = 0
+    assert session.runtime.can_retry_checkpoint is False
     defense = session.runtime.world.get_component(player, DefenseState)
     defense.guarding = True
     defense.dodge_cooldown_ms = 320
@@ -526,9 +524,12 @@ def test_runtime_reset_matches_fresh_world_and_preserves_subscribers_once() -> N
     _, _, goal_transform = runtime.world.query(StageGoal, Transform)[0]
     player_transform.x = goal_transform.x
     player_transform.y = goal_transform.y
+    teammate_transform = runtime.world.get_component(runtime.player_entities[3], Transform)
+    teammate_transform.x = goal_transform.x
+    teammate_transform.y = goal_transform.y
     frame = runtime.step(InputFrame.empty())
-    assert [event.topic for event in observed] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
-    assert [event.topic for event in frame.events] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
+    assert [event.topic for event in observed] == ["StageCompleted"]
+    assert [event.topic for event in frame.events] == ["StageCompleted"]
     assert frame.simulation.event_count == 1
 
 
@@ -563,7 +564,7 @@ def test_gameplay_resources_are_hashed_but_presentation_resources_are_not() -> N
     runtime.world.resources["camera_target"] = (999.0, -999.0)
     assert runtime.world.snapshot().world_state_hash == baseline
 
-    runtime.world.resources["stage_outcome"] = StageOutcome.COMPLETED
+    runtime.world.resources["stage_outcome"] = StageOutcome.FAILED
     assert runtime.world.snapshot().world_state_hash != baseline
     runtime.world.resources["stage_outcome"] = StageOutcome.RUNNING
     assert runtime.world.snapshot().world_state_hash == baseline
@@ -604,7 +605,8 @@ def test_stage_retry_and_replay_reset_before_returning_to_play(source: SessionPh
         enter_victory(session)
         session.dispatch(SessionAction.SHOW_RESULTS)
         action = SessionAction.REPLAY_STAGE
-    session.runtime.world.resources["run_energy_spheres"] = 2
+    if source is SessionPhase.PAUSED:
+        session.runtime.world.resources["run_energy_spheres"] = 2
     previous_frame = session.last_frame
 
     snapshot = session.dispatch(action)

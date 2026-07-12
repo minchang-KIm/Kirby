@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.helpers.gameplay import make_active_player
 from windsprig.config import GameConfig
 from windsprig.content.loader import StageSpec
 from windsprig.core.ecs import World
@@ -29,6 +30,7 @@ from windsprig.gameplay.components import (
     Transform,
     Velocity,
 )
+from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.gameplay.systems import (
     AbilitySystem,
     CollisionSystem,
@@ -252,8 +254,27 @@ def test_hazard_uses_an_explicit_non_entity_unblockable_damage_source() -> None:
 def test_coop_respawn_uses_an_alive_anchor_and_respects_timer_and_lives() -> None:
     world = World()
     world.resources["stage_spec"] = stage_spec()
-    add_entity(world, PlayerSlot(1), Transform(100, 80), Health(5, 5))
-    fallen = add_entity(world, PlayerSlot(4), Transform(0, 0), Health(0, 10, dead=True))
+    world.resources["config"] = GameConfig()
+    world.resources["stage_outcome"] = StageOutcome.RUNNING
+    world.resources["stage_result"] = None
+    world.resources["damage_queue"] = []
+    world.resources["active_checkpoint_id"] = "test.checkpoint"
+    world.resources["active_players"] = (
+        make_active_player(1, leader=True),
+        make_active_player(2),
+        make_active_player(3),
+        make_active_player(4),
+    )
+    add_entity(
+        world,
+        PlayerSlot(1),
+        Respawn(100, 80),
+        Transform(100, 80),
+        Velocity(),
+        Collider(20, 20),
+        Health(5, 5),
+        ActorState(),
+    )
     ready = add_entity(
         world,
         PlayerSlot(2, lives=2),
@@ -284,8 +305,6 @@ def test_coop_respawn_uses_an_alive_anchor_and_respects_timer_and_lives() -> Non
         Health(0, 10, dead=True),
         ActorState("Dead"),
     )
-    world.get_component(fallen, Transform).y = 500
-
     CoopRespawnSystem().update(world, 16)
 
     ready_slot = world.get_component(ready, PlayerSlot)
@@ -300,22 +319,26 @@ def test_coop_respawn_uses_an_alive_anchor_and_respects_timer_and_lives() -> Non
     assert world.get_component(waiting, Respawn).timer_ms == 84
     assert world.get_component(waiting, Health).dead is True
     assert world.get_component(exhausted, Health).dead is True
-    assert world.resources["damage_queue"] == [
-        DamageRecord(
-            source_id=NON_ENTITY_DAMAGE_SOURCE_ID,
-            target_id=fallen,
-            amount=10,
-            knockback_x=0.0,
-            knockback_y=-220.0,
-            guard_break=True,
-        )
-    ]
-    assert world.events.peek()[0].payload == {"slot": 2, "entity_id": ready}
+    assert world.resources["damage_queue"] == []
+    assert world.events.peek()[0].topic == "PlayerRespawned"
+    assert world.events.peek()[0].payload == {
+        "frame_index": 0,
+        "slot": 2,
+        "entity_id": ready,
+        "checkpoint_id": "test.checkpoint",
+        "cost": 1,
+    }
 
 
-def test_coop_respawn_uses_the_checkpoint_when_no_player_is_alive() -> None:
+def test_coop_respawn_freezes_failure_when_no_player_is_alive() -> None:
     world = World()
     world.resources["stage_spec"] = stage_spec()
+    world.resources["config"] = GameConfig()
+    world.resources["stage_outcome"] = StageOutcome.RUNNING
+    world.resources["stage_result"] = None
+    world.resources["damage_queue"] = []
+    world.resources["active_checkpoint_id"] = "test.checkpoint"
+    world.resources["active_players"] = (make_active_player(1, leader=True),)
     player = add_entity(
         world,
         PlayerSlot(1, lives=1),
@@ -330,7 +353,9 @@ def test_coop_respawn_uses_the_checkpoint_when_no_player_is_alive() -> None:
     CoopRespawnSystem().update(world, 16)
 
     transform = world.get_component(player, Transform)
-    assert (transform.x, transform.y) == (45, 55)
+    assert (transform.x, transform.y) == (0, 0)
+    assert world.resources["stage_outcome"] is StageOutcome.FAILED
+    assert world.events.peek()[0].topic == "StageFailed"
 
 
 def test_damage_system_ignores_invalid_hits_and_applies_hurt_death_and_respawn_state() -> None:

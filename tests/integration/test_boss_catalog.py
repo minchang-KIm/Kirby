@@ -25,7 +25,6 @@ from windsprig.gameplay.components import (
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.gameplay.session import GameSession, SessionAction, SessionPhase
 from windsprig.gameplay.snapshot import StageOutcome
-from windsprig.gameplay.systems.stage_goal_system import PROVISIONAL_STAGE_CLEARED_TOPIC
 from windsprig.input.commands import InputFrame
 
 CONTENT_DIR = Path("windsprig/content")
@@ -263,7 +262,7 @@ def test_undefeated_boss_gates_goal_and_defeat_releases_it_in_the_same_frame() -
     gated = runtime.step(InputFrame.empty())
 
     assert gated.view.outcome is StageOutcome.RUNNING
-    assert PROVISIONAL_STAGE_CLEARED_TOPIC not in [event.topic for event in gated.events]
+    assert "StageCompleted" not in [event.topic for event in gated.events]
 
     _, boss_state, boss_health = runtime.world.query(BossState, Health)[0]
     boss_health.current = 0
@@ -273,7 +272,7 @@ def test_undefeated_boss_gates_goal_and_defeat_releases_it_in_the_same_frame() -
     assert boss_state.defeated is False
     assert [event.topic for event in released.events] == [
         "BossDefeated",
-        PROVISIONAL_STAGE_CLEARED_TOPIC,
+        "StageCompleted",
     ]
     assert released.view.bosses[0].hp == 0
     assert released.view.bosses[0].telegraph_id is None

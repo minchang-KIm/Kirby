@@ -10,7 +10,7 @@ from windsprig.content import load_campaign_catalog
 from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.abilities import create_default_registry
 from windsprig.gameplay.components import Transform
-from windsprig.gameplay.snapshot import StageOutcome
+from windsprig.gameplay.snapshot import StageOutcome, StageResult
 from windsprig.input.commands import (
     AbilityUseCommand,
     CancelCommand,
@@ -99,11 +99,22 @@ def stage_view(outcome: StageOutcome) -> SimpleNamespace:
 
 
 def completed_runtime(stage: object, *, frame_index: int = 10) -> SimpleNamespace:
-    """Return exact pre-Task-9 completion facts without count-to-ID synthesis."""
+    """Return one gameplay-owned immutable result at a completed outcome."""
+
+    result = StageResult(
+        stage_id=stage.stage_id,
+        world_id=stage.world_id,
+        node_id=stage.node_id,
+        clear_time_ms=frame_index * 16,
+        collected_mote_ids=(),
+        discovered_ability_ids=(),
+        active_slots=(1,),
+        deaths_by_slot=((1, 0),),
+    )
 
     return SimpleNamespace(
         stage=stage,
-        result=None,
+        result=result,
         player_entities={1: 1001},
         world=SimpleNamespace(
             resources={
@@ -390,9 +401,7 @@ def test_buffered_keyboard_ability_then_genuine_cancel_still_pauses() -> None:
     screen.runtime = runtime
     screen.screen_id = "playing"
     queue = InputQueue()
-    queue.push(
-        InputFrame(commands_by_slot={1: [AbilityUseCommand(player_slot=1, pressed=True)]})
-    )
+    queue.push(InputFrame(commands_by_slot={1: [AbilityUseCommand(player_slot=1, pressed=True)]}))
     queue.push(InputFrame(commands_by_slot={1: [CancelCommand(player_slot=1)]}))
 
     transition = screen.fixed_update(screen.config.fixed_dt_ms, queue.consume_step())

@@ -19,7 +19,7 @@ from windsprig.feasibility import FoundationProbe
 from windsprig.gameplay.abilities import AbilityRegistry, create_default_registry
 from windsprig.gameplay.components import Collectible, Collider, EnemyAI, Health, StageGoal, Team, Transform
 from windsprig.gameplay.runtime import StageRuntime
-from windsprig.gameplay.snapshot import StageOutcome, StageResult
+from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.input.commands import (
     CancelCommand,
     ConfirmCommand,
@@ -78,9 +78,7 @@ class FoundationScreen(Screen):
         self.ability_registry = ability_registry
         self.migration_catalog = migration_catalog
         self.probe = probe
-        self.progression_catalog = progression_catalog or load_catalog_bundle(
-            config.content_dir
-        )
+        self.progression_catalog = progression_catalog or load_catalog_bundle(config.content_dir)
         if self.progression_catalog.campaign != catalog:
             raise ValueError("progression catalog campaign must match screen catalog")
         self.unlock_rules = UnlockRules(catalog)
@@ -353,7 +351,9 @@ class FoundationScreen(Screen):
         stage = runtime.stage
         self.probe.mark("stage_id", stage.stage_id)
         self.probe.mark("stage", "completed")
-        result = self._stage_result_for_progression(runtime)
+        result = runtime.result
+        if result is None:
+            raise RuntimeError("completed gameplay must provide its frozen StageResult")
         if result.stage_id != stage.stage_id:
             raise ValueError("runtime result stage must match the active stage")
         profile, _ = apply_stage_result(
@@ -371,54 +371,6 @@ class FoundationScreen(Screen):
         if save_result is not None and save_result.ok:
             self.probe.mark("save", "written")
         return True
-
-    def _stage_result_for_progression(self, runtime: StageRuntime) -> StageResult:
-        """Adapt the pre-Task-9 runtime without inventing collectible identities."""
-
-        runtime_result = runtime.result
-        if runtime_result is not None:
-            return runtime_result
-        resources = runtime.world.resources
-        active_slots = tuple(sorted(runtime.player_entities))
-        if not active_slots:
-            active_slots = tuple(player.slot for player in self.roster.players)
-        raw_deaths = resources.get("deaths_by_slot")
-        if raw_deaths is None:
-            deaths_by_slot = tuple((slot, 0) for slot in active_slots)
-        else:
-            if not isinstance(raw_deaths, Mapping):
-                raise ValueError("deaths_by_slot must be a mapping")
-            deaths: list[tuple[int, int]] = []
-            for slot, count in raw_deaths.items():
-                if type(slot) is not int or type(count) is not int:
-                    raise ValueError("deaths_by_slot must map integer slots to integer counts")
-                deaths.append((slot, count))
-            deaths_by_slot = tuple(sorted(deaths))
-        return StageResult(
-            stage_id=runtime.stage.stage_id,
-            world_id=runtime.stage.world_id,
-            node_id=runtime.stage.node_id,
-            clear_time_ms=runtime.world.frame_index * self.config.fixed_dt_ms,
-            collected_mote_ids=self._result_ids(resources, "collected_mote_ids"),
-            discovered_ability_ids=self._result_ids(
-                resources,
-                "discovered_ability_ids",
-            ),
-            active_slots=active_slots,
-            deaths_by_slot=deaths_by_slot,
-        )
-
-    @staticmethod
-    def _result_ids(resources: Mapping[str, object], name: str) -> tuple[str, ...]:
-        raw_ids = resources.get(name, ())
-        if isinstance(raw_ids, (str, bytes)) or not isinstance(
-            raw_ids,
-            (tuple, list, set, frozenset),
-        ):
-            raise ValueError(f"{name} must be a collection of IDs")
-        if any(not isinstance(item, str) for item in raw_ids):
-            raise ValueError(f"{name} must contain only string IDs")
-        return tuple(sorted(raw_ids))
 
     def _flush_save(self, *, automatic: bool = False) -> SaveWriteResult | None:
         profile = replace(

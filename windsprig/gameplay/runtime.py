@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import astuple, dataclass, replace
+from typing import cast
 
 from windsprig.config import GameConfig
 from windsprig.content.loader import BossSpec, StageSpec, load_boss_catalog
@@ -25,7 +26,9 @@ from windsprig.gameplay.components import (
     CameraFocus,
     CapturedBy,
     CaptureState,
+    Checkpoint,
     Collider,
+    ControlIntent,
     DamageRecord,
     DefenseState,
     EchoPickup,
@@ -38,12 +41,13 @@ from windsprig.gameplay.components import (
     PendingEnemyLaunch,
     PlayerSlot,
     Projectile,
+    Respawn,
     StageGoal,
     Team,
     Transform,
     Velocity,
 )
-from windsprig.gameplay.events import GameplayTopic, make_event
+from windsprig.gameplay.events import GameplayTopic, make_event, publish
 from windsprig.gameplay.factory import EntityFactory
 from windsprig.gameplay.snapshot import (
     AttackView,
@@ -66,6 +70,7 @@ from windsprig.gameplay.systems import (
     AttackSpawnSystem,
     CameraSystem,
     CaptureSystem,
+    CheckpointSystem,
     CollisionSystem,
     CombatSystem,
     CoopRespawnSystem,
@@ -80,13 +85,53 @@ from windsprig.gameplay.systems import (
 )
 from windsprig.gameplay.systems.attack_spawn_system import boss_attack_request
 from windsprig.gameplay.validation import (
+    build_stage_result,
     validate_attack_request,
     validate_attack_requests,
+    validate_checkpoint_state,
     validate_damage_queue,
+    validate_deaths_by_slot,
     validate_pending_enemy_launches,
 )
 from windsprig.input.commands import InputFrame
 from windsprig.input.roster import ActivePlayer
+
+type _RetryRow = tuple[
+    int,
+    PlayerSlot,
+    Health,
+    Transform,
+    Velocity,
+    Collider,
+    DefenseState,
+    CaptureState,
+    ActorState,
+    Respawn,
+    ControlIntent,
+    MovementState,
+    AbilityState,
+]
+
+
+SYSTEM_ORDER: tuple[type[System], ...] = (
+    InputCommandSystem,
+    DefenseSystem,
+    MovementSystem,
+    EnemyAISystem,
+    CollisionSystem,
+    CaptureSystem,
+    AbilitySystem,
+    AttackSpawnSystem,
+    AttackMotionSystem,
+    CombatSystem,
+    DamageSystem,
+    InteractionSystem,
+    PickupSystem,
+    CheckpointSystem,
+    CoopRespawnSystem,
+    StageGoalSystem,
+    CameraSystem,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,10 +148,15 @@ class _ValidatedGameplayResources:
     attack_requests: tuple[AttackRequest, ...]
     pending_enemy_launches: tuple[PendingEnemyLaunch, ...]
     boss_commands: tuple[BossCommand, ...]
+    active_checkpoint_id: str
+    deaths_by_slot: tuple[tuple[int, int], ...]
+    stage_result: StageResult | None
 
 
 class StageRuntime:
     """Run one stage and expose only active-roster, event, and snapshot contracts."""
+
+    SYSTEM_ORDER = SYSTEM_ORDER
 
     def __init__(
         self,
@@ -147,39 +197,21 @@ class StageRuntime:
         self._last_simulation = self.world.snapshot()
 
     def _install_scheduler(self) -> None:
-        systems: list[System] = [
-            InputCommandSystem(),
-            DefenseSystem(),
-            MovementSystem(),
-            EnemyAISystem(),
-            CollisionSystem(),
-            CaptureSystem(),
-            AbilitySystem(),
-            AttackSpawnSystem(),
-            AttackMotionSystem(),
-            CombatSystem(),
-            DamageSystem(),
-            InteractionSystem(),
-        ]
-        if self._boss_director is not None:
-            systems.append(BossSystem(self._boss_director))
-        systems.extend(
-            [
-                PickupSystem(),
-                CoopRespawnSystem(),
-                StageGoalSystem(),
-                CameraSystem(),
-            ]
-        )
+        systems: list[System] = []
+        for system_type in self.SYSTEM_ORDER:
+            if system_type is PickupSystem and self._boss_director is not None:
+                # Boss decisions resolve after interactions and feed the next spawn step.
+                systems.append(BossSystem(self._boss_director))
+            systems.append(system_type())
         self.world.scheduler.systems = systems
 
     def step(self, input_frame: InputFrame) -> StageFrame:
         """Advance one fixed step and return its immutable state and events."""
-        if self._result is not None:
+        resources = self._validate_gameplay_resources(self.world)
+        if resources.stage_outcome is not StageOutcome.RUNNING:
             return StageFrame(self._last_simulation, self.snapshot(), (), self._result)
 
         # Validate mutable queues before input, timers, RNG, ECS, events, or frame state can change.
-        self._validate_gameplay_resources(self.world)
         self._step_events.clear()
         # Events already waiting in the bus belong to this step's queued frame.
         self._step_events.extend(self.world.events.peek())
@@ -191,6 +223,11 @@ class StageRuntime:
         self._last_simulation = simulation
         self._snapshot_frame_index = simulation.frame_index
         self._elapsed_ms += self.config.fixed_dt_ms
+        resources = self._validate_gameplay_resources(self.world)
+        if resources.stage_outcome is StageOutcome.COMPLETED:
+            if resources.stage_result is None:
+                raise RuntimeError("completed stages must own one frozen StageResult")
+            self._result = resources.stage_result
         return StageFrame(simulation, self.snapshot(), tuple(self._step_events), self._result)
 
     def sync_active_players(
@@ -201,6 +238,13 @@ class StageRuntime:
         requested_players = self._validate_active_players(active_players)
         requested = {player.slot: player for player in requested_players}
         emitted: list[GameEvent] = []
+        outcome = self.world.resources.get("stage_outcome")
+        if not isinstance(outcome, StageOutcome):
+            raise TypeError("stage_outcome must be a StageOutcome")
+        if outcome is not StageOutcome.RUNNING:
+            raise ValueError("active players cannot change after a stage outcome")
+        raw_deaths = self.world.resources.get("deaths_by_slot")
+        current_deaths = dict(validate_deaths_by_slot(raw_deaths, tuple(sorted(self.player_entities))))
 
         for slot in sorted(set(self.player_entities) - set(requested)):
             entity_id = self.player_entities[slot]
@@ -209,6 +253,7 @@ class StageRuntime:
                 CaptureSystem.release_player_capture(self.world, capture)
             del self.player_entities[slot]
             self.world.destroy_entity(entity_id)
+            current_deaths.pop(slot)
             emitted.append(
                 make_event(
                     GameplayTopic.PLAYER_LEFT,
@@ -222,6 +267,7 @@ class StageRuntime:
             x, y = self.stage.player_spawns[spawn_index]
             entity_id = self.factory.spawn_player(requested[slot], x, y)
             self.player_entities[slot] = entity_id
+            current_deaths[slot] = 0
             emitted.append(
                 make_event(
                     GameplayTopic.PLAYER_JOINED,
@@ -236,6 +282,7 @@ class StageRuntime:
             player_slot.is_leader = requested[slot].is_leader
 
         self.world.resources["active_players"] = requested_players
+        self.world.resources["deaths_by_slot"] = current_deaths
         for event in emitted:
             self.world.events.notify(event)
         return tuple(emitted)
@@ -274,16 +321,179 @@ class StageRuntime:
 
     @property
     def can_retry_checkpoint(self) -> bool:
-        """Return false until Task 9 introduces production checkpoints."""
-        return False
+        """Return whether the entire failed active team can pay one life."""
+        resources = self._validate_gameplay_resources(self.world)
+        rows = self._validated_retry_rows(resources)
+        self._validate_retry_capture_state(rows)
+        return (
+            resources.stage_outcome is StageOutcome.FAILED
+            and bool(rows)
+            and all(health.dead and type(slot.lives) is int and slot.lives >= 1 for _, slot, health, *_ in rows)
+        )
 
     def retry_from_checkpoint(self) -> StageSnapshot:
-        """Reject checkpoint retries until the production checkpoint task."""
-        raise ValueError("checkpoint retry is unavailable")
+        """Atomically restore every required player at the active checkpoint."""
+        resources = self._validate_gameplay_resources(self.world)
+        rows = self._validated_retry_rows(resources)
+        if (
+            resources.stage_outcome is not StageOutcome.FAILED
+            or not rows
+            or any(not health.dead or type(slot.lives) is not int or slot.lives < 1 for _, slot, health, *_ in rows)
+        ):
+            raise ValueError("checkpoint retry is unavailable")
+
+        checkpoint_rows = validate_checkpoint_state(self.world, self.stage)
+        _, checkpoint, _, _ = next(
+            row for row in checkpoint_rows if row[1].checkpoint_id == resources.active_checkpoint_id
+        )
+        targets = tuple(
+            (checkpoint.x, checkpoint.y - index * collider.height)
+            for index, (_, _, _, _, _, collider, *_) in enumerate(rows)
+        )
+        if any(y < 0.0 for _, y in targets):
+            raise ValueError("checkpoint player offsets must stay inside the stage")
+        self._validate_retry_capture_state(rows)
+        deferred = self.world.resources.get("deferred_echo_pickup_ids")
+        if deferred is not None and type(deferred) is not set:
+            raise TypeError("deferred_echo_pickup_ids must be a set")
+
+        # Every validation above precedes the first life charge or ECS mutation.
+        self.world.events.drain()
+        for entity_id in sorted(
+            {row[0] for row in self.world.query(Attack)} | {row[0] for row in self.world.query(Projectile)}
+        ):
+            self.world.destroy_entity(entity_id)
+        cast(list[DamageRecord], self.world.resources["damage_queue"]).clear()
+        cast(list[AttackRequest], self.world.resources["attack_requests"]).clear()
+        cast(list[PendingEnemyLaunch], self.world.resources["pending_enemy_launches"]).clear()
+        self.world.resources["boss_commands"] = ()
+        self.world.resources.pop("deferred_echo_pickup_ids", None)
+
+        for index, row in enumerate(rows):
+            (
+                entity_id,
+                slot,
+                health,
+                transform,
+                velocity,
+                collider,
+                defense,
+                capture,
+                actor,
+                respawn,
+                intent,
+                movement,
+                ability,
+            ) = row
+            CaptureSystem.release_player_capture(self.world, capture)
+            slot.lives -= 1
+            health.current = health.maximum
+            health.dead = False
+            health.invulnerable_ms = self.config.respawn_invulnerable_ms
+            transform.x, transform.y = targets[index]
+            velocity.vx = velocity.vy = 0.0
+            collider.on_ground = False
+            defense.guarding = False
+            defense.dodge_remaining_ms = 0
+            defense.dodge_cooldown_ms = 0
+            defense.dodge_direction = 1
+            actor.name = "Idle"
+            actor.timer_ms = 0
+            respawn.x, respawn.y = targets[index]
+            respawn.timer_ms = 0
+            _reset_control_intent(intent)
+            movement.coyote_remaining_ms = 0
+            movement.jump_buffer_remaining_ms = 0
+            movement.hover_remaining_ms = self.config.hover_duration_ms
+            movement.hover_ready = True
+            ability.cooldown_remaining_ms = 0
+            ability.charge_ms = 0
+            ability.combo_step = 0
+            ability.combo_window_remaining_ms = 0
+            ability.armor_remaining_ms = 0
+
+        self.world.frame_input = InputFrame.empty()
+        self.world.resources["stage_result"] = None
+        self.world.resources["stage_outcome"] = StageOutcome.RUNNING
+        self._result = None
+        self._step_events.clear()
+        for entity_id, slot, *_ in rows:
+            publish(
+                self.world,
+                GameplayTopic.PLAYER_RESPAWNED,
+                entity_id=entity_id,
+                slot=slot.slot,
+                checkpoint_id=checkpoint.checkpoint_id,
+                cost=1,
+            )
+        return self.snapshot()
+
+    def _validated_retry_rows(
+        self,
+        resources: _ValidatedGameplayResources,
+    ) -> tuple[_RetryRow, ...]:
+        rows = cast(
+            list[_RetryRow],
+            self.world.query(
+                PlayerSlot,
+                Health,
+                Transform,
+                Velocity,
+                Collider,
+                DefenseState,
+                CaptureState,
+                ActorState,
+                Respawn,
+                ControlIntent,
+                MovementState,
+                AbilityState,
+            ),
+        )
+        by_slot = {row[1].slot: row for row in rows}
+        active_slots = tuple(player.slot for player in resources.active_players)
+        if tuple(sorted(by_slot)) != active_slots:
+            raise ValueError("retry participants must exactly match active player slots")
+        canonical = tuple(by_slot[slot] for slot in active_slots)
+        for entity_id, slot, health, *_ in canonical:
+            if self.player_entities.get(slot.slot) != entity_id:
+                raise ValueError("retry participants must match player_entities")
+            if type(slot.lives) is not int or slot.lives < 0:
+                raise ValueError("player lives must be non-negative integers")
+            if (
+                type(health.current) is not int
+                or type(health.maximum) is not int
+                or health.maximum <= 0
+                or not 0 <= health.current <= health.maximum
+                or type(health.dead) is not bool
+            ):
+                raise ValueError("player health state is invalid for checkpoint retry")
+        return canonical
+
+    def _validate_retry_capture_state(self, rows: tuple[_RetryRow, ...]) -> None:
+        for entity_id, _, _, _, _, _, _, capture, *_ in rows:
+            if capture.phase not in {"idle", "drawing", "holding"}:
+                raise ValueError("player capture phase is invalid for checkpoint retry")
+            if capture.phase != "holding":
+                if any(
+                    value is not None
+                    for value in (
+                        capture.captured_entity_id,
+                        capture.captured_ability_id,
+                        capture.captured_visual_id,
+                    )
+                ):
+                    raise ValueError("non-holding capture state must not retain captured facts")
+                continue
+            enemy_id = capture.captured_entity_id
+            if type(enemy_id) is not int or enemy_id not in self.world.alive_entities:
+                raise ValueError("holding capture state must reference a live entity")
+            owner = self.world.try_component(enemy_id, CapturedBy)
+            if owner is None or owner.player_entity_id != entity_id:
+                raise ValueError("holding capture ownership must match its player")
 
     @property
     def result(self) -> StageResult | None:
-        """Return the frozen stage result once a later outcome system creates it."""
+        """Return the exact frozen completion facts owned by this runtime."""
         return self._result
 
     def _new_world(self) -> World:
@@ -301,6 +511,10 @@ class StageRuntime:
         world.resources["attack_requests"] = []
         world.resources["pending_enemy_launches"] = []
         world.resources["boss_commands"] = ()
+        world.resources["active_players"] = ()
+        world.resources["active_checkpoint_id"] = None
+        world.resources["deaths_by_slot"] = {}
+        world.resources["stage_result"] = None
         world.set_resource_hash_projection(self._gameplay_resource_hash)
         return world
 
@@ -315,9 +529,20 @@ class StageRuntime:
                 patrol_right=enemy.patrol_right,
             )
         for mote in self.stage.motes:
-            self.factory.spawn_energy_sphere(mote.tile_x, mote.tile_y, self.stage.tile_size)
+            self.factory.spawn_energy_sphere(
+                mote.tile_x,
+                mote.tile_y,
+                self.stage.tile_size,
+                mote_id=mote.mote_id,
+            )
         for interaction in self.stage.interactions:
             self.factory.spawn_interaction(interaction, self.stage.tile_size)
+        for index, checkpoint in enumerate(self.stage.checkpoints):
+            self.factory.spawn_checkpoint(
+                checkpoint,
+                self.stage.tile_size,
+                active=index == 0,
+            )
         self._spawn_boss()
         self.factory.spawn_stage_goal(self.stage)
 
@@ -368,6 +593,9 @@ class StageRuntime:
             "attack_requests": tuple(astuple(request) for request in resources.attack_requests),
             "pending_enemy_launches": tuple(astuple(launch) for launch in resources.pending_enemy_launches),
             "boss_commands": tuple(astuple(command) for command in resources.boss_commands),
+            "active_checkpoint_id": resources.active_checkpoint_id,
+            "deaths_by_slot": resources.deaths_by_slot,
+            "stage_result": (astuple(resources.stage_result) if resources.stage_result is not None else None),
         }
 
     def _validate_gameplay_resources(
@@ -401,6 +629,15 @@ class StageRuntime:
                 raise ValueError("player_entities must reference matching PlayerSlot components")
             active_authority.append((slot, player_slot.is_leader))
 
+        deaths = validate_deaths_by_slot(
+            world.resources.get("deaths_by_slot"),
+            active_slots,
+        )
+        checkpoint_rows = validate_checkpoint_state(world, self.stage)
+        active_checkpoint_id = next(
+            checkpoint.checkpoint_id for _, checkpoint, _, _ in checkpoint_rows if checkpoint.active
+        )
+
         outcome = world.resources.get("stage_outcome")
         if not isinstance(outcome, StageOutcome):
             raise TypeError("stage_outcome must be a StageOutcome")
@@ -409,16 +646,18 @@ class StageRuntime:
             raise TypeError("run_energy_spheres must be an integer")
         if run_motes < 0:
             raise ValueError("run_energy_spheres must be non-negative")
-        collected = world.resources.get("collected_mote_ids")
-        if not isinstance(collected, (tuple, list, set, frozenset)) or any(
-            not isinstance(mote_id, str) for mote_id in collected
+        raw_collected = world.resources.get("collected_mote_ids")
+        if not isinstance(raw_collected, (tuple, list, set, frozenset)) or any(
+            type(mote_id) is not str for mote_id in raw_collected
         ):
             raise TypeError("collected_mote_ids must be a collection of strings")
-        discovered = world.resources.get("discovered_ability_ids")
-        if not isinstance(discovered, (tuple, list, set, frozenset)) or any(
-            not isinstance(ability_id, str) for ability_id in discovered
+        collected = tuple(sorted(set(raw_collected)))
+        raw_discovered = world.resources.get("discovered_ability_ids")
+        if not isinstance(raw_discovered, (tuple, list, set, frozenset)) or any(
+            type(ability_id) is not str for ability_id in raw_discovered
         ):
             raise TypeError("discovered_ability_ids must be a collection of strings")
+        discovered = tuple(sorted(set(raw_discovered)))
         damage_queue = validate_damage_queue(world.resources.get("damage_queue"))
         attack_requests = validate_attack_requests(world.resources.get("attack_requests"))
         pending_launches = validate_pending_enemy_launches(world.resources.get("pending_enemy_launches"))
@@ -430,17 +669,36 @@ class StageRuntime:
                 request = boss_attack_request(owner_id, command)
                 if request is not None:
                     validate_attack_request(request)
+        stage_result = world.resources.get("stage_result")
+        if stage_result is not None and type(stage_result) is not StageResult:
+            raise TypeError("stage_result must be a StageResult or None")
+        validated_result = stage_result
+        if outcome is StageOutcome.COMPLETED and validated_result is None:
+            raise ValueError("completed stage_outcome requires stage_result")
+        if outcome is not StageOutcome.COMPLETED and validated_result is not None:
+            raise ValueError("stage_result is allowed only for a completed outcome")
+        if validated_result is not None:
+            expected_result = build_stage_result(
+                world,
+                self.stage,
+                validated_result.clear_time_ms,
+            )
+            if validated_result != expected_result:
+                raise ValueError("stage_result must exactly match gameplay-owned completion facts")
         return _ValidatedGameplayResources(
             active_players=active_players,
             active_authority=tuple(active_authority),
             stage_outcome=outcome,
             run_energy_spheres=run_motes,
-            collected_mote_ids=tuple(sorted(set(collected))),
-            discovered_ability_ids=tuple(sorted(set(discovered))),
+            collected_mote_ids=collected,
+            discovered_ability_ids=discovered,
             damage_queue=damage_queue,
             attack_requests=attack_requests,
             pending_enemy_launches=pending_launches,
             boss_commands=boss_commands,
+            active_checkpoint_id=active_checkpoint_id,
+            deaths_by_slot=deaths,
+            stage_result=validated_result,
         )
 
     def _capture_step_event(self, event: GameEvent) -> None:
@@ -473,18 +731,13 @@ class StageRuntime:
         bosses = self._boss_views()
         camera_targets = self._camera_target_views(active_slots)
         checkpoints = tuple(
-            sorted(
-                (
-                    CheckpointView(
-                        checkpoint_id=checkpoint.checkpoint_id,
-                        x=float(checkpoint.tile_x * self.stage.tile_size),
-                        y=float(checkpoint.tile_y * self.stage.tile_size),
-                        is_active=False,
-                    )
-                    for checkpoint in self.stage.checkpoints
-                ),
-                key=lambda view: view.checkpoint_id,
+            CheckpointView(
+                checkpoint_id=checkpoint.checkpoint_id,
+                x=transform.x,
+                y=transform.y,
+                is_active=checkpoint.active,
             )
+            for _, checkpoint, transform in self.world.query(Checkpoint, Transform)
         )
         goal_rows = self.world.query(StageGoal, Transform)
         goal_x = float(goal_rows[0][2].x) if goal_rows else 0.0
@@ -757,6 +1010,21 @@ class StageRuntime:
         resources: _ValidatedGameplayResources,
     ) -> tuple[str, ...]:
         ids = set(resources.collected_mote_ids)
-        if resources.run_energy_spheres > 0:
-            ids.update(mote.mote_id for mote in self.stage.motes[: resources.run_energy_spheres])
         return tuple(sorted(ids))
+
+
+def _reset_control_intent(intent: ControlIntent) -> None:
+    """Clear every edge and held input before a checkpoint retry resumes."""
+
+    intent.move_axis = 0
+    intent.jump_pressed = False
+    intent.hover_held = False
+    intent.draw_started = False
+    intent.draw_released = False
+    intent.ability_pressed = False
+    intent.ability_held = False
+    intent.ability_released = False
+    intent.ability_consumed = False
+    intent.guard_held = False
+    intent.dodge_pressed = False
+    intent.drop_pressed = False

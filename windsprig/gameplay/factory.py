@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import cast
 
 from windsprig.config import GameConfig
-from windsprig.content.loader import InteractionSpec, StageSpec
+from windsprig.content.loader import CheckpointSpec, InteractionSpec, StageSpec
 from windsprig.core.ecs import World
 from windsprig.gameplay.components import (
     AbilityState,
     ActorState,
     CameraFocus,
     CaptureState,
+    Checkpoint,
     Collectible,
     Collider,
     ControlIntent,
@@ -109,11 +110,21 @@ class EntityFactory:
         self.world.add_component(entity_id, Facing(direction=-1))
         return entity_id
 
-    def spawn_energy_sphere(self, tx: int, ty: int, tile_size: int) -> int:
+    def spawn_energy_sphere(
+        self,
+        tx: int,
+        ty: int,
+        tile_size: int,
+        *,
+        mote_id: str | None = None,
+    ) -> int:
         entity_id = self.world.create_entity()
         self.world.add_component(entity_id, Transform(tx * tile_size + 6, ty * tile_size + 6))
         self.world.add_component(entity_id, Collider(width=20, height=20, solid=False))
-        self.world.add_component(entity_id, Collectible(kind="energy_sphere", value=1))
+        self.world.add_component(
+            entity_id,
+            Collectible(kind="energy_sphere", value=1, stable_id=mote_id),
+        )
         return entity_id
 
     def spawn_interaction(self, spec: InteractionSpec, tile_size: int) -> int:
@@ -135,6 +146,35 @@ class EntityFactory:
             entity_id,
             Interaction(interaction_id=spec.interaction_id, kind=spec.kind),
         )
+        return entity_id
+
+    def spawn_checkpoint(
+        self,
+        spec: CheckpointSpec,
+        tile_size: int,
+        *,
+        active: bool,
+    ) -> int:
+        """Create one catalog-bound team checkpoint at its safe tile position."""
+        x = float(spec.tile_x * tile_size)
+        y = float(spec.tile_y * tile_size)
+        entity_id = self.world.create_entity()
+        self.world.add_component(entity_id, Transform(x, y))
+        self.world.add_component(
+            entity_id,
+            Collider(width=tile_size, height=tile_size, solid=False),
+        )
+        self.world.add_component(
+            entity_id,
+            Checkpoint(
+                checkpoint_id=spec.checkpoint_id,
+                x=x,
+                y=y,
+                active=active,
+            ),
+        )
+        if active:
+            self.world.resources["active_checkpoint_id"] = spec.checkpoint_id
         return entity_id
 
     def spawn_stage_goal(self, stage: StageSpec) -> int:

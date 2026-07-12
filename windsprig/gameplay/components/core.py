@@ -198,6 +198,7 @@ class Collectible:
     kind: str
     value: int = 1
     collected: bool = False
+    stable_id: str | None = None
 
 
 @dataclass
@@ -210,6 +211,16 @@ class Interaction:
     interaction_id: str
     kind: str
     state: str = "idle"
+
+
+@dataclass
+class Checkpoint:
+    """Hashed team checkpoint identity, safe position, and activation state."""
+
+    checkpoint_id: str
+    x: float
+    y: float
+    active: bool = False
 
 
 @dataclass

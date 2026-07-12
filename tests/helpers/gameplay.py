@@ -12,9 +12,9 @@ from windsprig.content.loader import (
 )
 from windsprig.core.events import GameEvent
 from windsprig.gameplay.abilities import AbilityContext, create_default_registry
+from windsprig.gameplay.components import DamageRecord, Health, StageGoal, Transform
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.gameplay.session import GameSession
-from windsprig.gameplay.snapshot import StageOutcome
 from windsprig.input.commands import InputCommand, InputFrame
 from windsprig.input.roster import ActivePlayer, DeviceRef
 
@@ -76,7 +76,7 @@ def make_stage(
     player_spawns: tuple[tuple[float, float], ...] = ((64.0, 160.0),),
     enemy_spawns: tuple[EnemySpawn, ...] = (),
     motes: tuple[MoteSpec, ...] = (),
-    checkpoints: tuple[CheckpointSpec, ...] = (),
+    checkpoints: tuple[CheckpointSpec, ...] = (CheckpointSpec("test_stage:checkpoint:1", 2, 7),),
     interactions: tuple[InteractionSpec, ...] = (),
 ) -> StageSpec:
     """Build a compact flat stage without coupling tests to campaign content."""
@@ -133,12 +133,20 @@ def make_session() -> GameSession:
 
 
 def enter_victory(session: GameSession) -> None:
-    """Drive the session through the same typed outcome seam as a normal step."""
-    session.runtime.world.resources["stage_outcome"] = StageOutcome.COMPLETED
-    session._synchronize_outcome()
+    """Complete through one normal goal-gated production step."""
+    player_id = session.runtime.player_entities[min(session.runtime.player_entities)]
+    _, _, goal = session.runtime.world.query(StageGoal, Transform)[0]
+    player = session.runtime.world.get_component(player_id, Transform)
+    player.x, player.y = goal.x, goal.y
+    session.step(InputFrame.empty())
 
 
 def enter_defeat(session: GameSession) -> None:
-    """Drive the session into defeat through its typed outcome seam."""
-    session.runtime.world.resources["stage_outcome"] = StageOutcome.FAILED
-    session._synchronize_outcome()
+    """Defeat through one normal typed damage and outcome step."""
+    player_id = session.runtime.player_entities[min(session.runtime.player_entities)]
+    health = session.runtime.world.get_component(player_id, Health)
+    queue = session.runtime.world.resources["damage_queue"]
+    if not isinstance(queue, list):
+        raise TypeError("damage_queue must be a list")
+    queue.append(DamageRecord(0, player_id, health.maximum, 0.0, -220.0, True))
+    session.step(InputFrame.empty())

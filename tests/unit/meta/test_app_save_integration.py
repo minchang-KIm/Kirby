@@ -8,7 +8,7 @@ import pytest
 
 from windsprig.app import GameApp
 from windsprig.config import GameConfig
-from windsprig.gameplay.snapshot import StageOutcome
+from windsprig.gameplay.snapshot import StageOutcome, StageResult
 from windsprig.meta.save_models import save_data_from_json
 from windsprig.platform.native import create_native_services
 from windsprig.platform.services import PlatformServices, StorageCapabilities
@@ -51,9 +51,19 @@ def _completed_runtime(
     frame_index: int,
     mote_ids: set[str],
 ) -> SimpleNamespace:
+    result = StageResult(
+        stage_id=stage.stage_id,
+        world_id=stage.world_id,
+        node_id=stage.node_id,
+        clear_time_ms=frame_index * 16,
+        collected_mote_ids=tuple(sorted(mote_ids)),
+        discovered_ability_ids=(),
+        active_slots=(1,),
+        deaths_by_slot=((1, 0),),
+    )
     return SimpleNamespace(
         stage=stage,
-        result=None,
+        result=result,
         player_entities={1: 1001},
         world=SimpleNamespace(
             resources={
@@ -129,9 +139,7 @@ def test_v2_flush_preserves_non_prefix_stable_mote_ids(
 
     app._flush_save()
 
-    assert GameApp(services=services).tracker.collected_mote_ids == {
-        "world_1_stage_1:mote:3"
-    }
+    assert GameApp(services=services).tracker.collected_mote_ids == {"world_1_stage_1:mote:3"}
 
 
 def test_completed_runtime_is_recorded_once_but_new_run_increments_replay_count(
@@ -176,9 +184,7 @@ def test_failed_flush_keeps_updated_memory_and_requires_retry(
 
     assert app.save_status == "retry_required"
     assert app.save_write_result is not None and app.save_write_result.ok is False
-    assert app.save_data.profiles[0].collected_mote_ids == frozenset(
-        {"world_1_stage_1:mote:3"}
-    )
+    assert app.save_data.profiles[0].collected_mote_ids == frozenset({"world_1_stage_1:mote:3"})
 
 
 def test_migrated_v1_is_rewritten_immediately_and_result_is_exposed(
@@ -206,8 +212,7 @@ def test_migrated_v1_rewrite_failure_keeps_migrated_memory_and_never_reports_sav
 ) -> None:
     storage = ToggleStorage()
     storage.values["save_data.json"] = (
-        '{"save_version":1,"profiles":[{"profile_name":"Legacy",'
-        '"energy_spheres":{"world_1_stage_1":1}}]}'
+        '{"save_version":1,"profiles":[{"profile_name":"Legacy","energy_spheres":{"world_1_stage_1":1}}]}'
     )
     storage.fail_writes = True
 

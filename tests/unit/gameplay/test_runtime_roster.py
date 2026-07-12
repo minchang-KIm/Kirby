@@ -30,7 +30,6 @@ from windsprig.gameplay.components import (
 from windsprig.gameplay.factory import EntityFactory
 from windsprig.gameplay.runtime import StageRuntime
 from windsprig.gameplay.snapshot import StageOutcome
-from windsprig.gameplay.systems.stage_goal_system import PROVISIONAL_STAGE_CLEARED_TOPIC
 from windsprig.input.commands import InputFrame
 from windsprig.input.roster import DeviceRef
 
@@ -334,11 +333,11 @@ def test_step_captures_each_system_event_in_its_matching_frame_only() -> None:
     completed = runtime.step(InputFrame.empty())
     following = runtime.step(InputFrame.empty())
 
-    assert [event.topic for event in completed.events] == [PROVISIONAL_STAGE_CLEARED_TOPIC]
+    assert [event.topic for event in completed.events] == ["StageCompleted"]
     assert completed.simulation.event_count == len(completed.events) == 1
     assert completed.view.outcome is StageOutcome.COMPLETED
     assert following.events == ()
-    assert following.simulation.event_count == 0
+    assert following.simulation == completed.simulation
 
 
 def test_step_returns_prequeued_and_in_step_events_once_in_queue_order() -> None:
@@ -353,13 +352,13 @@ def test_step_returns_prequeued_and_in_step_events_once_in_queue_order() -> None
 
     assert [event.topic for event in frame.events] == [
         "QueuedBeforeStep",
-        PROVISIONAL_STAGE_CLEARED_TOPIC,
+        "StageCompleted",
     ]
     assert len(frame.events) == frame.simulation.event_count == 2
     assert runtime.world.events.peek() == []
     following = runtime.step(InputFrame.empty())
     assert following.events == ()
-    assert following.simulation.event_count == 0
+    assert following.simulation == frame.simulation
 
 
 def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
@@ -379,6 +378,7 @@ def test_base_scheduler_has_one_collision_and_no_prototype_systems() -> None:
         "DamageSystem",
         "InteractionSystem",
         "PickupSystem",
+        "CheckpointSystem",
         "CoopRespawnSystem",
         "StageGoalSystem",
         "CameraSystem",
@@ -512,7 +512,7 @@ def test_collision_moves_actor_and_combat_moves_legacy_projectile_exactly_once()
 def test_snapshot_builds_sorted_immutable_views_for_current_runtime_entities() -> None:
     stage = make_stage(
         enemy_spawns=(EnemySpawn(200.0, 160.0, "grunt", "cinder", 180.0, 240.0),),
-        checkpoints=(CheckpointSpec("test_stage.start", 2, 5),),
+        checkpoints=(CheckpointSpec("test_stage.start", 2, 7),),
     )
     runtime = make_runtime(
         players=(make_active_player(3), make_active_player(1, leader=True)),
@@ -538,7 +538,7 @@ def test_snapshot_builds_sorted_immutable_views_for_current_runtime_entities() -
         (attack_id, "gust", -1),
     ]
     assert [(view.checkpoint_id, view.x, view.y) for view in snapshot.checkpoints] == [
-        ("test_stage.start", 64.0, 160.0),
+        ("test_stage.start", 64.0, 224.0),
     ]
     assert snapshot.goal_gather.required_slots == (1, 3)
     assert snapshot.goal_gather.leader_slot == 1
