@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,6 +13,7 @@ from windsprig.input.roster import ActiveRoster, DeviceRef
 from windsprig.localization import Localizer
 from windsprig.meta import SaveLoadResult, SaveWriteResult, migration_catalog
 from windsprig.meta.completion import (
+    CompletionPercent,
     apply_stage_result,
     completion_breakdown,
     completion_percent,
@@ -122,7 +122,7 @@ def test_complete_campaign_progression_is_idempotent_localized_and_camera_ready(
         breakdown.cleared_bosses,
         breakdown.challenge_rewards,
     ) == (30, 90, 6, 6)
-    assert completion_percent(profile, bundle) == Decimal("100.0")
+    assert completion_percent(profile, bundle) == CompletionPercent(1_000)
     assert len(profile.challenge_rewards) == 18
     assert profile.unlocked_worlds == frozenset(f"world_{index}" for index in range(1, 7))
 
@@ -157,7 +157,7 @@ def test_complete_campaign_progression_is_idempotent_localized_and_camera_ready(
     assert replay_delta.new_mote_ids == ()
     assert replay_delta.new_reward_ids == ()
     assert replay_delta.newly_unlocked_node_ids == ()
-    assert completion_percent(replayed, bundle) == Decimal("100.0")
+    assert completion_percent(replayed, bundle) == CompletionPercent(1_000)
 
 
 def test_foundation_completion_projects_the_canonical_result_without_count_synthesis() -> None:

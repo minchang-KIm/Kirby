@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from decimal import ROUND_HALF_UP, Decimal
+from math import gcd
 
 from windsprig.content.models import CatalogBundle, WorldNode, WorldSpec
 from windsprig.gameplay.snapshot import StageResult
@@ -16,8 +16,6 @@ from .save_models import (
     _immutable_int_map,
     _strict_int,
 )
-
-_PERCENT_QUANTUM = Decimal("0.1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +32,34 @@ class CompletionDelta:
     is_new_best: bool
 
 
+@dataclass(frozen=True, slots=True, order=True)
+class CompletionPercent:
+    """Exact fixed-point completion in tenths of one percent."""
+
+    tenths: int
+
+    def __post_init__(self) -> None:
+        if type(self.tenths) is not int or not 0 <= self.tenths <= 1_000:
+            raise ValueError("completion tenths must be an integer in [0, 1000]")
+
+    @classmethod
+    def from_tenths_ratio(cls, numerator: int, denominator: int) -> CompletionPercent:
+        """Round a non-negative rational tenths value half-up and clamp it."""
+
+        if type(numerator) is not int:
+            raise TypeError("completion numerator must be an integer")
+        if type(denominator) is not int:
+            raise TypeError("completion denominator must be an integer")
+        if denominator <= 0:
+            raise ValueError("completion denominator must be positive")
+        bounded_numerator = min(max(0, numerator), 1_000 * denominator)
+        rounded_tenths = (2 * bounded_numerator + denominator) // (2 * denominator)
+        return cls(rounded_tenths)
+
+    def __str__(self) -> str:
+        return f"{self.tenths // 10}.{self.tenths % 10}"
+
+
 @dataclass(frozen=True, slots=True)
 class CompletionBreakdown:
     """Catalog-known completion counts and their weighted percentage."""
@@ -46,7 +72,7 @@ class CompletionBreakdown:
     total_bosses: int
     challenge_rewards: int
     total_challenges: int
-    percent: Decimal
+    percent: CompletionPercent
 
 
 def ordered_worlds(catalog: CatalogBundle) -> tuple[WorldSpec, ...]:
@@ -187,10 +213,20 @@ def _advanced_stage_maps(
     return best_times, counts, previous_best
 
 
-def _ratio(completed: int, total: int) -> Decimal:
-    if total == 0:
-        return Decimal(0)
-    return Decimal(completed) / Decimal(total)
+def _weighted_percent(components: tuple[tuple[int, int, int], ...]) -> CompletionPercent:
+    """Combine weighted count ratios exactly before one half-up rounding."""
+
+    numerator = 0
+    denominator = 1
+    for weight_tenths, completed, total in components:
+        if total == 0:
+            continue
+        numerator = numerator * total + weight_tenths * completed * denominator
+        denominator *= total
+        common_divisor = gcd(numerator, denominator)
+        numerator //= common_divisor
+        denominator //= common_divisor
+    return CompletionPercent.from_tenths_ratio(numerator, denominator)
 
 
 def completion_breakdown(
@@ -218,14 +254,15 @@ def completion_breakdown(
     )
     earned_challenges = profile.challenge_rewards & challenge_ids
 
-    score = Decimal(100) * (
-        Decimal("0.50") * _ratio(len(cleared_stage_ids), len(stage_ids))
-        + Decimal("0.30") * _ratio(len(collected_mote_ids), len(mote_ids))
-        + Decimal("0.10") * _ratio(len(cleared_stage_ids & boss_stage_ids), len(boss_stage_ids))
-        + Decimal("0.10") * _ratio(len(earned_challenges), len(challenge_ids))
+    # Weights are expressed in tenths of one percent: 100.0% == 1_000.
+    percent = _weighted_percent(
+        (
+            (500, len(cleared_stage_ids), len(stage_ids)),
+            (300, len(collected_mote_ids), len(mote_ids)),
+            (100, len(cleared_stage_ids & boss_stage_ids), len(boss_stage_ids)),
+            (100, len(earned_challenges), len(challenge_ids)),
+        )
     )
-    bounded = max(Decimal("0.0"), min(Decimal("100.0"), score))
-    percent = bounded.quantize(_PERCENT_QUANTUM, rounding=ROUND_HALF_UP)
     return CompletionBreakdown(
         cleared_stages=len(cleared_stage_ids),
         total_stages=len(stage_ids),
@@ -239,7 +276,7 @@ def completion_breakdown(
     )
 
 
-def completion_percent(profile: SaveProfile, catalog: CatalogBundle) -> Decimal:
+def completion_percent(profile: SaveProfile, catalog: CatalogBundle) -> CompletionPercent:
     """Return completion rounded half-up to one decimal in ``0.0..100.0``."""
 
     return completion_breakdown(profile, catalog).percent
@@ -373,6 +410,7 @@ class CompletionTracker:
 __all__ = [
     "CompletionBreakdown",
     "CompletionDelta",
+    "CompletionPercent",
     "CompletionTracker",
     "apply_stage_result",
     "completion_breakdown",

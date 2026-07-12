@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, replace
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -12,6 +11,7 @@ from windsprig.meta import CompletionTracker
 from windsprig.meta.completion import (
     CompletionBreakdown,
     CompletionDelta,
+    CompletionPercent,
     apply_stage_result,
     completion_breakdown,
     completion_percent,
@@ -343,9 +343,9 @@ def test_documented_completion_weights_use_only_catalog_known_facts() -> None:
         total_bosses=6,
         challenge_rewards=3,
         total_challenges=6,
-        percent=Decimal("50.0"),
+        percent=CompletionPercent(500),
     )
-    assert completion_percent(profile, bundle) == Decimal("50.0")
+    assert completion_percent(profile, bundle) == CompletionPercent(500)
 
     future_only = replace(
         SaveProfile(profile_id="profile_1", display_name="Sprig"),
@@ -353,7 +353,7 @@ def test_documented_completion_weights_use_only_catalog_known_facts() -> None:
         collected_mote_ids=frozenset({"future_mote"}),
         challenge_rewards=frozenset({"future_challenge"}),
     )
-    assert completion_percent(future_only, bundle) == Decimal("0.0")
+    assert completion_percent(future_only, bundle) == CompletionPercent(0)
 
 
 def test_completion_rounds_half_up_to_one_decimal_and_clamps_at_one_hundred() -> None:
@@ -372,8 +372,9 @@ def test_completion_rounds_half_up_to_one_decimal_and_clamps_at_one_hundred() ->
         | frozenset({"future_challenge"}),
     )
 
-    assert completion_percent(one_stage, bundle) == Decimal("1.7")
-    assert completion_percent(all_known, bundle) == Decimal("100.0")
+    assert completion_percent(one_stage, bundle) == CompletionPercent(17)
+    assert completion_percent(all_known, bundle) == CompletionPercent(1_000)
+    assert str(CompletionPercent.from_tenths_ratio(33, 2)) == "1.7"
 
 
 def test_new_completion_values_are_frozen_and_slotted() -> None:

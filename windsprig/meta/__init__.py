@@ -3,6 +3,7 @@
 from .completion import (
     CompletionBreakdown,
     CompletionDelta,
+    CompletionPercent,
     CompletionTracker,
     apply_stage_result,
     completion_breakdown,
@@ -53,6 +54,7 @@ __all__ = [
     "AudioSettings",
     "CompletionBreakdown",
     "CompletionDelta",
+    "CompletionPercent",
     "CompletionTracker",
     "ConnectorVM",
     "ControlSettings",
