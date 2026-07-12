@@ -92,6 +92,7 @@ def test_complete_campaign_progression_is_idempotent_localized_and_camera_ready(
     ordered_nodes = tuple(node for world in ordered_worlds for node in world.nodes)
     last_result: StageResult | None = None
     last_delta = None
+    last_before = profile
 
     for node in ordered_nodes:
         stage = bundle.campaign.stages[node.stage_id]
@@ -106,6 +107,7 @@ def test_complete_campaign_progression_is_idempotent_localized_and_camera_ready(
             active_slots=(1,),
             deaths_by_slot=((1, 0),),
         )
+        last_before = profile
         profile, delta = apply_stage_result(profile, result, bundle)
         assert profile.clear_counts[stage.stage_id] == 1
         assert delta.first_clear is True
@@ -130,7 +132,14 @@ def test_complete_campaign_progression_is_idempotent_localized_and_camera_ready(
     assert map_view.total_motes_label == "Wind Motes 90 / 90"
     assert map_view.completion_label == "Completion 100.0%"
 
-    results = build_results_view(last_result, last_delta, profile, bundle, localizer)
+    results = build_results_view(
+        last_result,
+        last_delta,
+        profile,
+        bundle,
+        localizer,
+        before_profile=last_before,
+    )
     assert results.stage_name == "The Stillness"
     assert results.can_next_stage is False
     assert results.next_stage_id is None
