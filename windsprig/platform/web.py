@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
 from typing import Protocol, cast
 from urllib.parse import parse_qs
 
@@ -13,8 +15,10 @@ from windsprig.platform.native import (
     PygameTimeService,
 )
 from windsprig.platform.services import (
+    WEB_TEST_DIAGNOSTIC_NAME,
     AudioStatus,
     BrowserBridge,
+    DiagnosticPrimitive,
     DisplayCapabilities,
     PlatformCapabilities,
     PlatformServices,
@@ -60,6 +64,21 @@ class _WindowWithLocalStorage(Protocol):
 class _AudioStatusElement(Protocol):
     textContent: str
     hidden: bool
+
+
+class _JsonParser(Protocol):
+    def parse(self, raw: str) -> object:
+        raise NotImplementedError
+
+
+class _ObjectConstructor(Protocol):
+    def freeze(self, value: object) -> object:
+        raise NotImplementedError
+
+
+class _WindowWithDiagnosticFactories(Protocol):
+    JSON: _JsonParser
+    Object: _ObjectConstructor
 
 
 class PygbagBrowserBridge:
@@ -145,6 +164,29 @@ class PygbagBrowserBridge:
             status_element.hidden = False
         except Exception:
             return
+
+    def publish_diagnostic(
+        self,
+        name: str,
+        payload: Mapping[str, DiagnosticPrimitive],
+    ) -> None:
+        """Assign one frozen native-JS primitive snapshot under the canonical name."""
+        if name != WEB_TEST_DIAGNOSTIC_NAME:
+            raise ValueError(f"unsupported browser diagnostic name: {name}")
+        snapshot: dict[str, DiagnosticPrimitive] = {}
+        for key, value in payload.items():
+            if type(key) is not str or not key or key != key.strip():
+                raise TypeError("diagnostic keys must be non-blank strings")
+            if type(value) not in {str, int, bool}:
+                raise TypeError("diagnostic values must be a string, integer, or boolean")
+            snapshot[key] = value
+
+        window = cast(_WindowWithDiagnosticFactories, self.window)
+        native_object = window.JSON.parse(
+            json.dumps(snapshot, sort_keys=True, separators=(",", ":")),
+        )
+        frozen_object = window.Object.freeze(native_object)
+        setattr(self.window, name, frozen_object)
 
     def fullscreen_available(self) -> bool:
         document = _optional_attribute(self.window, "document")

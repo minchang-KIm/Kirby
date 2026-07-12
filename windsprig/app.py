@@ -28,7 +28,7 @@ from windsprig.meta import (
     SaveWriteResult,
 )
 from windsprig.platform.native import create_native_services
-from windsprig.platform.services import PlatformServices
+from windsprig.platform.services import PlatformServices, WebTestStatus, publish_test_status
 from windsprig.screens.base import Screen, ScreenFactory, ScreenId
 from windsprig.screens.foundation import (
     FoundationScreen,
@@ -108,6 +108,7 @@ class GameApp:
         self.disconnected_devices: tuple[DeviceRef, ...] = ()
         self.running = False
         self._audio_initialization_attempted = False
+        self._last_web_test_status: WebTestStatus | None = None
         selected_initial_id = initial_screen_id or self._factory_initial_screen_id()
         self.screen: Screen = self.screen_factory.create(selected_initial_id)
         self.screen.on_enter(MappingProxyType({}))
@@ -188,6 +189,7 @@ class GameApp:
 
         self.screen.render(self.canvas, batch.alpha)
         self.services.display.present(self.canvas)
+        self._publish_web_test_status()
         gameplay_active = (
             isinstance(self.screen, FoundationScreen)
             and self.screen.screen_id == "playing"
@@ -195,6 +197,23 @@ class GameApp:
         )
         self.probe.presented_frame(raw_elapsed_ms, gameplay_active=gameplay_active)
         await self.services.time.yield_frame()
+
+    def _publish_web_test_status(self) -> None:
+        """Publish changed post-render product state without feeding simulation input."""
+        if not isinstance(self.screen, FoundationScreen):
+            return
+        profile = self.screen.save_data.profiles[0]
+        status = WebTestStatus(
+            state=self.screen.screen_id,
+            save_version=self.screen.save_data.save_version,
+            save_status=self.screen.save_status,
+            cleared_stages=len(profile.clear_counts),
+            active_players=len(self.roster.players),
+        )
+        if status == self._last_web_test_status:
+            return
+        publish_test_status(self.services.browser, status)
+        self._last_web_test_status = status
 
     def _observe_probe_input(self, input_frame: InputFrame) -> None:
         for commands in input_frame.commands_by_slot.values():

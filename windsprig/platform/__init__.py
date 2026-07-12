@@ -14,6 +14,8 @@ from windsprig.platform.services import (
     StorageCapabilities,
     StorageService,
     TimeService,
+    WebTestStatus,
+    publish_test_status,
 )
 from windsprig.platform.web import create_web_services
 
@@ -32,6 +34,8 @@ __all__ = [
     "StorageCapabilities",
     "StorageService",
     "TimeService",
+    "WebTestStatus",
     "create_native_services",
     "create_web_services",
+    "publish_test_status",
 ]

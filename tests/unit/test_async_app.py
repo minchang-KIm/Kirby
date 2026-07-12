@@ -5,6 +5,7 @@ import runpy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import pygame
 import pytest
@@ -26,6 +27,7 @@ from windsprig.input.roster import ActiveRoster, DeviceRef
 from windsprig.input.router import RoutedInput
 from windsprig.platform.services import (
     AudioStatus,
+    BrowserBridge,
     DisplayCapabilities,
     LifecycleEvent,
     PlatformCapabilities,
@@ -138,6 +140,17 @@ class ProbeQueryBrowser:
         assert name == "foundation_probe"
         self.query_count += 1
         return "1"
+
+
+class RecordingDiagnosticBrowser:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict[str, object]]] = []
+
+    def query_param(self, name: str) -> str | None:
+        return "1" if name == "e2e" else None
+
+    def publish_diagnostic(self, name: str, payload: Mapping[str, object]) -> None:
+        self.published.append((name, dict(payload)))
 
 
 class FakeKeys:
@@ -382,6 +395,67 @@ def test_default_foundation_factory_shares_an_explicit_probe_with_the_coordinato
 
     assert app.probe is probe
     assert app.foundation_screen.probe is probe
+
+
+@pytest.mark.asyncio
+async def test_foundation_app_publishes_only_changed_post_render_product_status() -> None:
+    storage = FakeStorage()
+    browser = RecordingDiagnosticBrowser()
+    time = FakeTime()
+    services = PlatformServices(
+        storage=storage,
+        audio=FakeAudio(),
+        display=FakeDisplay(),
+        time=time,
+        lifecycle=FakeLifecycle(),
+        browser=cast(BrowserBridge, browser),
+        capabilities=PlatformCapabilities(
+            is_web=True,
+            persistent_storage=True,
+            fullscreen=False,
+            gamepads=False,
+            audio_requires_gesture=True,
+        ),
+    )
+    app = GameApp(
+        GameConfig(),
+        services,
+        event_source=lambda: (),
+        key_source=FakeKeys,
+    )
+
+    assert browser.published == []
+    await app.run_frame()
+    assert browser.published == [
+        (
+            "__WINSPRIG_TEST__",
+            {
+                "activePlayers": 0,
+                "clearedStages": 0,
+                "saveStatus": "ready",
+                "saveVersion": 2,
+                "state": "world_map",
+            },
+        )
+    ]
+
+    app.roster.join(DeviceRef("keyboard", "keyboard-wasd", "Keyboard WASD"))
+    app.tracker.clear_counts["world_1_stage_1"] = 1
+    app._flush_save()
+    await app.run_frame()
+    await app.run_frame()
+
+    assert browser.published[-1] == (
+        "__WINSPRIG_TEST__",
+        {
+            "activePlayers": 1,
+            "clearedStages": 1,
+            "saveStatus": "saved",
+            "saveVersion": 2,
+            "state": "world_map",
+        },
+    )
+    assert len(browser.published) == 2
 
 
 def test_staged_non_probe_capability_blocks_query_and_f9_in_active_runtime(

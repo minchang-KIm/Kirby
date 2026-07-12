@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -8,6 +8,8 @@ import pygame
 
 AudioBus = Literal["music", "sfx"]
 LifecycleKind = Literal["quit", "focus_lost", "focus_gained"]
+type DiagnosticPrimitive = str | int | bool
+WEB_TEST_DIAGNOSTIC_NAME = "__WINSPRIG_TEST__"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +38,17 @@ class PlatformCapabilities:
     fullscreen: bool
     gamepads: bool
     audio_requires_gesture: bool
+
+
+@dataclass(frozen=True, slots=True)
+class WebTestStatus:
+    """Expose a primitive read-only product summary without gameplay authority."""
+
+    state: str
+    save_version: int
+    save_status: str
+    cleared_stages: int
+    active_players: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +150,32 @@ class BrowserBridge(Protocol):
 
     def publish_audio_status(self, status: AudioStatus) -> None:
         raise NotImplementedError
+
+    def publish_diagnostic(
+        self,
+        name: str,
+        payload: Mapping[str, DiagnosticPrimitive],
+    ) -> None:
+        raise NotImplementedError
+
+
+def publish_test_status(
+    bridge: BrowserBridge | None,
+    status: WebTestStatus,
+) -> None:
+    """Publish the product summary only under the exact browser E2E opt-in."""
+    if bridge is None or bridge.query_param("e2e") != "1":
+        return
+    bridge.publish_diagnostic(
+        WEB_TEST_DIAGNOSTIC_NAME,
+        {
+            "activePlayers": status.active_players,
+            "clearedStages": status.cleared_stages,
+            "saveStatus": status.save_status,
+            "saveVersion": status.save_version,
+            "state": status.state,
+        },
+    )
 
 
 @dataclass(frozen=True, slots=True)

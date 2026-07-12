@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import cast
 
 import pygame
 import pytest
@@ -19,6 +22,8 @@ from windsprig.platform import (
     StorageCapabilities,
     StorageService,
     TimeService,
+    WebTestStatus,
+    publish_test_status,
 )
 from windsprig.platform.native import PygameDisplayService, PygameLifecycleService, PygameTimeService
 from windsprig.platform.web import (
@@ -85,12 +90,43 @@ class FakeNavigator:
         return []
 
 
+class FakeJson:
+    def parse(self, raw: str) -> dict[str, object]:
+        payload = json.loads(raw)
+        assert isinstance(payload, dict)
+        return cast(dict[str, object], payload)
+
+
+@dataclass
+class FakeObjectConstructor:
+    freeze_count: int = 0
+
+    def freeze(self, payload: dict[str, object]) -> MappingProxyType[str, object]:
+        self.freeze_count += 1
+        return MappingProxyType(dict(payload))
+
+
 class FakeWindow:
     def __init__(self) -> None:
         self.localStorage = FakeLocalStorage({"foreign:save.json": "untouched"})
         self.document = FakeDocument()
         self.location = FakeLocation()
         self.navigator = FakeNavigator()
+        self.JSON = FakeJson()
+        self.Object = FakeObjectConstructor()
+
+
+@dataclass
+class RecordingDiagnosticBridge:
+    e2e_value: str | None
+    published: list[tuple[str, dict[str, object]]] = field(default_factory=list)
+
+    def query_param(self, name: str) -> str | None:
+        assert name == "e2e"
+        return self.e2e_value
+
+    def publish_diagnostic(self, name: str, payload: dict[str, object]) -> None:
+        self.published.append((name, dict(payload)))
 
 
 class FailingLocalStorage:
@@ -194,6 +230,79 @@ def test_bridge_denied_fullscreen_returns_false() -> None:
     window.document.documentElement = ThrowingFullscreenElement()
 
     assert PygbagBrowserBridge(window).request_fullscreen() is False
+
+
+def test_bridge_publishes_one_frozen_native_js_primitive_snapshot() -> None:
+    window = FakeWindow()
+
+    PygbagBrowserBridge(window).publish_diagnostic(
+        "__WINSPRIG_TEST__",
+        {"state": "world_map", "saveVersion": 2, "ready": True},
+    )
+
+    assert dict(window.__WINSPRIG_TEST__) == {  # type: ignore[attr-defined]
+        "state": "world_map",
+        "saveVersion": 2,
+        "ready": True,
+    }
+    assert isinstance(window.__WINSPRIG_TEST__, MappingProxyType)  # type: ignore[attr-defined]
+    assert window.Object.freeze_count == 1
+
+
+@pytest.mark.parametrize("invalid", (None, 1.5, (), [], {}, object()))
+def test_bridge_rejects_nonprimitive_diagnostic_payload_transactionally(invalid: object) -> None:
+    window = FakeWindow()
+    bridge = PygbagBrowserBridge(window)
+    bridge.publish_diagnostic("__WINSPRIG_TEST__", {"state": "world_map"})
+    published = window.__WINSPRIG_TEST__  # type: ignore[attr-defined]
+
+    with pytest.raises(TypeError, match="string, integer, or boolean"):
+        bridge.publish_diagnostic("__WINSPRIG_TEST__", {"state": invalid})  # type: ignore[dict-item]
+
+    assert window.__WINSPRIG_TEST__ is published  # type: ignore[attr-defined]
+    assert window.Object.freeze_count == 1
+
+
+def test_bridge_rejects_any_noncanonical_diagnostic_name() -> None:
+    window = FakeWindow()
+
+    with pytest.raises(ValueError, match="diagnostic name"):
+        PygbagBrowserBridge(window).publish_diagnostic("location", {"state": "world_map"})
+
+    assert isinstance(window.location, FakeLocation)
+
+
+@pytest.mark.parametrize("query_value", (None, "", "0", "true", "01"))
+def test_test_status_is_disabled_without_exact_e2e_opt_in(query_value: str | None) -> None:
+    status = WebTestStatus("world_map", 2, "ready", 0, 0)
+    bridge = RecordingDiagnosticBridge(query_value)
+
+    publish_test_status(cast(BrowserBridge, bridge), status)
+    publish_test_status(None, status)
+
+    assert bridge.published == []
+
+
+def test_test_status_publishes_only_the_read_only_product_summary() -> None:
+    bridge = RecordingDiagnosticBridge("1")
+
+    publish_test_status(
+        cast(BrowserBridge, bridge),
+        WebTestStatus("playing", 2, "saved", 3, 1),
+    )
+
+    assert bridge.published == [
+        (
+            "__WINSPRIG_TEST__",
+            {
+                "activePlayers": 1,
+                "clearedStages": 3,
+                "saveStatus": "saved",
+                "saveVersion": 2,
+                "state": "playing",
+            },
+        )
+    ]
 
 
 @pytest.mark.parametrize(
