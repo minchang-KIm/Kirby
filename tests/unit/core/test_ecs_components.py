@@ -28,6 +28,17 @@ class _VolatileHashLeaf:
         return f"volatile-{type(self).repr_calls}"
 
 
+class _VolatileHashComponent:
+    """Unsupported top-level component whose repr exposes accidental fallback use."""
+
+    __slots__ = ()
+    repr_calls = 0
+
+    def __repr__(self) -> str:
+        type(self).repr_calls += 1
+        return f"volatile-component-{type(self).repr_calls}"
+
+
 def test_world_remove_component_releases_one_component_without_touching_entity() -> None:
     world = World()
     entity_id = world.create_entity()
@@ -118,3 +129,18 @@ def test_world_hash_rejects_unsupported_nested_leaf_without_repr_fallback() -> N
         world.world_hash()
 
     assert _VolatileHashLeaf.repr_calls == 0
+
+
+def test_world_hash_rejects_unsupported_component_without_repr_fallback() -> None:
+    _VolatileHashComponent.repr_calls = 0
+    world = World(seed=8)
+    entity_id = world.create_entity()
+    world.add_component(entity_id, _VolatileHashComponent())
+
+    with pytest.raises(
+        TypeError,
+        match=r"^unsupported deterministic hash value: _VolatileHashComponent$",
+    ):
+        world.world_hash()
+
+    assert _VolatileHashComponent.repr_calls == 0

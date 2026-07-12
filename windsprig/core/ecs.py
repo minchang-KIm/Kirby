@@ -188,7 +188,10 @@ def _serialize_component(component: object) -> object:
         return _serialize_value(asdict(cast(Any, component)))
     if hasattr(component, "__dict__"):
         return _serialize_value(dict(vars(component)))
-    return repr(component)
+    # WHY: repr can contain identity or call-history state and therefore cannot
+    # participate in a replay hash. The strict value serializer accepts only
+    # canonical JSON-shaped primitives and rejects every unsupported component.
+    return _serialize_value(component)
 
 
 def _serialize_value(value: object) -> object:
