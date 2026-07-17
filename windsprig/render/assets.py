@@ -111,9 +111,19 @@ def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _decoded_image(payload: bytes, name: str) -> pygame.Surface:
+def _decoded_image(path: Path, payload: bytes, name: str) -> pygame.Surface:
     try:
         return pygame.image.load(io.BytesIO(payload), name)
+    except RuntimeError:
+        # pygame's web (pygbag) backend cannot decode from an in-memory file
+        # object; it raises RuntimeError("can't access resource on platform").
+        # The path was validated as a safe regular file by the caller, so decode
+        # it directly, which works on both native and web. The dimension and
+        # decoded-pixel-hash checks at the call site still enforce integrity.
+        try:
+            return pygame.image.load(str(path))
+        except (OSError, pygame.error, ValueError, RuntimeError) as error:
+            raise ValueError("unreadable PNG") from error
     except (OSError, pygame.error, ValueError) as error:
         raise ValueError("unreadable PNG") from error
 
@@ -231,7 +241,7 @@ class AssetCatalog:
             try:
                 path = _safe_relative_path(lexical_root, art_spec.path)
                 payload = _read_regular_file(path)
-                surface = _decoded_image(payload, path.name)
+                surface = _decoded_image(path, payload, path.name)
                 if surface.get_size() != (art_spec.width, art_spec.height):
                     expected_size = (art_spec.width, art_spec.height)
                     raise ValueError(f"invalid dimensions: expected {expected_size}, received {surface.get_size()}")
