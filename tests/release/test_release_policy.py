@@ -302,6 +302,24 @@ def test_release_workflow_is_tag_bound_and_publishes_checksums() -> None:
     assert "gh release create" in release
     assert "*.sha256" in release
     assert "github.ref_name" in release
+    assert "verify-and-package:" in release
+    assert "publish-release:" in release
+    assert "needs: verify-and-package" in release
+
+
+def test_release_workflow_scopes_write_token_and_never_interpolates_tag_in_shell() -> None:
+    release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    run_blocks = re.findall(r"\n\s+run:\s*(?:\|\s*\n(?:(?:\s{10,}.*\n?)+)|[^\n]+)", release)
+
+    assert release.count("GH_TOKEN: ${{ github.token }}") == 1
+    assert release.count("REF_NAME: ${{ github.ref_name }}") == 2
+    assert all("${{ github.ref_name }}" not in block for block in run_blocks)
+    assert "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" in release
+    publish = release.split("  publish-release:", maxsplit=1)[1]
+    assert "contents: write" in publish
+    assert "uv run" not in publish
+    assert "pytest" not in publish
+    assert "tools/" not in publish
 
 
 @pytest.mark.parametrize("relative", [".github/workflows/ci.yml", ".github/workflows/release.yml"])

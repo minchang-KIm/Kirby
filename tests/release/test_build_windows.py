@@ -16,6 +16,7 @@ from tools.build_windows import (
     release_build_environment,
     require_clean_release_source,
     stage_windows_release,
+    stage_windows_source,
 )
 from tools.release_common import BuildIdentity, sha256_file
 from windsprig.config import GameConfig
@@ -100,7 +101,10 @@ def test_windows_builder_rejects_modified_and_untracked_source(tmp_path: Path) -
         require_clean_release_source(tmp_path)
 
 
-def test_windows_builder_pins_hash_order_timestamp_and_local_cache() -> None:
+def test_windows_builder_pins_hash_order_timestamp_and_local_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PYTHONOPTIMIZE", "1")
+    monkeypatch.setenv("PYTHONPATH", "malicious-path")
+    monkeypatch.setenv("PYTHONHOME", "malicious-home")
     environment = release_build_environment(ROOT)
     commit_time = subprocess.run(
         ["git", "show", "-s", "--format=%ct", "HEAD"],
@@ -113,6 +117,57 @@ def test_windows_builder_pins_hash_order_timestamp_and_local_cache() -> None:
     assert environment["PYTHONHASHSEED"] == "0"
     assert environment["SOURCE_DATE_EPOCH"] == commit_time
     assert environment["PYINSTALLER_CONFIG_DIR"] == str(ROOT / "build/pyinstaller-config")
+    assert environment["PYTHONOPTIMIZE"] == "0"
+    assert environment["PYTHONNOUSERSITE"] == "1"
+    assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert "PYTHONPATH" not in environment
+    assert "PYTHONHOME" not in environment
+
+
+def test_windows_source_stage_reads_only_regular_tracked_head_files(tmp_path: Path) -> None:
+    root = tmp_path / "source"
+    files = {
+        "CREDITS.md": "Credits\n",
+        "LICENSE": "MIT\n",
+        "assets/branding/windsprig.ico": "icon",
+        "assets/generated/ui/favicon.png": "png",
+        "packaging/version_info.txt": "version",
+        "packaging/windows.spec": "spec",
+        "windsprig/__main__.py": "print('Windsprig')\n",
+        "windsprig/content/catalog.json": "{}\n",
+    }
+    for relative, payload in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(payload, encoding="utf-8")
+    (root / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+    subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Windsprig Test",
+            "-c",
+            "user.email=windsprig@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "source",
+        ],
+        cwd=root,
+        check=True,
+    )
+    ignored = root / "windsprig/content/__pycache__/catalog.cpython-312.pyc"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_bytes(b"ignored bytecode")
+
+    staged = tmp_path / "staged"
+    members = stage_windows_source(root, staged)
+
+    assert set(members) == set(files)
+    assert not tuple(staged.rglob("*.pyc"))
+    assert (staged / "windsprig/content/catalog.json").read_text(encoding="utf-8") == "{}\n"
 
 
 def test_native_module_help_lists_isolated_smoke_arguments() -> None:
@@ -207,7 +262,10 @@ def test_windows_builder_invokes_current_python_and_packaged_smoke() -> None:
     builder = (ROOT / "tools/build_windows.py").read_text(encoding="utf-8")
 
     assert "sys.executable" in builder
-    assert '"-m", "PyInstaller"' in builder
+    assert '"PyInstaller"' in builder
+    assert "stage_windows_source(ROOT, stage)" in builder
+    assert "cwd=stage" in builder
+    assert "python -I tools/build_windows.py" in builder
     assert '"--smoke-test"' in builder
     assert '"--data-dir"' in builder
     assert "TemporaryDirectory" in builder
