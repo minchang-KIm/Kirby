@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "python -m pip install uv==0.11.28 && uv sync --all-extras --locked",
+  "installCommand": "python -m pip install --break-system-packages uv==0.11.28 && uv sync --all-extras --locked",
   "buildCommand": "uv run python -I tools/build_web.py --output dist/web",
   "outputDirectory": "dist/web",
   "cleanUrls": true,
