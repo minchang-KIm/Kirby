@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .combat import Hitbox, HitEvent, Hurtbox
 from .config import GameConfig
 from .input import InputState
 from .math2d import Rect, Vec2, move_towards
-from .physics import PhysicsBody, TileCollisionWorld, move_body
+from .physics import PhysicsBody, move_body
+
+if TYPE_CHECKING:
+    from .entities import WorldState
 
 
 @dataclass
@@ -43,7 +47,7 @@ class Player:
     def set_input(self, input_state: InputState) -> None:
         self._input_state = input_state
 
-    def update(self, dt_ms: int, world: WorldStateLike) -> None:
+    def update(self, dt_ms: int, world: WorldState) -> None:
         if self.dead:
             return
 
@@ -180,7 +184,3 @@ class Player:
         self._attack_ms = 0
         self._hurt_ms = 0
         self._invulnerable_ms = 500
-
-
-class WorldStateLike:
-    collision_map: TileCollisionWorld

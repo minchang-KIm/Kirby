@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .combat import Hitbox, HitEvent, Hurtbox
 from .math2d import Rect, Vec2, move_towards
 from .physics import PhysicsBody, move_body
+
+if TYPE_CHECKING:
+    from .entities import WorldState
 
 _id_iter = itertools.count(100)
 
@@ -18,7 +22,7 @@ class Enemy:
     spawn: tuple[float, float]
     patrol_left: float
     patrol_right: float
-    entity_id: int | None = None
+    entity_id: int = field(default_factory=lambda: next(_id_iter))
     team: str = "enemy"
     dead: bool = field(default=False, init=False)
     state: str = field(default="patrol", init=False)
@@ -32,8 +36,6 @@ class Enemy:
     _invulnerable_ms: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
-        if self.entity_id is None:
-            self.entity_id = next(_id_iter)
         if self.kind == "brute":
             w, h = 30, 30
             self.max_hp = 4
@@ -47,7 +49,7 @@ class Enemy:
         self.hp = self.max_hp
         self.body = PhysicsBody(rect=Rect(self.spawn[0], self.spawn[1], w, h), velocity=Vec2(0.0, 0.0))
 
-    def update(self, dt_ms: int, world: WorldStateLike) -> None:
+    def update(self, dt_ms: int, world: WorldState) -> None:
         if self.dead:
             return
 
@@ -138,9 +140,3 @@ class Enemy:
             self.hp = 0
             self.dead = True
             self.state = "dead"
-
-
-class WorldStateLike:
-    player_id: int
-    entity_index: dict[int, object]
-    collision_map: object

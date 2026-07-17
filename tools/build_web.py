@@ -30,6 +30,7 @@ from importlib.metadata import version
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Final, TypedDict
 
+
 def _normalized_tool_code(code: types.CodeType) -> types.CodeType:
     """Erase path variance while retaining every executable code field."""
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from .combat import HitEvent
+from .combat import Hitbox, HitEvent, Hurtbox
 from .math2d import Rect
 
 if TYPE_CHECKING:
@@ -36,16 +36,8 @@ class Entity(Protocol):
     def on_hit(self, hit: HitEvent) -> None:
         ...
 
-    def get_hurtbox(self) -> HurtboxLike:
+    def get_hurtbox(self) -> Hurtbox:
         ...
 
-    def get_hitboxes(self, frame_index: int) -> list[HitboxLike]:
+    def get_hitboxes(self, frame_index: int) -> list[Hitbox]:
         ...
-
-
-class HitboxLike(Protocol):
-    ...
-
-
-class HurtboxLike(Protocol):
-    ...

@@ -7,10 +7,10 @@ import json
 import random
 from dataclasses import dataclass
 
-from .combat import CombatResolver
+from .combat import CombatResolver, Hitbox, Hurtbox
 from .config import GameConfig
 from .enemies import Enemy
-from .entities import WorldState
+from .entities import Entity, WorldState
 from .input import InputState
 from .level import LevelData
 from .math2d import Rect
@@ -53,8 +53,8 @@ class Simulation:
         self.paused = False
         self._dropped_enemy_loot: set[int] = set()
 
-    def entity_index(self) -> dict[int, object]:
-        entities: dict[int, object] = {self.player.entity_id: self.player}
+    def entity_index(self) -> dict[int, Entity]:
+        entities: dict[int, Entity] = {self.player.entity_id: self.player}
         for enemy in self.enemies:
             entities[enemy.entity_id] = enemy
         return entities
@@ -106,13 +106,13 @@ class Simulation:
         self._handle_enemy_loot()
         self.lost = self.player.dead
 
-    def _build_hitboxes(self):
+    def _build_hitboxes(self) -> list[Hitbox]:
         hitboxes = self.player.get_hitboxes(self.frame_index)
         for enemy in self.enemies:
             hitboxes.extend(enemy.get_hitboxes(self.frame_index))
         return hitboxes
 
-    def _build_hurtboxes(self):
+    def _build_hurtboxes(self) -> list[Hurtbox]:
         hurtboxes = [self.player.get_hurtbox()]
         for enemy in self.enemies:
             if not enemy.dead:
