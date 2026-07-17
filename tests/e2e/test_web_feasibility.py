@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 
+import pytest
 from playwright.sync_api import ConsoleMessage, Page, expect
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +18,13 @@ def signal(page: Page, name: str) -> str | None:
 
 
 def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> None:
+    report_path = _ROOT / "artifacts" / "web-build.json"
+    if not report_path.is_file():
+        pytest.skip("requires a probe artifact: run tools/build_web.py --output dist/web --probe first")
+    build_report = json.loads(report_path.read_text(encoding="utf-8"))
+    if build_report["probe"] is not True:
+        pytest.skip("requires a probe build from tools/build_web.py --probe")
+
     errors: list[str] = []
 
     def record_console(message: ConsoleMessage) -> None:
@@ -97,7 +105,6 @@ def test_pygbag_boot_input_audio_stage_and_save(page: Page, web_server: str) -> 
     )
     fps = float(signal(page, "fps") or "0")
 
-    build_report = json.loads((_ROOT / "artifacts" / "web-build.json").read_text(encoding="utf-8"))
     report = {
         "audio": audio_status in {"ready", "muted"},
         "audio_status": audio_status,
