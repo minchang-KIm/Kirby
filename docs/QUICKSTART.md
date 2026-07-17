@@ -14,7 +14,7 @@ guide gets one to four players into the game in a couple of minutes.
 
 **Windows**
 1. Download the latest build from the
-   [releases page](https://github.com/minchang-KIm/Kirby/releases)
+   [releases page](https://github.com/minchang-KIm/windsprig/releases)
    (Windows 10+, x64).
 2. Unzip and run the executable. No install or account is needed.
 3. Saves live under `%LOCALAPPDATA%/Windsprig`.

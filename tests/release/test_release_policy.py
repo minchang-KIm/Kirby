@@ -85,7 +85,11 @@ def test_vercel_configuration_uses_only_the_current_static_contract() -> None:
 def test_vercel_build_is_pinned_locked_and_stages_only_the_web_output() -> None:
     config = _load_vercel_config()
 
-    assert config["installCommand"] == ("python -m pip install uv==0.11.28 && uv sync --all-extras --locked")
+    # Vercel's build image ships a uv-managed Python, so bootstrapping the pinned
+    # uv requires the PEP 668 override; without it pip aborts on the build image.
+    assert config["installCommand"] == (
+        "python -m pip install --break-system-packages uv==0.11.28 && uv sync --all-extras --locked"
+    )
     assert config["buildCommand"] == "uv run python -I tools/build_web.py --output dist/web"
     assert config["outputDirectory"] == "dist/web"
     assert "latest" not in config["installCommand"].lower()
@@ -167,7 +171,6 @@ def test_vercel_source_upload_excludes_generated_and_private_state() -> None:
         ".coverage.*",
         ".env",
         ".env.*",
-        ".git",
         ".github",
         ".hypothesis",
         ".idea",
@@ -204,6 +207,10 @@ def test_vercel_source_upload_excludes_generated_and_private_state() -> None:
         "venv",
     }
     assert required_patterns <= set(patterns)
+
+    # .git must NOT be excluded from the Vercel upload: tools/build_web.py runs a
+    # git-based provenance preflight during the web build and needs the repository.
+    assert ".git" not in set(patterns)
 
     excluded_samples = (
         ".env.production",

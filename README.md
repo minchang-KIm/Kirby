@@ -2,7 +2,7 @@
 
 Ride the living wind, harmonize enemy echoes, and restore six hand-crafted sky worlds in a storybook action-platform adventure for one to four local players.
 
-[Play in your browser](https://windsprig.vercel.app/) · [Windows releases](https://github.com/minchang-KIm/Kirby/releases) · [Support](SUPPORT.md) · [Privacy](PRIVACY.md) · [Security](SECURITY.md)
+[Play in your browser](https://windsprig.vercel.app/) · [Windows releases](https://github.com/minchang-KIm/windsprig/releases) · [Support](SUPPORT.md) · [Privacy](PRIVACY.md) · [Security](SECURITY.md)
 
 Windsprig is an original local action-platform game starring Sprig, a mint-and-gold seed spirit with a wind-sail scarf. Draw nearby echoes into a vortex, launch them through hazards, or harmonize with their resonance to carry one of six abilities through 30 stages, six multi-phase bosses, and 90 hidden Wind Motes.
 
