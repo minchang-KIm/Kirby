@@ -1,84 +1,64 @@
-# Kirby RTD Study Clone (ECS + OOP)
+# Windsprig: Echoes of the Gale
 
-Kirby’s Return to Dream Land 계열 메커닉을 학습 목적으로 재구성한 2D 액션 플랫폼 프로젝트입니다.
+Ride the living wind, harmonize enemy echoes, and restore six hand-crafted sky worlds in a storybook action-platform adventure for one to four local players.
 
-핵심 목표:
-- 흡입 -> 삼키기/뱉기 -> 카피 능력 전환 루프 구현
-- 월드맵 진행 + 해금 + 저장 구조 구현
-- 로컬 4인(키보드 2인 + 게임패드 2인) 입력 구조 구현
-- 디자인 패턴/객체지향 학습 자료와 코드 동시 제공
+[Play in your browser](https://windsprig.vercel.app/) · [Windows releases](https://github.com/minchang-KIm/windsprig/releases) · [Support](SUPPORT.md) · [Privacy](PRIVACY.md) · [Security](SECURITY.md)
 
-## 구현 상태
+Windsprig is an original local action-platform game starring Sprig, a mint-and-gold seed spirit with a wind-sail scarf. Draw nearby echoes into a vortex, launch them through hazards, or harmonize with their resonance to carry one of six abilities through 30 stages, six multi-phase bosses, and 90 hidden Wind Motes.
 
-- ECS 하이브리드 런타임(`World + SystemScheduler`) 적용
-- Command 패턴 입력 계층(`InputCommand`, `InputFrame`, 디바이스 mux) 적용
-- Ability Strategy 레지스트리(데이터 드리븐 JSON) 적용
-- 6월드 x 5노드(총 30 스테이지) 캠페인 카탈로그/월드맵 데이터 적용
-- Save 스키마(`profiles[3]`, `unlocked_worlds`, `cleared_nodes`, `energy_spheres`, `best_times`) 적용
-- 단위/통합 테스트에서 결정론 해시 및 진행/저장 규칙 검증
+## Play requirements
 
-## 빠른 실행
+- Browser: desktop Chromium, a viewport of at least 1024×576, and a physical keyboard or compatible gamepad.
+- Windows: Windows 10 or newer, x64, and a physical keyboard or XInput-compatible gamepad.
+- Local co-op: one to four joined players sharing one display. Only joined players affect gameplay, camera, HUD, and goals.
+- Saves are local. Browser profiles remain in that browser; Windows profiles remain under `%LOCALAPPDATA%/Windsprig`.
+- No account or telemetry is used.
 
-1. `uv` 설치
+## Controls
+
+| Action | Player 1 keyboard | Player 2 keyboard | Gamepad |
+| --- | --- | --- | --- |
+| Move / navigate | `A` / `D` | `Left` / `Right` | Left stick / D-pad |
+| Jump / hover | `W` | `Up` | South face button |
+| Draw / release | Hold / release `S` | Hold / release `Down` | West face button |
+| Use ability | `F` | `.` | North face button |
+| Guard | `G` | `/` | Left bumper |
+| Dodge | `H` | `Right Shift` | East face button |
+| Drop ability | `T` | `,` | Right bumper |
+| Confirm / gather | `Enter` | `Enter` | South face button |
+| Back / pause | `Esc` | `Esc` | Menu button |
+
+Players 3 and 4 require compatible gamepads. The Controls screen always shows the active bindings and join guidance.
+
+## Accessibility and languages
+
+Windsprig includes English and Korean, keyboard and gamepad control references, remappable native gamepad bindings, hold/toggle options for draw and guard, reduced motion, screen-shake control, master/music/SFX volume controls, mute, fullscreen/windowed display, integer scaling, redundant icon/pattern/text HUD cues, and high-contrast gameplay UI.
+
+## Develop and verify
+
+Python 3.12 or 3.13 is supported. The lockfile is authoritative.
+
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv sync --all-extras --locked
+uv run --locked --no-sync python -m windsprig
+uv run --locked --no-sync pytest -q
+uv run --locked --no-sync ruff check .
+uv run --locked --no-sync mypy windsprig/platform windsprig/input windsprig/meta windsprig/app.py windsprig/screens tools
+uv run --locked --no-sync python tools/validate_content.py
+uv run --locked --no-sync python -I tools/build_web.py --output dist/web
 ```
 
-2. 가상환경/의존성 설치
-```powershell
-python -m uv venv
-python -m uv pip install --python .venv\Scripts\python.exe -r requirements-dev.txt
-```
+The Windows release builder and packaged smoke test are documented by `python tools/build_windows.py --help` once the desktop packaging extras are installed.
 
-3. 게임 실행
-```powershell
-python -m uv run python -m kirby_clone
-```
+## Architecture and provenance
 
-4. 테스트 실행
-```powershell
-python -m uv run pytest -q
-```
+- `windsprig/core/`: deterministic ECS, events, fixed-step time, and random-number ownership.
+- `windsprig/gameplay/`: the production stage runtime, abilities, systems, snapshots, and sessions.
+- `windsprig/input/`: device-independent commands, bindings, rosters, and routing.
+- `windsprig/render/`: logical display, camera, animation, effects, HUD, and renderer.
+- `windsprig/meta/`: profiles, progression, completion, saves, and migrations.
+- `windsprig/content/`: the canonical bilingual campaign and gameplay data.
 
-5. 패키징
-```powershell
-python -m uv run pyinstaller build.spec --noconfirm --clean
-```
+All shipped art and audio are original deterministic Windsprig project assets. The Korean font is a pinned, licensed Noto Sans KR subset. See [asset and font provenance](assets/LICENSES.md), [credits](CREDITS.md), and the [code-study conventions](docs/development/code-conventions.md).
 
-## 기본 조작
-
-- 월드맵:
-  - `Left/Right`, `A/D`: 노드 선택
-  - `Enter`: 스테이지 시작
-  - `Esc`: 종료
-- 스테이지:
-  - `Esc`: 월드맵 복귀
-  - `R`: 스테이지 재시작
-
-플레이어 키맵:
-- P1: `A/D` 이동, `W` 점프/호버, `S` 흡입(눌렀다 떼기), `F` 능력 사용, `G` 가드, `H` 회피, `T` 능력 버리기
-- P2: `Left/Right` 이동, `Up` 점프/호버, `Down` 흡입, `.` 능력 사용, `/` 가드, `Right Shift` 회피, `,` 능력 버리기
-- P3/P4: 게임패드(기본 Xbox 버튼 매핑)
-
-## 주요 디렉터리
-
-- `kirby_clone/core/`: ECS, 이벤트 버스, 고정 시간 스텝, RNG
-- `kirby_clone/input/`: 명령 객체, 키바인딩, 디바이스 입력 수집
-- `kirby_clone/gameplay/`: 컴포넌트, 시스템, 능력 전략, 엔티티 팩토리, 런타임
-- `kirby_clone/content/`: 캠페인/능력 데이터(JSON)
-- `kirby_clone/meta/`: 월드맵 해금 규칙, 저장/완료 추적
-- `docs/kr/`: 패턴 설명, 다이어그램, 실습 과제
-- `tests/`: 단위/통합 테스트
-
-## 학습 문서
-
-- 패턴 개요: [docs/kr/README.md](docs/kr/README.md)
-- 다이어그램: [docs/kr/diagrams.md](docs/kr/diagrams.md)
-- 실습 과제: `docs/kr/labs/`
-
-## 법적 고지
-
-- 본 저장소는 학습 목적의 팬 프로젝트 구조 예시입니다.
-- Nintendo/Kirby 원저작권 자산은 포함하지 않습니다.
-- 팬에셋 사용 시 비공개 개인 학습용으로만 유지하고 외부 배포하지 마세요.
-- 자세한 정책은 [assets/LICENSES.md](assets/LICENSES.md) 참고.
+Windsprig uses only its original characters, names, art, audio, levels, and copy. Code is available under the [MIT License](LICENSE).

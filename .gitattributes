@@ -1,0 +1,19 @@
+windsprig/content/campaign.json text eol=lf
+windsprig/content/rewards.json text eol=lf
+windsprig/content/bosses.json text eol=lf
+windsprig/content/strings.en.json text eol=lf
+windsprig/content/strings.ko.json text eol=lf
+windsprig/content/assets.json text eol=lf
+assets/fonts/NotoSansKR[[]wght].ttf binary
+assets/fonts/WindsprigSansKR.ttf binary
+assets/fonts/OFL-NotoSansKR.txt binary
+assets/generated/**/*.png binary
+assets/generated/art-provenance.json text eol=lf
+assets/generated/audio/**/*.wav binary
+assets/generated/audio-provenance.json text eol=lf
+web/*.html text eol=lf
+web/*.js text eol=lf
+web/*.json text eol=lf
+web/*.py text eol=lf
+web/*.tmpl text eol=lf
+web/*.webmanifest text eol=lf

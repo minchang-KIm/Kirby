@@ -1,0 +1,826 @@
+{
+  "art": {
+    "boss.crucible_crab": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/crucible_crab.png",
+      "pixel_sha256": "000efa0b4871ab3a8f3c55bb68b3742040cd06853f7bee17852f84efd3bc0892",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.luma_eel": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/luma_eel.png",
+      "pixel_sha256": "7286b5c13c73d44b8666bb016dde23b5a077a953246da8eaa180801715ce460a",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.prism_warden": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/prism_warden.png",
+      "pixel_sha256": "876b617054968ca0d8a3754c340d69f7bef183af2af2395d19bf32bd02a85971",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.rootjaw": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/rootjaw.png",
+      "pixel_sha256": "8f9c827faa33da5a3cb5b9ac57657b83152506315d9adaba8722c761f913ca59",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.the_stillness": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/the_stillness.png",
+      "pixel_sha256": "cf93c6b1c0732cc4687293ee8acf0e94a6f4918c9b9fe90b67693d4a92ef56ed",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "boss.volt_roc": {
+      "frames": 18,
+      "height": 384,
+      "mandatory": true,
+      "path": "generated/bosses/volt_roc.png",
+      "pixel_sha256": "d80a4c9af2a85f305959348e12aad79d1c2e80d47934433c838b4dbad0746f3d",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "enemy.bramblekin": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/bramblekin.png",
+      "pixel_sha256": "02fbb4b796e44684a1b4f0da860b694dcaecbd00f1e777cff6f81ffc9eb2e322",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.breezeling": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/breezeling.png",
+      "pixel_sha256": "4066bbc47dbd10c8fbcbb2006404c8c804914f1e5fd90cb29d0fb272169d0d3c",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.bubblefin": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/bubblefin.png",
+      "pixel_sha256": "5129c174ed4b415e02b09a9bb10e25dc9a4899d06243deb88963a7777cedb26e",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.cinderling": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/cinderling.png",
+      "pixel_sha256": "179c3768244c51201dbd03d334d34693b825f3a1163c7f100d4f0b0a4f49a320",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.coilbird": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/coilbird.png",
+      "pixel_sha256": "1d56db7586d9d05453bc082d24720008d3c752b31afff241cc769685080ec1db",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.gravitybud": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/gravitybud.png",
+      "pixel_sha256": "baa3f95b67bbdf359043cbd8ad1b1515d90b9e40b5123f5cc7ab970d0ec17930",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.hushshade": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/hushshade.png",
+      "pixel_sha256": "6fde573020b96e608d63b2e136c311dfd7ff58d60ecde624514cedd0b1cf6573",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.lockwarden": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/lockwarden.png",
+      "pixel_sha256": "29cfde69344bd6e73c108345656935ff5181e92b243958f758d05e4545ae0420",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.millmite": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/millmite.png",
+      "pixel_sha256": "6f97211ed423e96fa730c88daa492b7a85f501b9026e050718a831163b0e11b3",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.mirrormite": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/mirrormite.png",
+      "pixel_sha256": "f848e70156c72958d95a1babf32fd1674698a67ddbb84b3f5ffde065a644884f",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.moonjelly": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/moonjelly.png",
+      "pixel_sha256": "c5446fd4037848a395473b45511bfca8fa9b3ba38c282f20544681bff2c3292b",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.petalisk": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/petalisk.png",
+      "pixel_sha256": "5ee3438c20174f35f3d41f765bce97dec3fdd25d848737d8fd6ca3965ac8ce81",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.railrunner": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/railrunner.png",
+      "pixel_sha256": "b9d756d0097e7d1679796d84f6ec50f955794df7bd208d09da2cf39eb9aac4bc",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.riftling": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/riftling.png",
+      "pixel_sha256": "955beca622cf7ef7195b30bb09ae6b09810d13c9a1dcf5444432f979f3b78128",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.shellskiff": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/shellskiff.png",
+      "pixel_sha256": "d62694e5079217edb43f6e4675300fd38b6370174563f04cfe36977accbb4ee4",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.shutterimp": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/shutterimp.png",
+      "pixel_sha256": "010ae7400df8a13b54edb5b6b75cb5b0d11e63f54c557f078433b66be913870b",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.slagroller": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/slagroller.png",
+      "pixel_sha256": "5f12b3064f96d1ff2f92b117513b02c561a4969f19219ca931e9cac773660982",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "enemy.stormlens": {
+      "frames": 4,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/enemies/stormlens.png",
+      "pixel_sha256": "4520efecaf0ce2821b4166ebf5d44a128630745d6f3e6930f2965a00c08630a9",
+      "provenance": "procedural-vector-v1",
+      "width": 384
+    },
+    "player.sprig": {
+      "frames": 56,
+      "height": 672,
+      "mandatory": true,
+      "path": "generated/player/sprig.png",
+      "pixel_sha256": "268a2a797e4adc926d9f5bb934a63c986f90789f90e650946b1cc70514feb3bd",
+      "provenance": "procedural-vector-v1",
+      "width": 768
+    },
+    "ui.favicon": {
+      "frames": 1,
+      "height": 192,
+      "mandatory": true,
+      "path": "generated/ui/favicon.png",
+      "pixel_sha256": "29c8443f6c81e8f62c3bd8d7d05e28465385fce15b6c50496dd6cead1e17f07d",
+      "provenance": "procedural-vector-v1",
+      "width": 192
+    },
+    "ui.icons": {
+      "frames": 32,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/ui/icons.png",
+      "pixel_sha256": "9c6ced00ed8aa1e21e308843a1548d3310d7f5e9093a33e95dbf464be5cff5ff",
+      "provenance": "procedural-vector-v1",
+      "width": 2048
+    },
+    "ui.social_card": {
+      "frames": 1,
+      "height": 630,
+      "mandatory": true,
+      "path": "generated/ui/social-card.png",
+      "pixel_sha256": "8ee54d4fad5d2204ed15b98d2eb090aee953b179f8aff04a5fa85b057709c257",
+      "provenance": "procedural-vector-v1",
+      "width": 1200
+    },
+    "world.world_1.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-background.png",
+      "pixel_sha256": "60a288bbe373fffe2c8f9a0bbee8163189877c4e28091d440f7f63666f92b6ad",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_1.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-props.png",
+      "pixel_sha256": "f04160bccca32a6d3b070270068de927a7e22c1dcd559273042d60fc430bf28d",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_1.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-tiles.png",
+      "pixel_sha256": "c2d99854d03e33f2ef10a18cf4386796388322604207e7a7630e3843da3cb8b5",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_1.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_1-transition.png",
+      "pixel_sha256": "944c00b598c772eb620ee77436a62fd773b1418a44a4ec13b656b52ebed84494",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_2.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-background.png",
+      "pixel_sha256": "e411bba5be3e0a14fef30d17226ce6652f4808cf4e9a227da3eef9dd4e87c7fe",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_2.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-props.png",
+      "pixel_sha256": "ad01b1d403da53b8f77708b54711de3ee2911ec9d7fdef35f1c10fe7c12c317d",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_2.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-tiles.png",
+      "pixel_sha256": "d4133384bd58b8f47a1834fd6987041db56317fdc08a84bb8961bd228445d4a7",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_2.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_2-transition.png",
+      "pixel_sha256": "6a4fd2e9754a1c058d0e72e16bcb4d935105d2b19339e74b975d09bd63d5cf78",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_3.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-background.png",
+      "pixel_sha256": "c95b6153a99a7780c40895f412afec6a3e46983d6d014213f1c55412b81466e3",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_3.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-props.png",
+      "pixel_sha256": "822fe4b1858f877fd23c8671f08d2523e721f67c79c28c08226abfcc387b2977",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_3.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-tiles.png",
+      "pixel_sha256": "5f1cf65122130b81d4692824e4997d38b43a121c9a37a4d57ceee9c75e69154d",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_3.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_3-transition.png",
+      "pixel_sha256": "d260ee509d1665218011b1cac5ca53941ec101215a5d08a27f8f1b4ec0a60f29",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_4.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-background.png",
+      "pixel_sha256": "e4744547b290ac02e48bedf9359bac7a25a438480262943b5e6387bb23afcac8",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_4.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-props.png",
+      "pixel_sha256": "d48e9e97c7b4a8c994cf48220b6c2d3f6daa5ec1e55bf6a9a2b68063ad107d86",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_4.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-tiles.png",
+      "pixel_sha256": "e7e4e2a0c579b11cbf8fa6ed2eef273a45e1488e822452fb5b54636d2e94d6e9",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_4.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_4-transition.png",
+      "pixel_sha256": "281c1378523fb935da9a8f3ac6837465344623facae14a8c5ff34e309de36c3b",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_5.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-background.png",
+      "pixel_sha256": "f90b39767c04cf01c361ee3d8d052ea76bada926ddd908b72b44c7311d9e8202",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_5.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-props.png",
+      "pixel_sha256": "46d1fce174b5af7cb7313c290636105e1172afdb172520fa3de383bb9f984741",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_5.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-tiles.png",
+      "pixel_sha256": "425221050c55435295f965ae65e80fe89606ef8e3cabe352b6cc7d6e2223405f",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_5.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_5-transition.png",
+      "pixel_sha256": "854f3cfaa5dd306b68011b78b6faaccb06df46e59de70c9eae07b660204d2ecb",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_6.background": {
+      "frames": 4,
+      "height": 2880,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-background.png",
+      "pixel_sha256": "ac9e2258f8050b626c756552f9bd12a759fc65305748d8b0f6e686561ec67571",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    },
+    "world.world_6.props": {
+      "frames": 6,
+      "height": 96,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-props.png",
+      "pixel_sha256": "f49cdb259d4c475080ecec9387eaa0039d355e47865dd66dcde3c6f23e373524",
+      "provenance": "procedural-vector-v1",
+      "width": 576
+    },
+    "world.world_6.tiles": {
+      "frames": 8,
+      "height": 64,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-tiles.png",
+      "pixel_sha256": "16e9f04f779989e3f664459bbe9ad02c9a7b65a81bb942c5d1531d1c632995a1",
+      "provenance": "procedural-vector-v1",
+      "width": 512
+    },
+    "world.world_6.transition": {
+      "frames": 1,
+      "height": 720,
+      "mandatory": true,
+      "path": "generated/worlds/world_6-transition.png",
+      "pixel_sha256": "b3627e77b7a5ace33e37f335b4bddd079ca56a0e254b2397cd10e75e6421e4c6",
+      "provenance": "procedural-vector-v1",
+      "width": 1280
+    }
+  },
+  "audio": {
+    "music.boss.crucible_crab.p1": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-crucible_crab-p1.wav",
+      "sha256": "bdfb955799490825315473c1a78e374e24fe82b1eefc31b4c02e21bf86be4d00"
+    },
+    "music.boss.crucible_crab.p2": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-crucible_crab-p2.wav",
+      "sha256": "a78c5c28879fe4166a90ac36b582751f51e997c14db3a01d3371e2d911c52467"
+    },
+    "music.boss.crucible_crab.p3": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-crucible_crab-p3.wav",
+      "sha256": "3bd2cd71c8e432ca5c470c9feb835c27159005bfc84df1b23f84ae3ba3a43790"
+    },
+    "music.boss.luma_eel.p1": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-luma_eel-p1.wav",
+      "sha256": "85934677df80592c1b42c86b189ec16dfe62665fcd9b7c33179799bddddda744"
+    },
+    "music.boss.luma_eel.p2": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-luma_eel-p2.wav",
+      "sha256": "e00ab8ad76e9f6d85b368d36c241b2c4c4e074e131ea9326cea368fcbaae0e6e"
+    },
+    "music.boss.luma_eel.p3": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-luma_eel-p3.wav",
+      "sha256": "cfdb8fec1f4ebad418d81d66bf9d6060939f7c0512d7a1ab2b642977613d3ac1"
+    },
+    "music.boss.prism_warden.p1": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-prism_warden-p1.wav",
+      "sha256": "eaa03ac9c50f2720fd6117430d90d64f39a6f191cbe7571f578b7e867e4d891c"
+    },
+    "music.boss.prism_warden.p2": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-prism_warden-p2.wav",
+      "sha256": "263ef06ad5fd1db9af00583a539c6d3693de6a34370b2056a51ef025aa11544b"
+    },
+    "music.boss.prism_warden.p3": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-prism_warden-p3.wav",
+      "sha256": "177fd10c6780b2ee4734807f25b8705f6a23315a870fc3aa8f41f3003e138d71"
+    },
+    "music.boss.rootjaw.p1": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-rootjaw-p1.wav",
+      "sha256": "69fcd33a533fb004813594e1e6ed46d52d76aea3d86585b3e8d3083cb743f63c"
+    },
+    "music.boss.rootjaw.p2": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-rootjaw-p2.wav",
+      "sha256": "8c0c228fc7150bb64c2f69e32521654a7c2a8913ca637934dcb2217e7433b3b2"
+    },
+    "music.boss.rootjaw.p3": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-rootjaw-p3.wav",
+      "sha256": "6fae63034244cfaed713a832bf3a57a48f6914c8afe6dcbc4868d8e614ad855b"
+    },
+    "music.boss.the_stillness.p1": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-the_stillness-p1.wav",
+      "sha256": "52eff09b0f399cff0ef753b924fd496c23fc1e0c7c75e7b0c2beae71d52d513b"
+    },
+    "music.boss.the_stillness.p2": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-the_stillness-p2.wav",
+      "sha256": "d94260e9134502e884696f5858b2377b38618887d4caf74d0515458386f5b81e"
+    },
+    "music.boss.the_stillness.p3": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-the_stillness-p3.wav",
+      "sha256": "5eabf6e9a1a243d90343f6fb61e6eb3464e267f225f57373a8b36cf15bc9746e"
+    },
+    "music.boss.volt_roc.p1": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-volt_roc-p1.wav",
+      "sha256": "740c71e27d12b4e0294eb02c43cd545a35ab364a502f6581585b8263470f9439"
+    },
+    "music.boss.volt_roc.p2": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-volt_roc-p2.wav",
+      "sha256": "808ec2cfbca10168fde95d079ab7bf6bb7ec8d3ed916f2f000750796f3aa7aa6"
+    },
+    "music.boss.volt_roc.p3": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/boss-volt_roc-p3.wav",
+      "sha256": "e5e9607ed288a1c9efe0f15756d1a238014bf5908c50442599cee50dc15d36c7"
+    },
+    "music.credits": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/credits.wav",
+      "sha256": "08a4cda00089f84b45359210d66e539c0858326c228fda0607ba7dd178cae3b8"
+    },
+    "music.map": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/map.wav",
+      "sha256": "9dae9604b95e54f2d70c79863763b896d9ff66ab2dc23bd3b262b1664e080238"
+    },
+    "music.results": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/results.wav",
+      "sha256": "91adb8aeba27ada4a64276373c3082fb879b46825a7c6fa4c01c6b70b50ba518"
+    },
+    "music.title": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/title.wav",
+      "sha256": "43773849725d2637e0234ae9d30cca2045eeea2989fc2b449ba9a43f81fd6667"
+    },
+    "music.world.world_1": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/world-world_1.wav",
+      "sha256": "54c115a4d4f9191fc5f537c54061aa3962085d777ca718ebb6ced79371809545"
+    },
+    "music.world.world_2": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/world-world_2.wav",
+      "sha256": "903b205fcce1b69b7c3a4145c0f8429e8dd6eb3b4c2cd5f0ffc5c0bb6721913c"
+    },
+    "music.world.world_3": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/world-world_3.wav",
+      "sha256": "dd77d1b16205a76de5ed9847f67dc96124d3897ca6ecee70155a9857780a2199"
+    },
+    "music.world.world_4": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/world-world_4.wav",
+      "sha256": "63a59534c1b534aae49764bce3912bacfd023be369cbe086bd2fd427a89fd44c"
+    },
+    "music.world.world_5": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/world-world_5.wav",
+      "sha256": "8b61892534201b2eb05e4c95a6c0516140733d45f37c38f1433001ff2f5203ae"
+    },
+    "music.world.world_6": {
+      "bus": "music",
+      "mandatory": true,
+      "path": "generated/audio/music/world-world_6.wav",
+      "sha256": "ca2d92f62771e92bd690fee3a0c2b04792dbc97515520bd241cb80fadeb99185"
+    },
+    "sfx.ability.bloomblade": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ability-bloomblade.wav",
+      "sha256": "d0fa56b77afdfdbb9a35624164d59f77dba66e2adc3566b7d1f233e7221b1b31"
+    },
+    "sfx.ability.cinder": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ability-cinder.wav",
+      "sha256": "4845b356d9bf8ff348b01ff3eb709bc04aa7e8b4c1e734f04143b78b92ce279c"
+    },
+    "sfx.ability.galehook": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ability-galehook.wav",
+      "sha256": "7b2e74a1fba99e9cde29b1edeaa7925ebd022672d777aaf9238e77dbbf526637"
+    },
+    "sfx.ability.stoneheart": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ability-stoneheart.wav",
+      "sha256": "ad19a429a9f977fc9eb0ea4bc0d62648a0ea11cb6fc182cdb0071fc4bf8f1e9a"
+    },
+    "sfx.ability.tempest": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ability-tempest.wav",
+      "sha256": "f83a66530a975713b48fafdcae54949f06fbcf6736d53e79e0350ead8fee1993"
+    },
+    "sfx.ability.voltsong": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ability-voltsong.wav",
+      "sha256": "c31de7f2fe42270eb99b6bad3b873e468467a165a334fd2c2ccaf2b5c4e5fb0d"
+    },
+    "sfx.boss.crucible_crab": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/boss-crucible_crab.wav",
+      "sha256": "3610f158ed4ab7f0d02601a1bb8936a41989056d012c2fc5693f178aeea3d797"
+    },
+    "sfx.boss.luma_eel": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/boss-luma_eel.wav",
+      "sha256": "e018f8004ad027191953d4334efefbdae21e4b4337d54dcf67e22aab1380896d"
+    },
+    "sfx.boss.prism_warden": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/boss-prism_warden.wav",
+      "sha256": "da848ca44e1ded3268d158acb20213b1a6428ce2acee85cd926abf671ac1b0d3"
+    },
+    "sfx.boss.rootjaw": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/boss-rootjaw.wav",
+      "sha256": "7c2f390c5f350b38e311709243ca14fcb496b97a28d0d3468557dc91718bff53"
+    },
+    "sfx.boss.the_stillness": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/boss-the_stillness.wav",
+      "sha256": "4186d15cf56bd6ecb87604efbb04db990bf8c28ccd8c0b392f746f02c86c2b61"
+    },
+    "sfx.boss.volt_roc": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/boss-volt_roc.wav",
+      "sha256": "d5b240b08247acd664451473389ff9ecdd7c1321147ac797e6719957ff708e24"
+    },
+    "sfx.checkpoint": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/checkpoint.wav",
+      "sha256": "2f38aaa2a50b93b9a1ea3717f6b76b85168a717a33744383bcab12e6733a2e28"
+    },
+    "sfx.damage": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/damage.wav",
+      "sha256": "27512ca67c35448a2a370660064d0ca0a60e4eb024ea33362694ea60d524e964"
+    },
+    "sfx.defeat": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/defeat.wav",
+      "sha256": "6d2595f5f3d4d874124a99e525668ed1fb7e884a0f82963d984bd33824bf6f5b"
+    },
+    "sfx.dodge": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/dodge.wav",
+      "sha256": "82a481b7b2fc20f5402b5103dca3644833e9f0a4bf5beaeb8bd084673d1e2e56"
+    },
+    "sfx.draw.release": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/draw-release.wav",
+      "sha256": "c3022a8fae18cdf6c6fea69f334854813834d5c195cc60e6bcdb4d22b36c9c38"
+    },
+    "sfx.draw.start": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/draw-start.wav",
+      "sha256": "f4b8ad28afed37f7397b1bc57e85528f6429c1867e53650848b2137d974409bc"
+    },
+    "sfx.enemy.launch": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/enemy-launch.wav",
+      "sha256": "d31386584022b6dcc07df75341ecdf17db4f99bd0ba848a3fbf775a3995f9cef"
+    },
+    "sfx.goal": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/goal.wav",
+      "sha256": "9d0412235992cefd417c77fa1518fa2cb1952bdb1012dc9803d19bcecad651fa"
+    },
+    "sfx.guard": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/guard.wav",
+      "sha256": "71aa7e442f3dc5801c48997d4d051178314df151657697373d79926ba27552a7"
+    },
+    "sfx.harmonize": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/harmonize.wav",
+      "sha256": "aca691b826090683187376dc54a7aa849f6e95bbf4f054195624cd433ed7c551"
+    },
+    "sfx.mote": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/mote.wav",
+      "sha256": "2b9166ac31909a8a8bd0e3d7e91f7daf47e810ab621446c8b4ce5f919eba4fbf"
+    },
+    "sfx.player.hover": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/player-hover.wav",
+      "sha256": "065213fa8c74bb45226cc8002aaac79583c51bd371bd36ddabb3f68be8038ee6"
+    },
+    "sfx.player.jump": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/player-jump.wav",
+      "sha256": "31d0221e6cc76334142fdbbe9d20c32ff64e614e7c14ef9439a9dc2697ced4ec"
+    },
+    "sfx.save.ok": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/save-ok.wav",
+      "sha256": "60670c5f0d10681c7f01f9234e9146a74255dee588861152728cd3fc6192850b"
+    },
+    "sfx.ui.cancel": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ui-cancel.wav",
+      "sha256": "561cc3915e2f46a11a9da864df25e50be4605a1bc514df29f18341d82ee8e654"
+    },
+    "sfx.ui.confirm": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/ui-confirm.wav",
+      "sha256": "d780b317d9e409597db1b81daf6f61006b24b14ffd041b5b408767cbf7121d42"
+    },
+    "sfx.victory": {
+      "bus": "sfx",
+      "mandatory": true,
+      "path": "generated/audio/sfx/victory.wav",
+      "sha256": "399fe6aa916dba0e270ab47b82f12224c96cba87fe5acda46bc9e02acfd587fc"
+    }
+  },
+  "font": {
+    "license": "fonts/OFL-NotoSansKR.txt",
+    "mandatory": true,
+    "path": "fonts/WindsprigSansKR.ttf",
+    "sha256": "4211e2545aa28f0a9e6c72d61a9996663b3160f7b6ce54d6563e065543743f58"
+  },
+  "provenance_files": [
+    "generated/art-provenance.json",
+    "generated/audio-provenance.json"
+  ]
+}

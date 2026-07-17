@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv lock --check
+      - run: uv sync --all-extras --locked
+      - run: uv run --locked --no-sync ruff check .
+      - run: uv run --locked --no-sync mypy windsprig/platform windsprig/input windsprig/meta windsprig/app.py windsprig/screens tools
+      - run: uv run --locked --no-sync pytest tests/unit/test_public_identity.py -v
+      - run: uv run --locked --no-sync pytest tests/unit tests/integration tests/release -q --cov=windsprig --cov-branch --cov-report=term-missing --cov-fail-under=85
+      - run: uv run --locked --no-sync python tools/validate_content.py
+      - run: uv run --locked --no-sync python -c "from pathlib import Path; from tools.verify_release import verify_local_release; errors=verify_local_release(Path('.')); print(*errors, sep='\\n'); raise SystemExit(bool(errors))"
+
+  native-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.28"
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run --locked --no-sync pytest tests/unit tests/integration -q --cov=windsprig --cov-branch --cov-report=term-missing --cov-fail-under=85
+
+  web-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run --locked --no-sync playwright install --with-deps chromium
+      - run: uv run --locked --no-sync python -I tools/build_web.py --output dist/web --probe
+      - run: uv run --locked --no-sync pytest tests/e2e/test_web_feasibility.py -q
+      - run: uv run --locked --no-sync python -I tools/build_web.py --output dist/web
+      - run: uv run --locked --no-sync pytest tests/e2e/test_web_product.py tests/e2e/test_web_release_probe_boundary.py tests/e2e/test_web_pwa.py -q
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windsprig-web-${{ github.sha }}
+          path: dist/web
+          if-no-files-found: error
+          retention-days: 14
+      - if: always()
+        run: uv run --locked --no-sync python tools/evaluate_web_feasibility.py --write docs/feasibility/pygbag-0.9.3.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: windsprig-web-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/web-build.json
+            artifacts/browser-probe.json
+            docs/feasibility/pygbag-0.9.3.md
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows-artifact:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run --locked --no-sync pytest tests/release/test_build_windows.py -q
+      - run: uv run --locked --no-sync python tools/build_windows.py --output dist/release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windsprig-windows-${{ github.sha }}
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 14

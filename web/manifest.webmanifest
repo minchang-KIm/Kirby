@@ -1,0 +1,37 @@
+{
+  "background_color": "#071426",
+  "categories": [
+    "games"
+  ],
+  "description": "A storybook local-co-op action-platform adventure.",
+  "display": "fullscreen",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "icons": [
+    {
+      "purpose": "any maskable",
+      "sizes": "192x192",
+      "src": "/favicon.png",
+      "type": "image/png"
+    }
+  ],
+  "id": "/",
+  "lang": "en",
+  "name": "Windsprig: Echoes of the Gale",
+  "orientation": "landscape",
+  "scope": "/",
+  "screenshots": [
+    {
+      "form_factor": "wide",
+      "label": "Windsprig: Echoes of the Gale release artwork",
+      "sizes": "1200x630",
+      "src": "/social-card.png",
+      "type": "image/png"
+    }
+  ],
+  "short_name": "Windsprig",
+  "start_url": "/",
+  "theme_color": "#10233f"
+}

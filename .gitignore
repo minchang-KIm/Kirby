@@ -33,6 +33,7 @@ MANIFEST
 *.manifest
 *.spec
 !build.spec
+!packaging/windows.spec
 
 # Installer logs
 pip-log.txt
@@ -139,7 +140,8 @@ celerybeat.pid
 # Environments
 .env
 .envrc
-.venv
+.venv/
+.worktrees/
 env/
 venv/
 ENV/
@@ -183,8 +185,11 @@ cython_debug/
 # Learn more at https://abstra.io/docs
 .abstra/
 
+# Visual Studio
+.vs/
+
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 #  and can be added to the global gitignore or merged into this file. However, if you prefer, 
 #  you could uncomment the following to ignore the entire vscode folder
@@ -202,6 +207,22 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Windsprig generated feasibility artifacts
+artifacts/
+dist/
+build/web-stage/
+__pycache__/
+.pytest_cache/
+.coverage
+
+# Windsprig generated release and browser-test outputs
+dist/web/
+dist/release/
+web/build/
+.vercel/
+test-results/
+playwright-report/
 
 # Marimo
 marimo/_static/

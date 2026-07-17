@@ -4,15 +4,18 @@ import argparse
 import json
 from pathlib import Path
 
-from kirby_clone.input import InputState
-from kirby_clone.level import LevelLoader
-from kirby_clone.settings import GameConfig
-from kirby_clone.simulation import Simulation
+from windsprig.config import GameConfig
+from windsprig.input import InputState
+from windsprig.level import LevelLoader
+from windsprig.simulation import Simulation
 
 
 def _frame_to_input(frame: dict[str, object]) -> InputState:
+    move_x = frame.get("move_x", 0)
+    if not isinstance(move_x, int):
+        raise ValueError(f"replay frame move_x must be an integer: {move_x!r}")
     return InputState(
-        move_x=int(frame.get("move_x", 0)),
+        move_x=move_x,
         jump_pressed=bool(frame.get("jump_pressed", False)),
         jump_held=bool(frame.get("jump_held", False)),
         attack_pressed=bool(frame.get("attack_pressed", False)),

@@ -1,0 +1,415 @@
+from __future__ import annotations
+
+import asyncio
+import math
+import os
+import tempfile
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+from typing import cast
+
+import pygame
+
+from windsprig.audio.composition import load_canonical_sound_paths
+from windsprig.config import GameConfig
+from windsprig.platform.services import (
+    AudioBus,
+    AudioStatus,
+    DisplayCapabilities,
+    LifecycleEvent,
+    LifecycleKind,
+    PlatformCapabilities,
+    PlatformServices,
+    StorageCapabilities,
+)
+
+
+class NativeStorage:
+    def __init__(self, root: Path) -> None:
+        self.root = root.resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._resolved_root = self.root
+        self._capabilities = StorageCapabilities(persistent=True, atomic_write=True, backup=True)
+
+    @property
+    def capabilities(self) -> StorageCapabilities:
+        return self._capabilities
+
+    def _path(self, key: str) -> Path:
+        relative = Path(key)
+        if not key or relative.is_absolute() or relative.drive:
+            raise ValueError("storage key escapes storage root")
+        candidate = (self._resolved_root / relative).resolve()
+        if candidate == self._resolved_root or self._resolved_root not in candidate.parents:
+            raise ValueError("storage key escapes storage root")
+        return candidate
+
+    def read_text(self, key: str) -> str | None:
+        path = self._path(key)
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+
+    def write_text(self, key: str, value: str) -> None:
+        path = self._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            text=True,
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(value)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def delete(self, key: str) -> None:
+        self._path(key).unlink(missing_ok=True)
+
+    def keys(self, prefix: str) -> tuple[str, ...]:
+        keys: list[str] = []
+        for path in self.root.rglob("*"):
+            if not path.is_file():
+                continue
+            key = path.relative_to(self.root).as_posix()
+            try:
+                contained = self._path(key)
+            except ValueError:
+                continue
+            if contained.is_file() and key.startswith(prefix):
+                keys.append(key)
+        return tuple(sorted(keys))
+
+
+class PygameAudioService:
+    """Own mixer initialization, canonical sound decoding, and playback channels."""
+
+    def __init__(
+        self,
+        requires_gesture: bool,
+        sounds: Mapping[str, pygame.mixer.Sound] | None = None,
+        sound_paths_loader: Callable[[], Mapping[str, Path]] | None = None,
+    ) -> None:
+        if sounds is not None and sound_paths_loader is not None:
+            raise ValueError("provide injected sounds or a deferred sound-path loader, not both")
+        self.requires_gesture = requires_gesture
+        self._sounds = dict(sounds or {})
+        self._sound_paths_loader = sound_paths_loader
+        self._bus_volumes: dict[AudioBus, float] = {"music": 1.0, "sfx": 1.0}
+        self._user_muted = False
+        self._focus_paused = False
+        self._music_channel: pygame.mixer.Channel | None = None
+        self._current_music_cue: str | None = None
+        self._status = AudioStatus(ready=False, muted=True)
+
+    @property
+    def status(self) -> AudioStatus:
+        return self._status
+
+    async def initialize(self, after_user_gesture: bool = False) -> AudioStatus:
+        if self.requires_gesture and not after_user_gesture:
+            self._status = AudioStatus(ready=False, muted=True, error_code="gesture_required")
+            self._publish_status()
+            return self._status
+        try:
+            if pygame.mixer.get_init() is None:
+                pygame.mixer.init()
+        except pygame.error:
+            self._status = AudioStatus(ready=False, muted=True, error_code="audio_init_failed")
+        else:
+            decode_failed = False
+            try:
+                self._decode_deferred_sounds()
+            except Exception:
+                # A corrupt optional audio device/asset capability must not stop gameplay.
+                decode_failed = True
+                self._sounds.clear()
+                self._music_channel = None
+                self._current_music_cue = None
+                self._status = AudioStatus(
+                    ready=False,
+                    muted=True,
+                    error_code="audio_assets_invalid",
+                )
+            if not decode_failed:
+                if not self._sounds:
+                    self._status = AudioStatus(
+                        ready=False,
+                        muted=True,
+                        error_code="audio_assets_unavailable",
+                    )
+                else:
+                    pygame.mixer.set_reserved(1)
+                    self._music_channel = pygame.mixer.Channel(0)
+                    self._status = AudioStatus(
+                        ready=True,
+                        muted=self._user_muted or self._focus_paused,
+                        error_code="focus_lost" if self._focus_paused else None,
+                    )
+        self._publish_status()
+        return self._status
+
+    def play_cue(self, cue_id: str, bus: AudioBus = "sfx") -> bool:
+        validated_bus = self._validate_bus(bus)
+        if not self._status.ready or self._status.muted:
+            return False
+        sound = self._sounds.get(cue_id)
+        if sound is None:
+            return False
+        try:
+            volume = self._bus_volumes[validated_bus]
+            # Channel gain is the sole bus control. Keeping source gain at one
+            # prevents pygame from multiplying the requested volume twice.
+            sound.set_volume(1.0)
+            if validated_bus == "music":
+                started = self._play_music(cue_id, sound, volume)
+            else:
+                channel = sound.play(loops=0)
+                started = channel is not None
+                if channel is not None:
+                    channel.set_volume(volume)
+        except pygame.error:
+            return False
+        if started:
+            self._publish_playback(cue_id, validated_bus)
+        return started
+
+    def pause(self) -> None:
+        if not self._status.ready:
+            return
+        try:
+            pygame.mixer.pause()
+        except pygame.error:
+            pass
+        self._focus_paused = True
+        self._status = AudioStatus(ready=True, muted=True, error_code="focus_lost")
+        self._publish_status()
+
+    def resume(self) -> None:
+        if not self._status.ready:
+            return
+        try:
+            if not self._user_muted:
+                pygame.mixer.unpause()
+        except pygame.error:
+            pass
+        self._focus_paused = False
+        self._status = AudioStatus(ready=True, muted=self._user_muted)
+        self._publish_status()
+
+    def set_bus_volume(self, bus: AudioBus, value: float) -> None:
+        validated_bus = self._validate_bus(bus)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("audio bus volume must be a finite number between zero and one")
+        number = float(value)
+        if not math.isfinite(number) or not 0.0 <= number <= 1.0:
+            raise ValueError("audio bus volume must be a finite number between zero and one")
+        self._bus_volumes[validated_bus] = number
+        self._apply_volume_to_playing_channels(validated_bus, number)
+
+    def set_muted(self, muted: bool) -> None:
+        """Apply explicit user mute without losing focus-suspension ownership."""
+
+        if type(muted) is not bool:
+            raise TypeError("muted must be a boolean")
+        self._user_muted = muted
+        if not self._status.ready:
+            return
+        try:
+            if muted:
+                pygame.mixer.pause()
+            elif not self._focus_paused:
+                pygame.mixer.unpause()
+        except pygame.error:
+            pass
+        self._status = AudioStatus(
+            ready=True,
+            muted=muted or self._focus_paused,
+            error_code="focus_lost" if self._focus_paused else None,
+        )
+        self._publish_status()
+
+    def _publish_status(self) -> None:
+        """Allow web adapters to surface each immutable status transition."""
+
+    def _publish_playback(self, cue_id: str, bus: AudioBus) -> None:
+        """Allow web adapters to expose evidence only after a channel starts."""
+
+    def _decode_deferred_sounds(self) -> None:
+        """Decode an all-or-nothing verified inventory after mixer initialization."""
+
+        loader = self._sound_paths_loader
+        if loader is None or self._sounds:
+            return
+        paths = loader()
+        decoded: dict[str, pygame.mixer.Sound] = {}
+        for cue_id, path in paths.items():
+            if type(cue_id) is not str or not isinstance(path, Path):
+                raise TypeError("sound-path loader must return string IDs and pathlib paths")
+            decoded[cue_id] = pygame.mixer.Sound(path.as_posix())
+        if not decoded:
+            return
+        self._sounds = decoded
+
+    def _play_music(
+        self,
+        cue_id: str,
+        sound: pygame.mixer.Sound,
+        volume: float,
+    ) -> bool:
+        """Replace the previous infinite loop on the one reserved music channel."""
+
+        channel = self._music_channel
+        if channel is None:
+            return False
+        if self._current_music_cue == cue_id and channel.get_busy():
+            channel.set_volume(volume)
+            return True
+        channel.play(sound, loops=-1, fade_ms=100)
+        channel.set_volume(volume)
+        started = channel.get_busy()
+        if started:
+            self._current_music_cue = cue_id
+        return started
+
+    def _apply_volume_to_playing_channels(self, bus: AudioBus, volume: float) -> None:
+        """Update channel gain so settings affect sounds already in flight."""
+
+        if pygame.mixer.get_init() is None:
+            return
+        if bus == "music":
+            channel = self._music_channel
+            if channel is not None and channel.get_busy():
+                channel.set_volume(volume)
+            return
+        for index in range(1, pygame.mixer.get_num_channels()):
+            channel = pygame.mixer.Channel(index)
+            if channel.get_busy():
+                channel.set_volume(volume)
+
+    @staticmethod
+    def _validate_bus(bus: object) -> AudioBus:
+        if type(bus) is not str or bus not in {"music", "sfx"}:
+            raise ValueError("audio bus must be music or sfx")
+        return cast(AudioBus, bus)
+
+
+class PygameDisplayService:
+    def __init__(self, logical_size: tuple[int, int]) -> None:
+        self.logical_size = logical_size
+        self._canvas = pygame.Surface(logical_size)
+        self._window: pygame.Surface | None = None
+        self._fullscreen = False
+        self._capabilities = DisplayCapabilities(fullscreen=True)
+
+    @property
+    def capabilities(self) -> DisplayCapabilities:
+        return self._capabilities
+
+    def create_window(self, logical_size: tuple[int, int], fullscreen: bool) -> pygame.Surface:
+        if logical_size != self.logical_size:
+            raise ValueError("logical size differs from configured display size")
+        if not pygame.display.get_init():
+            pygame.display.init()
+        flags = pygame.FULLSCREEN if fullscreen else pygame.RESIZABLE
+        window_size = (0, 0) if fullscreen else logical_size
+        self._window = pygame.display.set_mode(window_size, flags)
+        self._fullscreen = fullscreen
+        return self._canvas
+
+    def present(self, canvas: pygame.Surface) -> None:
+        window = self._window
+        if window is None:
+            raise RuntimeError("display window has not been created")
+        window_width, window_height = window.get_size()
+        logical_width, logical_height = self.logical_size
+        scale = min(window_width / logical_width, window_height / logical_height)
+        scaled_size = (max(1, int(logical_width * scale)), max(1, int(logical_height * scale)))
+        offset = ((window_width - scaled_size[0]) // 2, (window_height - scaled_size[1]) // 2)
+        window.fill("black")
+        window.blit(pygame.transform.smoothscale(canvas, scaled_size), offset)
+        pygame.display.flip()
+
+    def set_fullscreen(self, enabled: bool) -> bool:
+        if enabled == self._fullscreen and self._window is not None:
+            return True
+        if not pygame.display.get_init():
+            pygame.display.init()
+        flags = pygame.FULLSCREEN if enabled else pygame.RESIZABLE
+        window_size = (0, 0) if enabled else self.logical_size
+        try:
+            self._window = pygame.display.set_mode(window_size, flags)
+        except pygame.error:
+            return False
+        self._fullscreen = enabled
+        return True
+
+
+class PygameTimeService:
+    def __init__(self) -> None:
+        self._clock = pygame.time.Clock()
+
+    def tick(self, target_fps: int) -> float:
+        return float(self._clock.tick(target_fps))
+
+    def monotonic_ms(self) -> float:
+        return float(pygame.time.get_ticks())
+
+    async def yield_frame(self) -> None:
+        await asyncio.sleep(0)
+
+
+class PygameLifecycleService:
+    def consume(self, events: Sequence[pygame.event.Event]) -> tuple[LifecycleEvent, ...]:
+        translated: list[LifecycleEvent] = []
+        for event in events:
+            kind: LifecycleKind | None = None
+            if event.type == pygame.QUIT:
+                kind = "quit"
+            elif event.type == pygame.WINDOWFOCUSLOST:
+                kind = "focus_lost"
+            elif event.type == pygame.WINDOWFOCUSGAINED:
+                kind = "focus_gained"
+            if kind is not None:
+                translated.append(LifecycleEvent(kind))
+        return tuple(translated)
+
+
+def create_native_services(config: GameConfig, data_dir: Path | None = None) -> PlatformServices:
+    if not isinstance(config, GameConfig):
+        raise TypeError("config must be a GameConfig")
+    if data_dir is not None:
+        if not isinstance(data_dir, Path):
+            raise TypeError("data_dir must be a pathlib.Path or None")
+        root = data_dir.resolve()
+    else:
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        root = (
+            Path(local_app_data) / "Windsprig"
+            if local_app_data
+            else Path.home() / "AppData" / "Local" / "Windsprig"
+        )
+        if not root.is_absolute():
+            root = Path.home() / "AppData" / "Local" / "Windsprig"
+    return PlatformServices(
+        storage=NativeStorage(root),
+        audio=PygameAudioService(
+            requires_gesture=False,
+            sound_paths_loader=lambda: load_canonical_sound_paths(config),
+        ),
+        display=PygameDisplayService(config.resolution),
+        time=PygameTimeService(),
+        lifecycle=PygameLifecycleService(),
+        browser=None,
+        capabilities=PlatformCapabilities(
+            is_web=False,
+            persistent_storage=True,
+            fullscreen=True,
+            gamepads=True,
+            audio_requires_gesture=False,
+        ),
+    )

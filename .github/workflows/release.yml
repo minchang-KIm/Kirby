@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-and-package:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv lock --check
+      - run: uv sync --all-extras --locked
+      - name: Verify the annotated tag matches project version
+        shell: pwsh
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $version = uv run --locked --no-sync python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          if ($env:REF_NAME -ne "v$version") { throw "tag/version mismatch" }
+          $type = git cat-file -t "refs/tags/$env:REF_NAME"
+          if ($type -ne "tag") { throw "release tag must be annotated" }
+      - run: uv run --locked --no-sync ruff check .
+      - run: uv run --locked --no-sync pytest tests/unit tests/integration tests/release -q --cov=windsprig --cov-branch --cov-fail-under=85
+      - run: uv run --locked --no-sync python tools/validate_content.py --all
+      - run: uv run --locked --no-sync playwright install chromium
+      - run: uv run --locked --no-sync python -I tools/build_web.py --output dist/web
+      - run: uv run --locked --no-sync pytest tests/e2e/test_web_product.py tests/e2e/test_web_release_probe_boundary.py tests/e2e/test_web_pwa.py -q
+      - run: uv run --locked --no-sync python -I tools/build_windows.py --output dist/release
+      - name: Create the reproducible web archive and checksum
+        run: uv run --locked --no-sync python -c "from pathlib import Path; from tools.release_common import read_build_identity, sha256_file, write_reproducible_zip; root=Path('.'); identity=read_build_identity(root,'web'); archive=write_reproducible_zip(root/'dist/web',root/f'dist/release/Windsprig-{identity.version}-web.zip'); archive.with_suffix(archive.suffix+'.sha256').write_text(f'{sha256_file(archive)}  {archive.name}\n',encoding='ascii')"
+      - run: uv run --locked --no-sync python -c "from pathlib import Path; from tools.verify_release import verify_local_release; errors=verify_local_release(Path('.')); print(*errors, sep='\\n'); raise SystemExit(bool(errors))"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windsprig-release-${{ github.sha }}
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-release:
+    needs: verify-and-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: windsprig-release-${{ github.sha }}
+          path: release-assets
+      - name: Verify downloaded release checksums
+        shell: bash
+        run: |
+          mapfile -t assets < <(find release-assets -maxdepth 1 -type f \( -name '*.zip' -o -name '*.sha256' \) -print | sort)
+          test "${#assets[@]}" -eq 4
+          cd release-assets
+          sha256sum -c -- *.sha256
+      - name: Publish immutable release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          mapfile -t assets < <(find release-assets -maxdepth 1 -type f \( -name '*.zip' -o -name '*.sha256' \) -print | sort)
+          test "${#assets[@]}" -eq 4
+          gh release create "$REF_NAME" "${assets[@]}" --verify-tag --generate-notes --title "Windsprig $REF_NAME"

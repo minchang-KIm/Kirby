@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from kirby_clone.combat import CombatResolver, Hitbox, Hurtbox
-from kirby_clone.math2d import Rect, Vec2
+from windsprig.combat import CombatResolver, Hitbox, Hurtbox
+from windsprig.math2d import Rect, Vec2
 
 
 def test_hit_registered_once_during_iframe_window() -> None:

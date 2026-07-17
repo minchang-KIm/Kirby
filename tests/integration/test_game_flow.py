@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from kirby_clone.input import InputState
-from kirby_clone.level import LevelLoader
-from kirby_clone.math2d import Rect
-from kirby_clone.settings import GameConfig
-from kirby_clone.simulation import Simulation
+from windsprig.config import GameConfig
+from windsprig.input import InputState
+from windsprig.level import LevelLoader
+from windsprig.math2d import Rect
+from windsprig.simulation import Simulation
 
 
 def test_restart_from_checkpoint_after_death() -> None:

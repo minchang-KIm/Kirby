@@ -1,0 +1,628 @@
+{
+  "bosses": [
+    {
+      "boss_id": "rootjaw",
+      "max_hp": 120,
+      "name_key": "boss.rootjaw.name",
+      "phases": [
+        {
+          "arena_rule": "burrow_tells",
+          "attacks": [
+            {
+              "active_ms": 500,
+              "attack_id": "rootjaw.burrow_line",
+              "cue_id": "sfx.boss.rootjaw",
+              "marker": "ground",
+              "parameters": {
+                "lanes": 1,
+                "speed": 180
+              },
+              "recovery_ms": 700,
+              "telegraph_ms": 900
+            },
+            {
+              "active_ms": 650,
+              "attack_id": "rootjaw.seed_spit",
+              "cue_id": "sfx.boss.rootjaw",
+              "marker": "orbit",
+              "parameters": {
+                "arc": 70,
+                "projectiles": 5
+              },
+              "recovery_ms": 800,
+              "telegraph_ms": 700
+            }
+          ],
+          "enter_at_hp_ratio": 1.0,
+          "phase_id": "rootjaw.buried_hunger",
+          "vulnerability": "hidden"
+        },
+        {
+          "arena_rule": "root_cages",
+          "attacks": [
+            {
+              "active_ms": 900,
+              "attack_id": "rootjaw.root_cage",
+              "cue_id": "sfx.boss.rootjaw",
+              "marker": "arena",
+              "parameters": {
+                "columns": 3,
+                "gap": 2
+              },
+              "recovery_ms": 750,
+              "telegraph_ms": 850
+            },
+            {
+              "active_ms": 700,
+              "attack_id": "rootjaw.bramble_sweep",
+              "cue_id": "sfx.boss.rootjaw",
+              "marker": "silhouette",
+              "parameters": {
+                "sweeps": 2,
+                "width": 96
+              },
+              "recovery_ms": 850,
+              "telegraph_ms": 650
+            }
+          ],
+          "enter_at_hp_ratio": 0.66,
+          "phase_id": "rootjaw.tangled_fury",
+          "vulnerability": "vulnerable"
+        },
+        {
+          "arena_rule": "alternating_burrows",
+          "attacks": [
+            {
+              "active_ms": 800,
+              "attack_id": "rootjaw.quake_bloom",
+              "cue_id": "sfx.boss.rootjaw",
+              "marker": "ground",
+              "parameters": {
+                "rings": 3,
+                "spacing": 64
+              },
+              "recovery_ms": 650,
+              "telegraph_ms": 1000
+            },
+            {
+              "active_ms": 950,
+              "attack_id": "rootjaw.tunnel_feint",
+              "cue_id": "sfx.boss.rootjaw",
+              "marker": "lane",
+              "parameters": {
+                "feints": 2,
+                "lanes": 4
+              },
+              "recovery_ms": 550,
+              "telegraph_ms": 750
+            }
+          ],
+          "enter_at_hp_ratio": 0.33,
+          "phase_id": "rootjaw.heartwood_quake",
+          "vulnerability": "armored"
+        }
+      ],
+      "visual_id": "boss.rootjaw"
+    },
+    {
+      "boss_id": "crucible_crab",
+      "max_hp": 132,
+      "name_key": "boss.crucible_crab.name",
+      "phases": [
+        {
+          "arena_rule": "cooling_vents",
+          "attacks": [
+            {
+              "active_ms": 550,
+              "attack_id": "crucible_crab.claw_press",
+              "cue_id": "sfx.boss.crucible_crab",
+              "marker": "ground",
+              "parameters": {
+                "presses": 2,
+                "width": 80
+              },
+              "recovery_ms": 700,
+              "telegraph_ms": 750
+            },
+            {
+              "active_ms": 900,
+              "attack_id": "crucible_crab.slag_cast",
+              "cue_id": "sfx.boss.crucible_crab",
+              "marker": "lane",
+              "parameters": {
+                "duration": 1200,
+                "lanes": 2
+              },
+              "recovery_ms": 650,
+              "telegraph_ms": 800
+            }
+          ],
+          "enter_at_hp_ratio": 1.0,
+          "phase_id": "crucible_crab.forged_shell",
+          "vulnerability": "armored"
+        },
+        {
+          "arena_rule": "moving_molten_lanes",
+          "attacks": [
+            {
+              "active_ms": 1300,
+              "attack_id": "crucible_crab.lane_pour",
+              "cue_id": "sfx.boss.crucible_crab",
+              "marker": "lane",
+              "parameters": {
+                "lanes": 3,
+                "safe_lane": 1
+              },
+              "recovery_ms": 500,
+              "telegraph_ms": 950
+            },
+            {
+              "active_ms": 850,
+              "attack_id": "crucible_crab.shell_spin",
+              "cue_id": "sfx.boss.crucible_crab",
+              "marker": "silhouette",
+              "parameters": {
+                "bounces": 3,
+                "speed": 240
+              },
+              "recovery_ms": 750,
+              "telegraph_ms": 650
+            }
+          ],
+          "enter_at_hp_ratio": 0.66,
+          "phase_id": "crucible_crab.molten_lanes",
+          "vulnerability": "vulnerable"
+        },
+        {
+          "arena_rule": "vent_cycle",
+          "attacks": [
+            {
+              "active_ms": 900,
+              "attack_id": "crucible_crab.vent_burst",
+              "cue_id": "sfx.boss.crucible_crab",
+              "marker": "ground",
+              "parameters": {
+                "interval": 140,
+                "vents": 6
+              },
+              "recovery_ms": 550,
+              "telegraph_ms": 700
+            },
+            {
+              "active_ms": 600,
+              "attack_id": "crucible_crab.forge_drop",
+              "cue_id": "sfx.boss.crucible_crab",
+              "marker": "ground",
+              "parameters": {
+                "drops": 4,
+                "radius": 44
+              },
+              "recovery_ms": 600,
+              "telegraph_ms": 1050
+            }
+          ],
+          "enter_at_hp_ratio": 0.33,
+          "phase_id": "crucible_crab.overheat",
+          "vulnerability": "vulnerable"
+        }
+      ],
+      "visual_id": "boss.crucible_crab"
+    },
+    {
+      "boss_id": "luma_eel",
+      "max_hp": 126,
+      "name_key": "boss.luma_eel.name",
+      "phases": [
+        {
+          "arena_rule": "clockwise_current",
+          "attacks": [
+            {
+              "active_ms": 650,
+              "attack_id": "luma_eel.current_dash",
+              "cue_id": "sfx.boss.luma_eel",
+              "marker": "silhouette",
+              "parameters": {
+                "passes": 2,
+                "speed": 260
+              },
+              "recovery_ms": 700,
+              "telegraph_ms": 800
+            },
+            {
+              "active_ms": 1000,
+              "attack_id": "luma_eel.lumen_orbs",
+              "cue_id": "sfx.boss.luma_eel",
+              "marker": "orbit",
+              "parameters": {
+                "orbs": 6,
+                "turn_rate": 40
+              },
+              "recovery_ms": 650,
+              "telegraph_ms": 700
+            }
+          ],
+          "enter_at_hp_ratio": 1.0,
+          "phase_id": "luma_eel.moonlit_current",
+          "vulnerability": "vulnerable"
+        },
+        {
+          "arena_rule": "light_decoys",
+          "attacks": [
+            {
+              "active_ms": 750,
+              "attack_id": "luma_eel.decoy_flash",
+              "cue_id": "sfx.boss.luma_eel",
+              "marker": "arena",
+              "parameters": {
+                "decoys": 3,
+                "true_index_cycle": 3
+              },
+              "recovery_ms": 650,
+              "telegraph_ms": 900
+            },
+            {
+              "active_ms": 1200,
+              "attack_id": "luma_eel.reverse_current",
+              "cue_id": "sfx.boss.luma_eel",
+              "marker": "lane",
+              "parameters": {
+                "direction": -1,
+                "strength": 190
+              },
+              "recovery_ms": 550,
+              "telegraph_ms": 750
+            }
+          ],
+          "enter_at_hp_ratio": 0.66,
+          "phase_id": "luma_eel.decoy_tide",
+          "vulnerability": "hidden"
+        },
+        {
+          "arena_rule": "alternating_currents",
+          "attacks": [
+            {
+              "active_ms": 1000,
+              "attack_id": "luma_eel.eclipse_ring",
+              "cue_id": "sfx.boss.luma_eel",
+              "marker": "orbit",
+              "parameters": {
+                "gaps": 2,
+                "rings": 2
+              },
+              "recovery_ms": 500,
+              "telegraph_ms": 1000
+            },
+            {
+              "active_ms": 1100,
+              "attack_id": "luma_eel.spiral_dive",
+              "cue_id": "sfx.boss.luma_eel",
+              "marker": "silhouette",
+              "parameters": {
+                "curve": 0.7,
+                "dives": 3
+              },
+              "recovery_ms": 500,
+              "telegraph_ms": 700
+            }
+          ],
+          "enter_at_hp_ratio": 0.33,
+          "phase_id": "luma_eel.eclipse_spiral",
+          "vulnerability": "vulnerable"
+        }
+      ],
+      "visual_id": "boss.luma_eel"
+    },
+    {
+      "boss_id": "volt_roc",
+      "max_hp": 138,
+      "name_key": "boss.volt_roc.name",
+      "phases": [
+        {
+          "arena_rule": "charged_perches",
+          "attacks": [
+            {
+              "active_ms": 600,
+              "attack_id": "volt_roc.dive_lane",
+              "cue_id": "sfx.boss.volt_roc",
+              "marker": "lane",
+              "parameters": {
+                "dives": 2,
+                "speed": 320
+              },
+              "recovery_ms": 650,
+              "telegraph_ms": 850
+            },
+            {
+              "active_ms": 900,
+              "attack_id": "volt_roc.feather_bolts",
+              "cue_id": "sfx.boss.volt_roc",
+              "marker": "orbit",
+              "parameters": {
+                "bolts": 7,
+                "spread": 100
+              },
+              "recovery_ms": 750,
+              "telegraph_ms": 650
+            }
+          ],
+          "enter_at_hp_ratio": 1.0,
+          "phase_id": "volt_roc.storm_perch",
+          "vulnerability": "vulnerable"
+        },
+        {
+          "arena_rule": "linked_conductors",
+          "attacks": [
+            {
+              "active_ms": 800,
+              "attack_id": "volt_roc.lightning_chain",
+              "cue_id": "sfx.boss.volt_roc",
+              "marker": "ground",
+              "parameters": {
+                "jumps": 3,
+                "nodes": 4
+              },
+              "recovery_ms": 600,
+              "telegraph_ms": 950
+            },
+            {
+              "active_ms": 1000,
+              "attack_id": "volt_roc.rail_talon",
+              "cue_id": "sfx.boss.volt_roc",
+              "marker": "silhouette",
+              "parameters": {
+                "passes": 2,
+                "rails": 2
+              },
+              "recovery_ms": 550,
+              "telegraph_ms": 700
+            }
+          ],
+          "enter_at_hp_ratio": 0.66,
+          "phase_id": "volt_roc.chain_sky",
+          "vulnerability": "vulnerable"
+        },
+        {
+          "arena_rule": "eye_of_storm_windows",
+          "attacks": [
+            {
+              "active_ms": 1100,
+              "attack_id": "volt_roc.tempest_wall",
+              "cue_id": "sfx.boss.volt_roc",
+              "marker": "arena",
+              "parameters": {
+                "gap": 96,
+                "walls": 2
+              },
+              "recovery_ms": 500,
+              "telegraph_ms": 1050
+            },
+            {
+              "active_ms": 1200,
+              "attack_id": "volt_roc.thunder_dive",
+              "cue_id": "sfx.boss.volt_roc",
+              "marker": "ground",
+              "parameters": {
+                "dives": 4,
+                "shock_radius": 72
+              },
+              "recovery_ms": 450,
+              "telegraph_ms": 750
+            }
+          ],
+          "enter_at_hp_ratio": 0.33,
+          "phase_id": "volt_roc.tempest_dive",
+          "vulnerability": "invulnerable"
+        }
+      ],
+      "visual_id": "boss.volt_roc"
+    },
+    {
+      "boss_id": "prism_warden",
+      "max_hp": 144,
+      "name_key": "boss.prism_warden.name",
+      "phases": [
+        {
+          "arena_rule": "mirror_weak_side",
+          "attacks": [
+            {
+              "active_ms": 900,
+              "attack_id": "prism_warden.prism_beam",
+              "cue_id": "sfx.boss.prism_warden",
+              "marker": "beam",
+              "parameters": {
+                "bounces": 2,
+                "width": 24
+              },
+              "recovery_ms": 650,
+              "telegraph_ms": 900
+            },
+            {
+              "active_ms": 700,
+              "attack_id": "prism_warden.mirror_guard",
+              "cue_id": "sfx.boss.prism_warden",
+              "marker": "silhouette",
+              "parameters": {
+                "reflect_ms": 700,
+                "weak_side": "rear"
+              },
+              "recovery_ms": 800,
+              "telegraph_ms": 650
+            }
+          ],
+          "enter_at_hp_ratio": 1.0,
+          "phase_id": "prism_warden.reflection",
+          "vulnerability": "armored"
+        },
+        {
+          "arena_rule": "three_clones",
+          "attacks": [
+            {
+              "active_ms": 1000,
+              "attack_id": "prism_warden.clone_cast",
+              "cue_id": "sfx.boss.prism_warden",
+              "marker": "arena",
+              "parameters": {
+                "clones": 3,
+                "real_glint_ms": 180
+              },
+              "recovery_ms": 600,
+              "telegraph_ms": 850
+            },
+            {
+              "active_ms": 900,
+              "attack_id": "prism_warden.color_cross",
+              "cue_id": "sfx.boss.prism_warden",
+              "marker": "beam",
+              "parameters": {
+                "beams": 4,
+                "rotation": 45
+              },
+              "recovery_ms": 650,
+              "telegraph_ms": 750
+            }
+          ],
+          "enter_at_hp_ratio": 0.66,
+          "phase_id": "prism_warden.clone_garden",
+          "vulnerability": "hidden"
+        },
+        {
+          "arena_rule": "gravity_flip_beams",
+          "attacks": [
+            {
+              "active_ms": 1100,
+              "attack_id": "prism_warden.gravity_shard",
+              "cue_id": "sfx.boss.prism_warden",
+              "marker": "ground",
+              "parameters": {
+                "gravity": -1,
+                "shards": 8
+              },
+              "recovery_ms": 500,
+              "telegraph_ms": 1000
+            },
+            {
+              "active_ms": 1200,
+              "attack_id": "prism_warden.refraction_bloom",
+              "cue_id": "sfx.boss.prism_warden",
+              "marker": "orbit",
+              "parameters": {
+                "gaps": 2,
+                "petals": 10
+              },
+              "recovery_ms": 450,
+              "telegraph_ms": 800
+            }
+          ],
+          "enter_at_hp_ratio": 0.33,
+          "phase_id": "prism_warden.gravity_refraction",
+          "vulnerability": "vulnerable"
+        }
+      ],
+      "visual_id": "boss.prism_warden"
+    },
+    {
+      "boss_id": "the_stillness",
+      "max_hp": 180,
+      "name_key": "boss.the_stillness.name",
+      "phases": [
+        {
+          "arena_rule": "moving_silence_fields",
+          "attacks": [
+            {
+              "active_ms": 1000,
+              "attack_id": "the_stillness.hush_wave",
+              "cue_id": "sfx.boss.the_stillness",
+              "marker": "arena",
+              "parameters": {
+                "fields": 2,
+                "speed": 90
+              },
+              "recovery_ms": 600,
+              "telegraph_ms": 900
+            },
+            {
+              "active_ms": 850,
+              "attack_id": "the_stillness.locked_echo",
+              "cue_id": "sfx.boss.the_stillness",
+              "marker": "silhouette",
+              "parameters": {
+                "lock_ms": 1200,
+                "orbs": 4
+              },
+              "recovery_ms": 700,
+              "telegraph_ms": 750
+            }
+          ],
+          "enter_at_hp_ratio": 1.0,
+          "phase_id": "the_stillness.silenced_motion",
+          "vulnerability": "vulnerable"
+        },
+        {
+          "arena_rule": "learned_world_remix",
+          "attacks": [
+            {
+              "active_ms": 1300,
+              "attack_id": "the_stillness.system_chain",
+              "cue_id": "sfx.boss.the_stillness",
+              "marker": "arena",
+              "parameters": {
+                "interval": 260,
+                "systems": "gust,vent,current,rail"
+              },
+              "recovery_ms": 500,
+              "telegraph_ms": 1050
+            },
+            {
+              "active_ms": 1000,
+              "attack_id": "the_stillness.prism_lock",
+              "cue_id": "sfx.boss.the_stillness",
+              "marker": "beam",
+              "parameters": {
+                "beams": 3,
+                "lock_zones": 2
+              },
+              "recovery_ms": 550,
+              "telegraph_ms": 800
+            }
+          ],
+          "enter_at_hp_ratio": 0.66,
+          "phase_id": "the_stillness.stolen_systems",
+          "vulnerability": "armored"
+        },
+        {
+          "arena_rule": "ability_rotation",
+          "attacks": [
+            {
+              "active_ms": 1400,
+              "attack_id": "the_stillness.echo_crown",
+              "cue_id": "sfx.boss.the_stillness",
+              "marker": "orbit",
+              "parameters": {
+                "ability_windows": 6,
+                "rings": 3
+              },
+              "recovery_ms": 400,
+              "telegraph_ms": 1100
+            },
+            {
+              "active_ms": 1500,
+              "attack_id": "the_stillness.final_release",
+              "cue_id": "sfx.boss.the_stillness",
+              "marker": "arena",
+              "parameters": {
+                "safe_arc": 50,
+                "waves": 5
+              },
+              "recovery_ms": 350,
+              "telegraph_ms": 900
+            }
+          ],
+          "enter_at_hp_ratio": 0.33,
+          "phase_id": "the_stillness.motion_returns",
+          "vulnerability": "vulnerable"
+        }
+      ],
+      "visual_id": "boss.the_stillness"
+    }
+  ]
+}

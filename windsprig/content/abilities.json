@@ -1,0 +1,40 @@
+{
+  "abilities": {
+    "bloomblade": {
+      "strategy": "bloomblade",
+      "icon_id": "ability.bloomblade",
+      "palette_token": "bloomblade",
+      "enemy_source_tag": "bloomblade"
+    },
+    "cinder": {
+      "strategy": "cinder",
+      "icon_id": "ability.cinder",
+      "palette_token": "cinder",
+      "enemy_source_tag": "cinder"
+    },
+    "voltsong": {
+      "strategy": "voltsong",
+      "icon_id": "ability.voltsong",
+      "palette_token": "voltsong",
+      "enemy_source_tag": "voltsong"
+    },
+    "galehook": {
+      "strategy": "galehook",
+      "icon_id": "ability.galehook",
+      "palette_token": "galehook",
+      "enemy_source_tag": "galehook"
+    },
+    "stoneheart": {
+      "strategy": "stoneheart",
+      "icon_id": "ability.stoneheart",
+      "palette_token": "stoneheart",
+      "enemy_source_tag": "stoneheart"
+    },
+    "tempest": {
+      "strategy": "tempest",
+      "icon_id": "ability.tempest",
+      "palette_token": "tempest",
+      "enemy_source_tag": "tempest"
+    }
+  }
+}

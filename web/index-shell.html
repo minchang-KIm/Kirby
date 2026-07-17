@@ -1,0 +1,93 @@
+<!-- windsprig-pwa:head -->
+<meta name="theme-color" content="#10233f">
+<meta name="description" content="Ride the living wind, harmonize enemy echoes, and restore six hand-crafted sky worlds—solo or with up to four local players.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Windsprig: Echoes of the Gale">
+<meta property="og:description" content="A storybook action-platform adventure playable in your browser.">
+<meta property="og:image" content="/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Sprig rides a ribbon of wind across the six worlds of Windsprig.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/favicon.png" type="image/png" sizes="192x192">
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: "Noto Sans KR", system-ui, sans-serif;
+    background: #071426;
+    color: #f7fbff;
+  }
+  #windsprig-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    text-align: center;
+    background: radial-gradient(circle at 50% 15%, #27577c, #071426 68%);
+  }
+  #windsprig-loader[hidden] { display: none; }
+  #windsprig-loader > div {
+    max-width: 42rem;
+    padding: 2rem;
+    border: 2px solid #d8f27c;
+    border-radius: 1.25rem;
+    background: #10233fee;
+    box-shadow: 0 1.5rem 5rem #0008;
+  }
+  #windsprig-loader h1 { margin: 0 0 .75rem; color: #f7fbff; }
+  #windsprig-loader p { margin: .5rem 0; line-height: 1.5; }
+  #windsprig-status { color: #d8f27c; font-weight: 700; }
+  .skip-link {
+    position: fixed;
+    left: 1rem;
+    top: -5rem;
+    z-index: 40;
+    padding: .75rem 1rem;
+    border-radius: .4rem;
+    background: #f7fbff;
+    color: #071426;
+    font-weight: 700;
+  }
+  .skip-link:focus { top: 1rem; }
+  canvas { max-width: 100vw; max-height: 100vh; outline: none; }
+</style>
+<!-- windsprig-pwa:body -->
+<a class="skip-link" href="#canvas">Skip to game canvas</a>
+<section id="windsprig-loader" aria-labelledby="windsprig-title" aria-busy="true">
+  <div>
+    <h1 id="windsprig-title">Windsprig: Echoes of the Gale</h1>
+    <p id="windsprig-status" aria-live="polite">Gathering the wind…</p>
+    <p>Requires a keyboard or compatible gamepad and a viewport of at least 1024×576.</p>
+    <p>Your profiles stay in this browser. No account or telemetry is used.</p>
+  </div>
+</section>
+<script>
+  window.addEventListener("DOMContentLoaded", () => {
+    const loader = document.getElementById("windsprig-loader");
+    const status = document.getElementById("windsprig-status");
+    const pygbagStatus = document.getElementById("infobox");
+    if (!loader || !status || !pygbagStatus) return;
+    // Pygbag owns readiness; mirror its status instead of inventing a second clock.
+    const observer = new MutationObserver(() => {
+      const message = pygbagStatus.textContent?.trim();
+      if (message) status.textContent = message;
+      if (pygbagStatus.style.display === "none") {
+        loader.hidden = true;
+        loader.setAttribute("aria-busy", "false");
+        observer.disconnect();
+      }
+    });
+    observer.observe(pygbagStatus, {
+      attributes: true,
+      attributeFilter: ["style"],
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  }, { once: true });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker?.register("/service-worker.js").catch(() => {});
+  }, { once: true });
+</script>

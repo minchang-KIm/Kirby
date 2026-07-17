@@ -1,20 +1,62 @@
+[build-system]
+requires = ["setuptools>=80,<81"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "kirby-rtd-study-clone"
-version = "0.2.0"
-requires-python = ">=3.12"
+name = "windsprig"
+version = "1.0.0"
+description = "Windsprig: Echoes of the Gale"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "pygame-ce==2.5.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "fonttools==4.63.0",
+  "hypothesis>=6.146,<7",
+  "mypy>=1.17,<2",
+  "pyinstaller>=6.17,<7",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "pytest-cov>=6.3,<7",
+  "ruff>=0.12,<1",
+]
+web = [
+  "playwright==1.61.0",
+  "pygbag==0.9.3",
+]
+
+[project.scripts]
+windsprig = "windsprig.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["windsprig*"]
+
+[tool.setuptools.package-data]
+windsprig = ["content/*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-q"
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
-source = ["kirby_clone"]
-omit = [
-  "kirby_clone/game.py",
-  "kirby_clone/assets.py",
-  "kirby_clone/hud.py",
-  "kirby_clone/audio.py",
-  "kirby_clone/__main__.py"
-]
+source = ["windsprig"]
+omit = ["windsprig/__main__.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["windsprig.platform", "windsprig.input", "windsprig.meta"]

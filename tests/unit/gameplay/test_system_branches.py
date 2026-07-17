@@ -1,0 +1,550 @@
+"""Focused branch behavior for the production ECS gameplay systems."""
+
+from __future__ import annotations
+
+import pytest
+
+from tests.helpers.gameplay import make_active_player
+from windsprig.config import GameConfig
+from windsprig.content.loader import StageSpec
+from windsprig.core.ecs import World
+from windsprig.gameplay.abilities import create_default_registry
+from windsprig.gameplay.components import (
+    NON_ENTITY_DAMAGE_SOURCE_ID,
+    AbilityState,
+    ActorState,
+    AttackRequest,
+    Collectible,
+    Collider,
+    ControlIntent,
+    DamageRecord,
+    DefenseState,
+    EnemyAI,
+    Facing,
+    Health,
+    MovementState,
+    PlayerSlot,
+    Projectile,
+    Respawn,
+    Team,
+    Transform,
+    Velocity,
+)
+from windsprig.gameplay.snapshot import StageOutcome
+from windsprig.gameplay.systems import (
+    AbilitySystem,
+    CollisionSystem,
+    CombatSystem,
+    CoopRespawnSystem,
+    DamageSystem,
+    EnemyAISystem,
+    InputCommandSystem,
+    MovementSystem,
+    PickupSystem,
+)
+from windsprig.input.commands import (
+    AbilityUseCommand,
+    DodgeCommand,
+    DrawReleaseCommand,
+    DrawStartCommand,
+    DropAbilityCommand,
+    GuardCommand,
+    HoverCommand,
+    InputFrame,
+    JumpCommand,
+    MoveCommand,
+)
+from windsprig.physics import TileCollisionWorld
+
+
+def add_entity(world: World, *components: object) -> int:
+    entity_id = world.create_entity()
+    for component in components:
+        world.add_component(entity_id, component)
+    return entity_id
+
+
+def stage_spec() -> StageSpec:
+    return StageSpec(
+        stage_id="test_stage",
+        world_id="test_world",
+        node_id="test_node",
+        width_tiles=20,
+        height_tiles=10,
+        tile_size=32,
+        ground_y_tile=8,
+        player_spawns=((10.0, 20.0),),
+        enemy_spawns=(),
+        motes=(),
+        checkpoints=(),
+        interactions=(),
+        goal_tile=(18, 8),
+        hazards=(),
+        one_way_tiles=(),
+        solids=(),
+    )
+
+
+def test_ability_system_ignores_drop_and_queues_a_typed_attack_without_materializing() -> None:
+    world = World()
+    world.resources["ability_registry"] = create_default_registry(GameConfig().content_dir)
+    add_entity(
+        world,
+        Team("enemy"),
+        Transform(0, 0),
+        Facing(),
+        Collider(28, 28, on_ground=True),
+        Health(3, 3),
+        ControlIntent(ability_pressed=True),
+        AbilityState(current_id="bloomblade"),
+        ActorState(),
+    )
+    dropped = add_entity(
+        world,
+        Team("player"),
+        Transform(20, 30),
+        Facing(),
+        Collider(28, 28, on_ground=True),
+        Health(10, 10),
+        ControlIntent(drop_pressed=True),
+        AbilityState(current_id="cinder"),
+        ActorState(),
+    )
+    caster = add_entity(
+        world,
+        Team("player"),
+        Transform(100, 50),
+        Facing(-1),
+        Collider(28, 28, on_ground=True),
+        Health(10, 10),
+        ControlIntent(ability_pressed=True),
+        AbilityState(current_id="bloomblade", cooldown_remaining_ms=10),
+        ActorState(),
+    )
+
+    AbilitySystem().update(world, 16)
+
+    dropped_ability = world.get_component(dropped, AbilityState)
+    caster_ability = world.get_component(caster, AbilityState)
+    assert (dropped_ability.previous_id, dropped_ability.current_id) == ("none", "cinder")
+    assert caster_ability.cooldown_remaining_ms == 120
+    assert world.query(Projectile) == []
+    requests = world.resources["attack_requests"]
+    assert isinstance(requests, list)
+    assert len(requests) == 1
+    assert isinstance(requests[0], AttackRequest)
+    assert (requests[0].owner_entity_id, requests[0].ability_id, requests[0].x) == (
+        caster,
+        "bloomblade",
+        72.0,
+    )
+    assert "projectile_requests" not in world.resources
+    assert world.events.peek() == []
+
+
+def test_combat_system_expires_projectiles_and_queues_projectile_and_contact_damage() -> None:
+    world = World()
+    player = add_entity(
+        world,
+        Team("player"),
+        Transform(10, 10),
+        Collider(20, 20),
+        Health(5, 5),
+    )
+    dead_player = add_entity(
+        world,
+        Team("player"),
+        Transform(10, 10),
+        Collider(20, 20),
+        Health(0, 5, dead=True),
+    )
+    enemy = add_entity(
+        world,
+        Team("enemy"),
+        Transform(12, 10),
+        Collider(20, 20),
+        Health(5, 5),
+        EnemyAI("boss", 0, 100),
+    )
+    add_entity(
+        world,
+        Team("enemy"),
+        Transform(500, 500),
+        Collider(20, 20),
+        Health(0, 5, dead=True),
+        EnemyAI("grunt", 0, 100),
+    )
+    expired = add_entity(
+        world,
+        Projectile(owner=player, tag="expired", damage=1, ttl_ms=1),
+        Team("player"),
+        Transform(0, 0),
+        Collider(5, 5, solid=False),
+        Velocity(),
+    )
+    colliding = add_entity(
+        world,
+        Projectile(owner=player, tag="hit", damage=3, ttl_ms=100),
+        Team("player"),
+        Transform(12, 10),
+        Collider(10, 10, solid=False),
+        Velocity(100, 0),
+    )
+    surviving = add_entity(
+        world,
+        Projectile(owner=enemy, tag="miss", damage=3, ttl_ms=100),
+        Team("enemy"),
+        Transform(1_000, 1_000),
+        Collider(10, 10, solid=False),
+        Velocity(),
+    )
+
+    CombatSystem().update(world, 16)
+
+    assert expired not in world.alive_entities
+    assert colliding not in world.alive_entities
+    assert surviving in world.alive_entities
+    assert dead_player in world.alive_entities
+    queue = world.resources["damage_queue"]
+    assert isinstance(queue, list)
+    assert any(item.target_id == enemy and item.amount == 3 and item.source_id == player for item in queue)
+    assert any(item.target_id == player and item.amount == 2 and item.source_id == enemy for item in queue)
+
+
+def test_hazard_uses_an_explicit_non_entity_unblockable_damage_source() -> None:
+    world = World()
+    world.resources["config"] = GameConfig()
+    world.resources["collision_world"] = TileCollisionWorld(
+        tile_size=32,
+        width_tiles=2,
+        height_tiles=2,
+        solid_tiles=set(),
+        hazard_tiles={(0, 0)},
+    )
+    player = add_entity(
+        world,
+        PlayerSlot(1),
+        Transform(2, 2),
+        Velocity(),
+        Collider(20, 20, on_ground=True),
+        Health(10, 10),
+        Facing(1),
+        ActorState("Guard"),
+        DefenseState(guarding=True),
+    )
+
+    CollisionSystem().update(world, 16)
+
+    assert world.resources["damage_queue"] == [
+        DamageRecord(
+            source_id=NON_ENTITY_DAMAGE_SOURCE_ID,
+            target_id=player,
+            amount=1,
+            knockback_x=0.0,
+            knockback_y=-200.0,
+            guard_break=True,
+        )
+    ]
+    world.get_component(player, Collider).on_ground = True
+    DamageSystem().update(world, 0)
+    assert world.get_component(player, Health).current == 9
+    assert world.events.peek()[0].payload["guarded"] is False
+
+
+def test_coop_respawn_uses_an_alive_anchor_and_respects_timer_and_lives() -> None:
+    world = World()
+    world.resources["stage_spec"] = stage_spec()
+    world.resources["config"] = GameConfig()
+    world.resources["stage_outcome"] = StageOutcome.RUNNING
+    world.resources["stage_result"] = None
+    world.resources["damage_queue"] = []
+    world.resources["active_checkpoint_id"] = "test.checkpoint"
+    world.resources["active_players"] = (
+        make_active_player(1, leader=True),
+        make_active_player(2),
+        make_active_player(3),
+        make_active_player(4),
+    )
+    add_entity(
+        world,
+        PlayerSlot(1),
+        Respawn(100, 80),
+        Transform(100, 80),
+        Velocity(),
+        Collider(20, 20),
+        Health(5, 5),
+        ActorState(),
+    )
+    ready = add_entity(
+        world,
+        PlayerSlot(2, lives=2),
+        Respawn(20, 30),
+        Transform(0, 0),
+        Velocity(20, 30),
+        Collider(20, 20, on_ground=True),
+        Health(0, 10, dead=True),
+        ActorState("Dead"),
+    )
+    waiting = add_entity(
+        world,
+        PlayerSlot(3, lives=2),
+        Respawn(20, 30, timer_ms=100),
+        Transform(0, 0),
+        Velocity(),
+        Collider(20, 20),
+        Health(0, 10, dead=True),
+        ActorState("Dead"),
+    )
+    exhausted = add_entity(
+        world,
+        PlayerSlot(4, lives=0),
+        Respawn(20, 30),
+        Transform(0, 0),
+        Velocity(),
+        Collider(20, 20),
+        Health(0, 10, dead=True),
+        ActorState("Dead"),
+    )
+    CoopRespawnSystem().update(world, 16)
+
+    ready_slot = world.get_component(ready, PlayerSlot)
+    ready_transform = world.get_component(ready, Transform)
+    ready_health = world.get_component(ready, Health)
+    assert ready_slot.lives == 1
+    assert (ready_transform.x, ready_transform.y) == (118, 52)
+    assert (ready_health.current, ready_health.dead, ready_health.invulnerable_ms) == (5, False, 1200)
+    assert world.get_component(ready, Velocity) == Velocity(0.0, -100.0)
+    assert world.get_component(ready, Collider).on_ground is False
+    assert world.get_component(ready, ActorState).name == "Idle"
+    assert world.get_component(waiting, Respawn).timer_ms == 84
+    assert world.get_component(waiting, Health).dead is True
+    assert world.get_component(exhausted, Health).dead is True
+    assert world.resources["damage_queue"] == []
+    assert world.events.peek()[0].topic == "PlayerRespawned"
+    assert world.events.peek()[0].payload == {
+        "frame_index": 0,
+        "slot": 2,
+        "entity_id": ready,
+        "checkpoint_id": "test.checkpoint",
+        "cost": 1,
+    }
+
+
+def test_coop_respawn_freezes_failure_when_no_player_is_alive() -> None:
+    world = World()
+    world.resources["stage_spec"] = stage_spec()
+    world.resources["config"] = GameConfig()
+    world.resources["stage_outcome"] = StageOutcome.RUNNING
+    world.resources["stage_result"] = None
+    world.resources["damage_queue"] = []
+    world.resources["active_checkpoint_id"] = "test.checkpoint"
+    world.resources["active_players"] = (make_active_player(1, leader=True),)
+    player = add_entity(
+        world,
+        PlayerSlot(1, lives=1),
+        Respawn(45, 55),
+        Transform(0, 0),
+        Velocity(),
+        Collider(20, 20),
+        Health(0, 8, dead=True),
+        ActorState("Dead"),
+    )
+
+    CoopRespawnSystem().update(world, 16)
+
+    transform = world.get_component(player, Transform)
+    assert (transform.x, transform.y) == (0, 0)
+    assert world.resources["stage_outcome"] is StageOutcome.FAILED
+    assert world.events.peek()[0].topic == "StageFailed"
+
+
+def test_damage_system_ignores_invalid_hits_and_applies_hurt_death_and_respawn_state() -> None:
+    world = World()
+    world.resources["config"] = GameConfig()
+    dead = add_entity(world, Health(0, 5, dead=True))
+    invulnerable = add_entity(world, Health(5, 5, invulnerable_ms=50))
+    hurt = add_entity(world, Health(5, 5), Velocity(10, 0), ActorState("Idle"))
+    killed_player = add_entity(
+        world,
+        Health(1, 5),
+        Velocity(),
+        ActorState("Idle"),
+        PlayerSlot(1),
+        Respawn(0, 0),
+    )
+    killed_enemy = add_entity(world, Health(1, 1))
+    world.resources["damage_queue"] = [
+        DamageRecord(0, 999, 1, 0.0, 0.0, False),
+        DamageRecord(0, dead, 1, 0.0, 0.0, False),
+        DamageRecord(0, invulnerable, 1, 0.0, 0.0, False),
+        DamageRecord(0, hurt, 2, 5.0, 10.0, False),
+        DamageRecord(0, killed_player, 1, 0.0, 0.0, False),
+        DamageRecord(0, killed_enemy, 1, 0.0, 0.0, False),
+    ]
+
+    DamageSystem().update(world, 10)
+
+    assert world.resources["damage_queue"] == []
+    assert world.get_component(invulnerable, Health).current == 5
+    assert world.get_component(invulnerable, Health).invulnerable_ms == 40
+    assert world.get_component(hurt, Health).current == 3
+    assert world.get_component(hurt, Velocity) == Velocity(15.0, 10.0)
+    assert world.get_component(hurt, ActorState).name == "Hurt"
+    assert world.get_component(killed_player, Health).dead is True
+    assert world.get_component(killed_player, Respawn).timer_ms == 1800
+    assert world.get_component(killed_player, ActorState).name == "Dead"
+    assert world.get_component(killed_enemy, Health).dead is True
+    assert [event.payload["entity_id"] for event in world.events.peek() if event.topic == "actor_dead"] == [
+        killed_player,
+        killed_enemy,
+    ]
+
+
+def test_enemy_ai_covers_dead_chase_and_all_patrol_boundaries() -> None:
+    world = World()
+    add_entity(world, PlayerSlot(1), Transform(100, 0), Health(5, 5))
+    add_entity(world, PlayerSlot(2), Transform(500, 0), Health(0, 5, dead=True))
+    dead = add_entity(world, EnemyAI("grunt", 0, 100), Transform(0, 0), Velocity(20, 0), Health(0, 2, dead=True))
+    chasing_right = add_entity(world, EnemyAI("grunt", 0, 300), Transform(50, 0), Velocity(), Health(2, 2))
+    chasing_left = add_entity(world, EnemyAI("brute", 0, 300), Transform(150, 0), Velocity(), Health(2, 2))
+    boss = add_entity(world, EnemyAI("boss", 0, 300), Transform(90, 0), Velocity(), Health(2, 2))
+    patrol_left = add_entity(
+        world,
+        EnemyAI("grunt", 300, 400, aggro_range=10),
+        Transform(250, 0),
+        Velocity(),
+        Health(2, 2),
+    )
+    patrol_right = add_entity(
+        world,
+        EnemyAI("grunt", 300, 400, aggro_range=10),
+        Transform(450, 0),
+        Velocity(),
+        Health(2, 2),
+    )
+    patrol_middle = add_entity(
+        world,
+        EnemyAI("boss", 300, 400, aggro_range=10, facing=-1),
+        Transform(350, 0),
+        Velocity(),
+        Health(2, 2),
+    )
+
+    EnemyAISystem().update(world, 16)
+
+    assert world.get_component(dead, Velocity).vx == 0
+    assert world.get_component(chasing_right, Velocity).vx == 140
+    assert world.get_component(chasing_left, Velocity).vx == -90
+    assert world.get_component(boss, Velocity).vx == 120
+    assert world.get_component(patrol_left, Velocity).vx == 88
+    assert world.get_component(patrol_right, Velocity).vx == -88
+    assert world.get_component(patrol_middle, Velocity).vx == -70
+
+
+def test_input_command_system_resets_stale_intent_and_maps_every_command_type() -> None:
+    world = World()
+    first = add_entity(world, PlayerSlot(1), ControlIntent(move_axis=-1, jump_pressed=True), Facing(-1))
+    second = add_entity(world, PlayerSlot(2), ControlIntent(), Facing(1))
+    third = add_entity(world, PlayerSlot(3), ControlIntent(), Facing(-1))
+    system = InputCommandSystem()
+    world.frame_input = object()
+    system.update(world, 16)
+    assert world.get_component(first, ControlIntent).jump_pressed is False
+
+    world.frame_input = InputFrame(
+        commands_by_slot={
+            1: [
+                MoveCommand(1, 1),
+                JumpCommand(1, True),
+                HoverCommand(1, True),
+                DrawStartCommand(1),
+                DrawReleaseCommand(1),
+                AbilityUseCommand(1, held=True),
+                AbilityUseCommand(1, pressed=True),
+                AbilityUseCommand(1, released=True),
+                GuardCommand(1, True),
+                DodgeCommand(1, True),
+                DropAbilityCommand(1, True),
+            ],
+            2: [MoveCommand(2, -1)],
+            3: [MoveCommand(3, 0)],
+        }
+    )
+    system.update(world, 16)
+
+    first_intent = world.get_component(first, ControlIntent)
+    assert first_intent == ControlIntent(
+        move_axis=1,
+        jump_pressed=True,
+        hover_held=True,
+        draw_started=True,
+        draw_released=True,
+        ability_pressed=True,
+        ability_held=True,
+        ability_released=True,
+        guard_held=True,
+        dodge_pressed=True,
+        drop_pressed=True,
+    )
+    assert world.get_component(first, Facing).direction == 1
+    assert world.get_component(second, Facing).direction == -1
+    assert world.get_component(third, Facing).direction == -1
+
+
+def test_movement_system_handles_guard_acceleration_deceleration_jump_hover_and_gravity() -> None:
+    world = World()
+    world.resources["config"] = GameConfig()
+
+    def player(intent: ControlIntent, velocity: Velocity, collider: Collider) -> int:
+        return add_entity(
+            world,
+            PlayerSlot(1),
+            Team("player"),
+            Transform(0, 0),
+            velocity,
+            collider,
+            intent,
+            ActorState("Idle"),
+            MovementState(),
+            DefenseState(guarding=intent.guard_held),
+            Health(10, 10),
+        )
+
+    jumping = player(ControlIntent(move_axis=1, jump_pressed=True, guard_held=True), Velocity(), Collider(20, 20, True))
+    moving_left = player(ControlIntent(move_axis=-1), Velocity(), Collider(20, 20))
+    slowing_right = player(ControlIntent(), Velocity(100, 0), Collider(20, 20))
+    slowing_left = player(ControlIntent(), Velocity(-100, 0), Collider(20, 20))
+    hovering = player(ControlIntent(hover_held=True), Velocity(0, 0), Collider(20, 20))
+    over_speed = player(ControlIntent(move_axis=1), Velocity(500, 2_000), Collider(20, 20))
+
+    MovementSystem().update(world, 16)
+
+    assert world.get_component(jumping, Velocity).vx == pytest.approx(27.2)
+    assert world.get_component(jumping, Velocity).vy == pytest.approx(-720.0)
+    assert world.get_component(jumping, Collider).on_ground is False
+    assert world.get_component(jumping, ActorState).name == "Jump"
+    assert world.get_component(moving_left, Velocity).vx == pytest.approx(-27.2)
+    assert world.get_component(slowing_right, Velocity).vx == pytest.approx(52.0)
+    assert world.get_component(slowing_left, Velocity).vx == pytest.approx(-52.0)
+    assert world.get_component(hovering, Velocity).vy == pytest.approx(11.2)
+    assert world.get_component(hovering, ActorState).name == "Hover"
+    assert world.get_component(over_speed, Velocity).vx == pytest.approx(472.8)
+    assert world.get_component(over_speed, Velocity).vy == 1600.0
+
+
+def test_pickup_system_ignores_ineligible_entities_and_collects_each_overlap_once() -> None:
+    world = World()
+    add_entity(world, Team("enemy"), Transform(0, 0), Collider(20, 20), Health(5, 5))
+    add_entity(world, Team("player"), Transform(0, 0), Collider(20, 20), Health(0, 5, dead=True))
+    add_entity(world, Team("player"), Transform(10, 10), Collider(20, 20), Health(5, 5))
+    collected = add_entity(world, Collectible("mote", collected=True), Transform(10, 10), Collider(8, 8))
+    far = add_entity(world, Collectible("mote", value=2), Transform(500, 500), Collider(8, 8))
+    overlap = add_entity(world, Collectible("mote", value=3), Transform(15, 15), Collider(8, 8))
+
+    PickupSystem().update(world, 16)
+
+    assert collected in world.alive_entities
+    assert far in world.alive_entities
+    assert overlap not in world.alive_entities
+    assert world.resources["run_energy_spheres"] == 3
+    assert world.events.peek()[0].payload == {"kind": "mote", "value": 3}

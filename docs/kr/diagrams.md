@@ -1,4 +1,4 @@
-# 아키텍처 다이어그램
+# Windsprig 아키텍처 다이어그램
 
 ## 1) 런루프 (Facade -> ECS)
 
@@ -8,8 +8,8 @@ flowchart LR
   B --> C["World.step(dt, input_frame)"]
   C --> D["SystemScheduler.run"]
   D --> E["InputCommandSystem"]
-  D --> F["Movement/Collision/Inhale/Ability"]
-  D --> G["Combat/Damage/Pickup/Goal/Respawn"]
+  D --> F["Movement/Collision/Draw/Echo Ability"]
+  D --> G["Combat/Damage/Wind Mote/Goal/Respawn"]
   G --> H["HUD/Camera Snapshot"]
   H --> I["Renderer"]
 ```
@@ -22,23 +22,23 @@ flowchart LR
   B --> C["InputFrame{slot -> commands}"]
   C --> D["InputCommandSystem"]
   D --> E["ControlIntent Component"]
-  E --> F["Movement/Inhale/Ability Systems"]
+  E --> F["Movement/Draw/Echo Ability Systems"]
 ```
 
-## 3) 흡입/카피 시퀀스
+## 3) Draw/포획/하모나이즈 시퀀스
 
 ```mermaid
 sequenceDiagram
   participant P as Player
-  participant IS as InhaleSystem
+  participant DS as DrawSystem
   participant W as World
   participant AS as AbilitySystem
 
-  P->>IS: InhaleStartCommand
-  IS->>W: set InhaleState.active
-  IS->>W: capture nearby enemy
-  P->>IS: InhaleReleaseCommand
-  IS->>W: swallow enemy + set AbilityState.current
+  P->>DS: DrawStartCommand
+  DS->>W: set DrawState.active
+  DS->>W: capture nearby echo
+  P->>DS: DrawReleaseCommand
+  DS->>W: harmonize captured echo + set AbilityState.current
   P->>AS: AbilityUseCommand
-  AS->>W: spawn projectile entity
+  AS->>W: activate echo ability
 ```
