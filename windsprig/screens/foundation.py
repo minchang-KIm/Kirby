@@ -457,12 +457,43 @@ class FoundationScreen(Screen):
         """Return the reduced-motion accessibility preference (default off)."""
         return False
 
+    def _weblog(self, message: str) -> None:
+        """Mirror a diagnostic line to the browser console in the web runtime."""
+        try:
+            import platform as _platform
+
+            _platform.window.console.log(message[:1500])
+        except Exception:
+            pass
+
+    def _probe_web_image_ops(self) -> None:
+        """One-shot: log which pygame image op fails under the web runtime."""
+        self._weblog("[wsdiag] probe start")
+        try:
+            path = self.config.asset_dir / "generated" / "player" / "sprig.png"
+            self._weblog(f"[wsdiag] path={path} exists={path.is_file()}")
+            data = path.read_bytes()
+            self._weblog(f"[wsdiag] read_bytes ok len={len(data)}")
+            import io as _io
+
+            surface = pygame.image.load(_io.BytesIO(data), "sprig.png")
+            self._weblog(f"[wsdiag] image.load ok size={surface.get_size()}")
+            raw = pygame.image.tobytes(surface, "RGBA", False)
+            self._weblog(f"[wsdiag] tobytes ok len={len(raw)}")
+            has_display = pygame.display.get_surface() is not None
+            self._weblog(f"[wsdiag] display_surface={has_display}")
+            surface.convert_alpha()
+            self._weblog("[wsdiag] convert_alpha ok")
+        except Exception as error:
+            self._weblog(f"[wsdiag] FAILED at op: {error!r}")
+
     def _stage_presentation(self) -> _StagePresentation | None:
         """Build and cache the verified art pipeline, or fall back to primitives."""
         if self._presentation is not None:
             return self._presentation
         if self._presentation_unavailable:
             return None
+        self._probe_web_image_ops()
         try:
             content_dir = Path(os.path.abspath(self.config.content_dir))
             manifest = load_asset_manifest(content_dir / "assets.json")
@@ -479,12 +510,7 @@ class FoundationScreen(Screen):
             # through the browser console where pygbag hides Python stdout.
             message = f"[windsprig] art presentation unavailable: {error!r}"
             print(message, flush=True)
-            try:
-                import platform as _platform
-
-                _platform.window.console.log(message[:1500])
-            except Exception:
-                pass
+            self._weblog(message)
             self._presentation_unavailable = True
             return None
 
