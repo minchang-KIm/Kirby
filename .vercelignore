@@ -1,5 +1,6 @@
 # Repository and local agent state
-.git
+# NOTE: .git is intentionally NOT ignored — tools/build_web.py runs a git-based
+# provenance preflight during the web build and needs the repository present.
 .github
 .superpowers
 .vercel
