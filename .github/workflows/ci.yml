@@ -79,6 +79,8 @@ jobs:
       - run: uv sync --all-extras --locked
       - run: uv run --locked --no-sync playwright install --with-deps chromium
       - run: uv run --locked --no-sync python -I tools/build_web.py --output dist/web --probe
+      - run: uv run --locked --no-sync pytest tests/e2e/test_web_feasibility.py -q
+      - run: uv run --locked --no-sync python -I tools/build_web.py --output dist/web
       - run: uv run --locked --no-sync pytest tests/e2e/test_web_product.py tests/e2e/test_web_release_probe_boundary.py tests/e2e/test_web_pwa.py -q
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
