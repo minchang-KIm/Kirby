@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 from types import MappingProxyType
 from typing import Literal
 
@@ -12,7 +14,7 @@ import pygame
 
 from windsprig._build_flags import FOUNDATION_PROBE_AVAILABLE
 from windsprig.config import GameConfig
-from windsprig.content import CampaignCatalog, CatalogBundle, load_catalog_bundle
+from windsprig.content import CampaignCatalog, CatalogBundle, load_asset_manifest, load_catalog_bundle
 from windsprig.content.loader import WorldNode
 from windsprig.core.rng import derive_stage_seed
 from windsprig.feasibility import FoundationProbe
@@ -30,6 +32,7 @@ from windsprig.input.commands import (
     ProbeCompleteCommand,
 )
 from windsprig.input.roster import ActiveRoster
+from windsprig.localization import Localizer
 from windsprig.meta import (
     CompletionTracker,
     SaveLoadResult,
@@ -44,7 +47,15 @@ from windsprig.meta import (
     migration_catalog,
 )
 from windsprig.meta.save_models import SaveData
-from windsprig.platform.services import PlatformServices, WebTestStatus
+from windsprig.platform.services import AudioStatus, PlatformServices, WebTestStatus
+from windsprig.render import (
+    AssetCatalog,
+    CameraController,
+    StageRenderer,
+    build_default_animation_bank,
+    build_hud_view,
+    empty_effect_frame,
+)
 from windsprig.screens.base import Screen, ScreenFactory, ScreenId, ScreenTransition
 
 _RELOAD_NOTICE_CODES = {
@@ -54,6 +65,20 @@ _RELOAD_NOTICE_CODES = {
     "unsupported_version",
 }
 _SaveResolutionAction = Literal["reset", "reload", "retry"]
+
+# When platform services are unavailable (e.g. isolated unit tests) the HUD still
+# renders with a deterministic, non-ready audio indicator rather than crashing.
+_DEFAULT_AUDIO_STATUS = AudioStatus(ready=False, muted=True)
+
+
+@dataclass(frozen=True, slots=True)
+class _StagePresentation:
+    """Cache the verified art pipeline that renders stages and the world map."""
+
+    catalog: AssetCatalog
+    localizer: Localizer
+    renderer: StageRenderer
+    camera: CameraController
 
 
 class FoundationScreen(Screen):
@@ -70,9 +95,11 @@ class FoundationScreen(Screen):
         migration_catalog: SaveMigrationCatalog,
         probe: FoundationProbe,
         progression_catalog: CatalogBundle | None = None,
+        services: PlatformServices | None = None,
     ) -> None:
         self.config = config
         self.roster = roster
+        self.services = services
         self.save_service = save_service
         self.catalog = catalog
         self.ability_registry = ability_registry
@@ -97,6 +124,9 @@ class FoundationScreen(Screen):
         self.unlocked_worlds: set[str] = set()
         self._font: pygame.font.Font | None = None
         self._small_font: pygame.font.Font | None = None
+        self._presentation: _StagePresentation | None = None
+        self._presentation_unavailable = False
+        self._render_clock_ms: int | None = None
         self._adopt_load_result(self.save_service.load())
 
     def on_enter(self, payload: Mapping[str, object]) -> None:
@@ -407,18 +437,61 @@ class FoundationScreen(Screen):
             self._small_font = pygame.font.Font(str(font_path), 16)
         return self._font, self._small_font
 
+    def _render_dt_ms(self) -> int:
+        """Return a bounded render delta for presentation-only animation cursors."""
+        now = pygame.time.get_ticks()
+        if self._render_clock_ms is None:
+            delta = self.config.fixed_dt_ms
+        else:
+            delta = min(max(0, now - self._render_clock_ms), self.config.max_frame_elapsed_ms)
+        self._render_clock_ms = now
+        return int(delta)
+
+    def _audio_status(self) -> AudioStatus:
+        """Return the live audio status or a deterministic non-ready default."""
+        if self.services is None:
+            return _DEFAULT_AUDIO_STATUS
+        return self.services.audio.status
+
+    def _reduced_motion(self) -> bool:
+        """Return the reduced-motion accessibility preference (default off)."""
+        return False
+
+    def _stage_presentation(self) -> _StagePresentation | None:
+        """Build and cache the verified art pipeline, or fall back to primitives."""
+        if self._presentation is not None:
+            return self._presentation
+        if self._presentation_unavailable:
+            return None
+        try:
+            content_dir = Path(os.path.abspath(self.config.content_dir))
+            manifest = load_asset_manifest(content_dir / "assets.json")
+            catalog = AssetCatalog.load(self.config.asset_dir, manifest)
+            localizer = Localizer.load(content_dir, "en")
+            renderer = StageRenderer(catalog, build_default_animation_bank(), localizer)
+            camera = CameraController(self.config.resolution)
+            self._presentation = _StagePresentation(catalog, localizer, renderer, camera)
+            return self._presentation
+        except Exception:
+            # Art is a hard release requirement, but a load failure must never
+            # crash the running product: degrade to the primitive foundation view.
+            self._presentation_unavailable = True
+            return None
+
     def _render_world_map(
         self,
         canvas: pygame.Surface,
         font: pygame.font.Font,
         small_font: pygame.font.Font,
     ) -> None:
-        canvas.fill((25, 33, 64))
+        nodes = self._visible_nodes()
+        presentation = self._stage_presentation()
+        if not self._draw_world_backdrop(canvas, nodes, presentation):
+            canvas.fill((25, 33, 64))
         heading = "World Map - Confirm: start / Cancel: title"
         if self.screen_id != "world_map":
             heading = f"Windsprig - {self.screen_id}"
         canvas.blit(font.render(heading, True, (240, 242, 255)), (20, 18))
-        nodes = self._visible_nodes()
         if not nodes:
             canvas.blit(font.render("No unlocked nodes.", True, (255, 220, 220)), (20, 70))
             return
@@ -429,8 +502,12 @@ class FoundationScreen(Screen):
             if selected:
                 color = (255, 255, 255)
             x, y = node.position
+            pygame.draw.circle(canvas, (12, 16, 30), (x, y), 20 if selected else 16)
             pygame.draw.circle(canvas, color, (x, y), 18 if selected else 14)
-            label = small_font.render(node.stage_id, True, (10, 10, 10))
+            self._draw_map_marker(canvas, presentation, selected, x, y)
+            label = small_font.render(node.stage_id, True, (245, 246, 255))
+            shadow = small_font.render(node.stage_id, True, (10, 10, 10))
+            canvas.blit(shadow, (x - label.get_width() // 2 + 1, y - 33))
             canvas.blit(label, (x - label.get_width() // 2, y - 34))
         info = small_font.render(
             f"Worlds: {', '.join(sorted(self.unlocked_worlds))} | Cleared: {len(self.tracker.cleared_nodes)}",
@@ -439,7 +516,87 @@ class FoundationScreen(Screen):
         )
         canvas.blit(info, (20, canvas.get_height() - 30))
 
+    def _draw_world_backdrop(
+        self,
+        canvas: pygame.Surface,
+        nodes: list[WorldNode],
+        presentation: _StagePresentation | None,
+    ) -> bool:
+        """Blit the selected world's authored art as a full-canvas map backdrop."""
+        if presentation is None or not nodes:
+            return False
+        node = nodes[self.selected_node_index % len(nodes)]
+        try:
+            art = presentation.catalog.image(f"world.{node.world_id}.transition")
+        except Exception:
+            return False
+        canvas.blit(pygame.transform.smoothscale(art, canvas.get_size()), (0, 0))
+        veil = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
+        veil.fill((8, 12, 24, 96))
+        canvas.blit(veil, (0, 0))
+        return True
+
+    def _draw_map_marker(
+        self,
+        canvas: pygame.Surface,
+        presentation: _StagePresentation | None,
+        selected: bool,
+        x: int,
+        y: int,
+    ) -> None:
+        """Place Sprig's authored sprite on the currently selected map node."""
+        if not selected or presentation is None:
+            return
+        try:
+            frame = presentation.catalog.frame("player.sprig", 0)
+        except Exception:
+            return
+        marker = pygame.transform.smoothscale(frame, (28, 28))
+        canvas.blit(marker, (x - 14, y - 44))
+
     def _render_stage(
+        self,
+        canvas: pygame.Surface,
+        font: pygame.font.Font,
+        small_font: pygame.font.Font,
+    ) -> None:
+        runtime = self.runtime
+        if runtime is None:
+            return
+        presentation = self._stage_presentation()
+        if presentation is None or canvas.get_size() != self.config.resolution:
+            self._render_stage_primitive(canvas, font, small_font)
+            return
+        stage = runtime.stage
+        snapshot = runtime.snapshot()
+        render_dt_ms = self._render_dt_ms()
+        bounds = (0.0, 0.0, float(stage.pixel_width), float(stage.pixel_height))
+        camera = presentation.camera.update(
+            snapshot.camera_targets,
+            bounds,
+            render_dt_ms,
+            self._reduced_motion(),
+        )
+        hud = build_hud_view(
+            snapshot,
+            stage,
+            self.roster.players,
+            camera,
+            self._audio_status(),
+            self.save_status,
+            presentation.localizer,
+        )
+        presentation.renderer.render(
+            canvas,
+            stage,
+            snapshot,
+            camera,
+            hud,
+            empty_effect_frame(),
+            render_dt_ms,
+        )
+
+    def _render_stage_primitive(
         self,
         canvas: pygame.Surface,
         font: pygame.font.Font,
@@ -630,6 +787,7 @@ class FoundationScreenFactory(ScreenFactory):
             migration_catalog=migrations,
             probe=self.probe,
             progression_catalog=progression_catalog,
+            services=services,
         )
 
     def create(self, screen_id: ScreenId) -> FoundationScreen:

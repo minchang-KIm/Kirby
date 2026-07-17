@@ -238,9 +238,11 @@ def test_stage_hud_and_camera_ignore_contradictory_legacy_resources() -> None:
     assert screen._camera_offset(runtime) == (expected_x, expected_y)
     assert expected_x > 0
 
+    # The primitive fallback view stays snapshot-authoritative and never surfaces
+    # the contradictory legacy HUD resources.
     title_font = RecordingFont()
     small_font = RecordingFont()
-    screen._render_stage(
+    screen._render_stage_primitive(
         pygame.Surface(screen.config.resolution),
         title_font,  # type: ignore[arg-type]
         small_font,  # type: ignore[arg-type]
@@ -249,6 +251,12 @@ def test_stage_hud_and_camera_ignore_contradictory_legacy_resources() -> None:
     assert "P1 HP 10/10 LIFE 3 ABIL none" in small_font.texts
     assert "Wind Motes (Run): 0" in small_font.texts
     assert all("P9" not in text and "99" not in text for text in small_font.texts)
+
+    # The manifest-backed art renderer consumes the same deterministic snapshot
+    # and draws a full frame without raising.
+    art_canvas = pygame.Surface(screen.config.resolution)
+    screen._render_stage(art_canvas, title_font, small_font)  # type: ignore[arg-type]
+    assert screen._stage_presentation() is not None
 
 
 def test_enabled_f9_uses_real_goal_system_then_marks_only_a_successful_save() -> None:
