@@ -472,9 +472,11 @@ class FoundationScreen(Screen):
             camera = CameraController(self.config.resolution)
             self._presentation = _StagePresentation(catalog, localizer, renderer, camera)
             return self._presentation
-        except Exception:
+        except Exception as error:
             # Art is a hard release requirement, but a load failure must never
             # crash the running product: degrade to the primitive foundation view.
+            # Surface the reason so a runtime-only failure is diagnosable.
+            print(f"[windsprig] art presentation unavailable: {error!r}", flush=True)
             self._presentation_unavailable = True
             return None
 
