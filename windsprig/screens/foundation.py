@@ -475,8 +475,16 @@ class FoundationScreen(Screen):
         except Exception as error:
             # Art is a hard release requirement, but a load failure must never
             # crash the running product: degrade to the primitive foundation view.
-            # Surface the reason so a runtime-only failure is diagnosable.
-            print(f"[windsprig] art presentation unavailable: {error!r}", flush=True)
+            # Surface the reason so a runtime-only failure is diagnosable, routing
+            # through the browser console where pygbag hides Python stdout.
+            message = f"[windsprig] art presentation unavailable: {error!r}"
+            print(message, flush=True)
+            try:
+                import platform as _platform
+
+                _platform.window.console.log(message[:1500])
+            except Exception:
+                pass
             self._presentation_unavailable = True
             return None
 
